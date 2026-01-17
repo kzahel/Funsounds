@@ -1,0 +1,15 @@
+# Ignore wav files (large, mp3s are sufficient)
+*.wav
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log

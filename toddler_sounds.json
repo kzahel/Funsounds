@@ -1,0 +1,841 @@
+{
+  "metadata": {
+    "name": "Toddler Fun Sounds",
+    "description": "Interactive sound library for toddlers - press a key, see an emoji, hear a sound!",
+    "version": "1.0"
+  },
+  "sounds": [
+    {
+      "emoji": "🐕",
+      "name": "dog",
+      "label": "Doggy",
+      "prompt": "happy dog barking playfully, friendly woof woof",
+      "filename": "sounds/dog",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🐱",
+      "name": "cat",
+      "label": "Kitty",
+      "prompt": "cute cat meowing softly, friendly kitten meow",
+      "filename": "sounds/cat",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🐄",
+      "name": "cow",
+      "label": "Cow",
+      "prompt": "cow mooing loudly, farm animal moo sound",
+      "filename": "sounds/cow",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐷",
+      "name": "pig",
+      "label": "Piggy",
+      "prompt": "pig oinking and snorting, cute farm pig sounds",
+      "filename": "sounds/pig",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🐸",
+      "name": "frog",
+      "label": "Froggy",
+      "prompt": "frog croaking ribbit ribbit, pond frog sounds",
+      "filename": "sounds/frog",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦁",
+      "name": "lion",
+      "label": "Lion",
+      "prompt": "lion roaring majestically, big cat roar",
+      "filename": "sounds/lion",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐘",
+      "name": "elephant",
+      "label": "Elephant",
+      "prompt": "elephant trumpeting loudly, elephant call",
+      "filename": "sounds/elephant",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐦",
+      "name": "bird",
+      "label": "Birdie",
+      "prompt": "cheerful birds chirping and singing, happy bird song",
+      "filename": "sounds/bird",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐔",
+      "name": "rooster",
+      "label": "Rooster",
+      "prompt": "rooster crowing cock-a-doodle-doo, morning rooster call",
+      "filename": "sounds/rooster",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🦆",
+      "name": "duck",
+      "label": "Ducky",
+      "prompt": "duck quacking, friendly quack quack sounds",
+      "filename": "sounds/duck",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🐝",
+      "name": "bee",
+      "label": "Buzzy Bee",
+      "prompt": "bee buzzing flying around, gentle buzzing sound",
+      "filename": "sounds/bee",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐴",
+      "name": "horse",
+      "label": "Horsey",
+      "prompt": "horse neighing and whinnying, friendly horse sound with galloping hooves",
+      "filename": "sounds/horse",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐑",
+      "name": "sheep",
+      "label": "Sheep",
+      "prompt": "sheep baaing, cute lamb bleating sound",
+      "filename": "sounds/sheep",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🦉",
+      "name": "owl",
+      "label": "Owl",
+      "prompt": "owl hooting at night, hoo hoo owl call",
+      "filename": "sounds/owl",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐒",
+      "name": "monkey",
+      "label": "Monkey",
+      "prompt": "monkey chattering and screeching playfully, jungle ape sounds",
+      "filename": "sounds/monkey",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐺",
+      "name": "wolf",
+      "label": "Wolf",
+      "prompt": "wolf howling at the moon, long dramatic howl",
+      "filename": "sounds/wolf",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🐻",
+      "name": "bear",
+      "label": "Bear",
+      "prompt": "bear growling and roaring, big grizzly bear sound",
+      "filename": "sounds/bear",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐋",
+      "name": "whale",
+      "label": "Whale",
+      "prompt": "whale singing underwater, beautiful whale call echoing",
+      "filename": "sounds/whale",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🐬",
+      "name": "dolphin",
+      "label": "Dolphin",
+      "prompt": "dolphin clicking and squeaking, playful dolphin sounds",
+      "filename": "sounds/dolphin",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦜",
+      "name": "parrot",
+      "label": "Parrot",
+      "prompt": "parrot squawking and mimicking, colorful bird sounds",
+      "filename": "sounds/parrot",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐧",
+      "name": "penguin",
+      "label": "Penguin",
+      "prompt": "penguin honking and braying, funny penguin calls",
+      "filename": "sounds/penguin",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦃",
+      "name": "turkey",
+      "label": "Turkey",
+      "prompt": "turkey gobbling loudly, gobble gobble sounds",
+      "filename": "sounds/turkey",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐍",
+      "name": "snake",
+      "label": "Snake",
+      "prompt": "snake hissing menacingly, slithering reptile hiss",
+      "filename": "sounds/snake",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦗",
+      "name": "cricket",
+      "label": "Cricket",
+      "prompt": "crickets chirping at night, peaceful summer evening insects",
+      "filename": "sounds/cricket",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🐊",
+      "name": "alligator",
+      "label": "Gator",
+      "prompt": "alligator growling and hissing, crocodile snapping jaws",
+      "filename": "sounds/alligator",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦛",
+      "name": "hippo",
+      "label": "Hippo",
+      "prompt": "hippopotamus grunting and bellowing, big hippo sounds",
+      "filename": "sounds/hippo",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦒",
+      "name": "giraffe",
+      "label": "Giraffe",
+      "prompt": "giraffe humming low frequency, gentle giant animal sounds",
+      "filename": "sounds/giraffe",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐿️",
+      "name": "squirrel",
+      "label": "Squirrel",
+      "prompt": "squirrel chattering and chirping, chipmunk sounds",
+      "filename": "sounds/squirrel",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🦇",
+      "name": "bat",
+      "label": "Bat",
+      "prompt": "bat squeaking and flapping wings, nocturnal bat sounds",
+      "filename": "sounds/bat",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐤",
+      "name": "chick",
+      "label": "Baby Chick",
+      "prompt": "baby chicks peeping, adorable fluffy chick sounds",
+      "filename": "sounds/chick",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦊",
+      "name": "fox",
+      "label": "Fox",
+      "prompt": "fox yipping and barking, wild fox call",
+      "filename": "sounds/fox",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚗",
+      "name": "car",
+      "label": "Car",
+      "prompt": "car engine starting and revving, vehicle honking horn beep beep",
+      "filename": "sounds/car",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚂",
+      "name": "train",
+      "label": "Choo Choo",
+      "prompt": "steam train whistle and choo choo, train chugging on tracks",
+      "filename": "sounds/train",
+      "duration": 4.0
+    },
+    {
+      "emoji": "✈️",
+      "name": "airplane",
+      "label": "Airplane",
+      "prompt": "airplane flying overhead whooshing, jet plane soaring",
+      "filename": "sounds/airplane",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🚀",
+      "name": "rocket",
+      "label": "Rocket",
+      "prompt": "rocket launching blast off, space rocket whoosh ignition countdown",
+      "filename": "sounds/rocket",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🚒",
+      "name": "firetruck",
+      "label": "Fire Truck",
+      "prompt": "fire truck siren wailing, emergency vehicle siren",
+      "filename": "sounds/firetruck",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🚁",
+      "name": "helicopter",
+      "label": "Helicopter",
+      "prompt": "helicopter rotor blades spinning, chopper flying overhead",
+      "filename": "sounds/helicopter",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🏍️",
+      "name": "motorcycle",
+      "label": "Motorcycle",
+      "prompt": "motorcycle engine revving vroom vroom, motorbike accelerating",
+      "filename": "sounds/motorcycle",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚌",
+      "name": "bus",
+      "label": "Bus",
+      "prompt": "school bus horn honking, bus doors opening with beeping",
+      "filename": "sounds/bus",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚓",
+      "name": "police",
+      "label": "Police Car",
+      "prompt": "police car siren wailing, cop car emergency lights sound",
+      "filename": "sounds/police",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🚑",
+      "name": "ambulance",
+      "label": "Ambulance",
+      "prompt": "ambulance siren wailing urgently, emergency vehicle rushing",
+      "filename": "sounds/ambulance",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🚜",
+      "name": "tractor",
+      "label": "Tractor",
+      "prompt": "farm tractor engine rumbling, heavy machinery chugging",
+      "filename": "sounds/tractor",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🏎️",
+      "name": "racecar",
+      "label": "Race Car",
+      "prompt": "race car zooming past at high speed, formula one engine screaming",
+      "filename": "sounds/racecar",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚲",
+      "name": "bicycle",
+      "label": "Bicycle",
+      "prompt": "bicycle bell ringing ding ding, bike wheels spinning",
+      "filename": "sounds/bicycle",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🚢",
+      "name": "ship",
+      "label": "Ship",
+      "prompt": "big ship horn blowing, foghorn on the ocean",
+      "filename": "sounds/ship",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🛸",
+      "name": "ufo",
+      "label": "UFO",
+      "prompt": "flying saucer hovering, mysterious alien spacecraft humming and beeping",
+      "filename": "sounds/ufo",
+      "duration": 3.5
+    },
+    {
+      "emoji": "⛈️",
+      "name": "thunder",
+      "label": "Thunder",
+      "prompt": "dramatic thunder rumbling and lightning crack, thunderstorm",
+      "filename": "sounds/thunder",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🌊",
+      "name": "ocean",
+      "label": "Ocean Waves",
+      "prompt": "gentle ocean waves crashing on beach, peaceful sea sounds",
+      "filename": "sounds/ocean",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🌧️",
+      "name": "rain",
+      "label": "Rain",
+      "prompt": "rain falling gently, raindrops on roof, peaceful rain sounds",
+      "filename": "sounds/rain",
+      "duration": 4.0
+    },
+    {
+      "emoji": "💨",
+      "name": "wind",
+      "label": "Whoosh",
+      "prompt": "wind whooshing and blowing strongly, gusty breeze sound",
+      "filename": "sounds/wind",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🌋",
+      "name": "volcano",
+      "label": "Volcano",
+      "prompt": "volcano erupting with explosion, lava rumbling and bubbling",
+      "filename": "sounds/volcano",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🔥",
+      "name": "fire",
+      "label": "Fire",
+      "prompt": "campfire crackling and popping, warm cozy fire sounds",
+      "filename": "sounds/fire",
+      "duration": 4.0
+    },
+    {
+      "emoji": "❄️",
+      "name": "snow",
+      "label": "Snow Crunch",
+      "prompt": "footsteps crunching through fresh snow, winter walking sounds",
+      "filename": "sounds/snow",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🍂",
+      "name": "leaves",
+      "label": "Leaves",
+      "prompt": "autumn leaves rustling and crunching underfoot, fall foliage sounds",
+      "filename": "sounds/leaves",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🎉",
+      "name": "party",
+      "label": "Party",
+      "prompt": "party horn blowing celebration, confetti popper festive sounds",
+      "filename": "sounds/party",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🥁",
+      "name": "drum",
+      "label": "Drums",
+      "prompt": "drum roll and cymbal crash, exciting drumbeat",
+      "filename": "sounds/drum",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🔔",
+      "name": "bell",
+      "label": "Bell",
+      "prompt": "bell ringing ding dong, cheerful chiming bells",
+      "filename": "sounds/bell",
+      "duration": 2.5
+    },
+    {
+      "emoji": "📯",
+      "name": "trumpet",
+      "label": "Trumpet",
+      "prompt": "trumpet fanfare ta-da, triumphant horn announcement",
+      "filename": "sounds/trumpet",
+      "duration": 3.0
+    },
+    {
+      "emoji": "👏",
+      "name": "clapping",
+      "label": "Clapping",
+      "prompt": "crowd clapping and cheering, applause celebration",
+      "filename": "sounds/clapping",
+      "duration": 3.0
+    },
+    {
+      "emoji": "😂",
+      "name": "laughing",
+      "label": "Laughing",
+      "prompt": "child laughing happily, joyful giggling and laughter",
+      "filename": "sounds/laughing",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🎈",
+      "name": "balloon",
+      "label": "Balloon Pop",
+      "prompt": "balloon inflating and popping loudly, rubber balloon pop",
+      "filename": "sounds/balloon",
+      "duration": 2.5
+    },
+    {
+      "emoji": "💦",
+      "name": "splash",
+      "label": "Splash",
+      "prompt": "big water splash, jumping in pool splashing sound",
+      "filename": "sounds/splash",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🎹",
+      "name": "piano",
+      "label": "Piano",
+      "prompt": "cheerful piano melody playing, happy musical notes ascending",
+      "filename": "sounds/piano",
+      "duration": 3.5
+    },
+    {
+      "emoji": "⏰",
+      "name": "clock",
+      "label": "Alarm",
+      "prompt": "alarm clock ringing loudly, wake up bell sound",
+      "filename": "sounds/clock",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚪",
+      "name": "door",
+      "label": "Door",
+      "prompt": "door knocking knock knock and creaky door opening",
+      "filename": "sounds/door",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🍳",
+      "name": "cooking",
+      "label": "Sizzle",
+      "prompt": "food sizzling in hot pan, cooking frying sounds",
+      "filename": "sounds/cooking",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🎸",
+      "name": "guitar",
+      "label": "Guitar",
+      "prompt": "acoustic guitar strumming cheerful tune, happy guitar chords",
+      "filename": "sounds/guitar",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🚽",
+      "name": "toilet",
+      "label": "Flush",
+      "prompt": "toilet flushing with water swirling, bathroom flush sound",
+      "filename": "sounds/toilet",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🚿",
+      "name": "shower",
+      "label": "Shower",
+      "prompt": "shower running water spraying, bathroom shower sounds",
+      "filename": "sounds/shower",
+      "duration": 3.5
+    },
+    {
+      "emoji": "📞",
+      "name": "phone",
+      "label": "Phone",
+      "prompt": "old telephone ringing brring brring, phone call sound",
+      "filename": "sounds/phone",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🔨",
+      "name": "hammer",
+      "label": "Hammer",
+      "prompt": "hammer banging on nails, construction hammering sounds",
+      "filename": "sounds/hammer",
+      "duration": 3.0
+    },
+    {
+      "emoji": "✂️",
+      "name": "scissors",
+      "label": "Scissors",
+      "prompt": "scissors cutting paper, snip snip cutting sounds",
+      "filename": "sounds/scissors",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🔑",
+      "name": "keys",
+      "label": "Keys",
+      "prompt": "keys jingling and jangling, metal keychain sounds",
+      "filename": "sounds/keys",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🍿",
+      "name": "popcorn",
+      "label": "Popcorn",
+      "prompt": "popcorn popping in microwave, kernels popping rapidly",
+      "filename": "sounds/popcorn",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🍎",
+      "name": "apple",
+      "label": "Crunch",
+      "prompt": "biting into crispy apple, crunchy fruit eating sound",
+      "filename": "sounds/apple",
+      "duration": 2.0
+    },
+    {
+      "emoji": "🥤",
+      "name": "slurp",
+      "label": "Slurp",
+      "prompt": "drinking through straw slurping, beverage slurp sound",
+      "filename": "sounds/slurp",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🧊",
+      "name": "ice",
+      "label": "Ice Cubes",
+      "prompt": "ice cubes clinking in glass, cold drink ice sounds",
+      "filename": "sounds/ice",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🤧",
+      "name": "sneeze",
+      "label": "Achoo",
+      "prompt": "big loud sneeze achoo, person sneezing",
+      "filename": "sounds/sneeze",
+      "duration": 2.0
+    },
+    {
+      "emoji": "💤",
+      "name": "snoring",
+      "label": "Snoring",
+      "prompt": "person snoring loudly while sleeping, funny snore sounds",
+      "filename": "sounds/snoring",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🥱",
+      "name": "yawn",
+      "label": "Yawn",
+      "prompt": "big tired yawn stretching, sleepy yawning sound",
+      "filename": "sounds/yawn",
+      "duration": 2.5
+    },
+    {
+      "emoji": "💋",
+      "name": "kiss",
+      "label": "Kiss",
+      "prompt": "kissing sound mwah, sweet kiss smooch",
+      "filename": "sounds/kiss",
+      "duration": 1.5
+    },
+    {
+      "emoji": "👣",
+      "name": "footsteps",
+      "label": "Footsteps",
+      "prompt": "footsteps walking on wooden floor, person walking sounds",
+      "filename": "sounds/footsteps",
+      "duration": 3.0
+    },
+    {
+      "emoji": "⚽",
+      "name": "soccer",
+      "label": "Kick",
+      "prompt": "soccer ball being kicked hard, football kick and crowd cheering",
+      "filename": "sounds/soccer",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🏀",
+      "name": "basketball",
+      "label": "Bounce",
+      "prompt": "basketball bouncing on court, dribbling ball sounds",
+      "filename": "sounds/basketball",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🎳",
+      "name": "bowling",
+      "label": "Strike",
+      "prompt": "bowling ball rolling and pins crashing, bowling strike sound",
+      "filename": "sounds/bowling",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🏊",
+      "name": "swimming",
+      "label": "Swimming",
+      "prompt": "person swimming in pool, splashing water strokes",
+      "filename": "sounds/swimming",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🎢",
+      "name": "rollercoaster",
+      "label": "Wheee",
+      "prompt": "roller coaster whooshing with people screaming excitedly",
+      "filename": "sounds/rollercoaster",
+      "duration": 4.0
+    },
+    {
+      "emoji": "✨",
+      "name": "magic",
+      "label": "Magic",
+      "prompt": "magical sparkle shimmer sound, fairy dust twinkling",
+      "filename": "sounds/magic",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🪄",
+      "name": "wand",
+      "label": "Spell",
+      "prompt": "magic wand casting spell, wizard enchantment whoosh",
+      "filename": "sounds/wand",
+      "duration": 2.5
+    },
+    {
+      "emoji": "👻",
+      "name": "ghost",
+      "label": "Boo",
+      "prompt": "friendly ghost saying boo, spooky but cute ghost sound",
+      "filename": "sounds/ghost",
+      "duration": 2.5
+    },
+    {
+      "emoji": "👽",
+      "name": "alien",
+      "label": "Alien",
+      "prompt": "alien speaking in weird beeps and boops, extraterrestrial communication",
+      "filename": "sounds/alien",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🦄",
+      "name": "unicorn",
+      "label": "Unicorn",
+      "prompt": "magical unicorn neighing with sparkle sounds, mystical horse",
+      "filename": "sounds/unicorn",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🐉",
+      "name": "dragon",
+      "label": "Dragon",
+      "prompt": "dragon roaring and breathing fire, mythical beast sound",
+      "filename": "sounds/dragon",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🧚",
+      "name": "fairy",
+      "label": "Fairy",
+      "prompt": "tiny fairy wings fluttering with magical chimes, pixie sounds",
+      "filename": "sounds/fairy",
+      "duration": 3.0
+    },
+    {
+      "emoji": "💫",
+      "name": "shooting_star",
+      "label": "Shooting Star",
+      "prompt": "shooting star whooshing across the sky, cosmic sparkle",
+      "filename": "sounds/shooting_star",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🎺",
+      "name": "trombone",
+      "label": "Trombone",
+      "prompt": "trombone playing wah wah, brass instrument slide",
+      "filename": "sounds/trombone",
+      "duration": 3.0
+    },
+    {
+      "emoji": "🎷",
+      "name": "saxophone",
+      "label": "Saxophone",
+      "prompt": "saxophone playing jazzy tune, smooth sax melody",
+      "filename": "sounds/saxophone",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🎻",
+      "name": "violin",
+      "label": "Violin",
+      "prompt": "violin playing beautiful melody, string instrument music",
+      "filename": "sounds/violin",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🪘",
+      "name": "bongo",
+      "label": "Bongos",
+      "prompt": "bongo drums playing rhythmic beat, hand drum percussion",
+      "filename": "sounds/bongo",
+      "duration": 3.5
+    },
+    {
+      "emoji": "🎤",
+      "name": "microphone",
+      "label": "Mic Check",
+      "prompt": "microphone feedback and tap tap testing, sound check",
+      "filename": "sounds/microphone",
+      "duration": 2.5
+    },
+    {
+      "emoji": "🎪",
+      "name": "circus",
+      "label": "Circus",
+      "prompt": "circus music playing with crowd cheering, carnival atmosphere",
+      "filename": "sounds/circus",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🎠",
+      "name": "carousel",
+      "label": "Merry-Go-Round",
+      "prompt": "carousel music playing, merry go round calliope organ",
+      "filename": "sounds/carousel",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🏖️",
+      "name": "beach",
+      "label": "Beach",
+      "prompt": "beach sounds with waves and seagulls calling, ocean breeze",
+      "filename": "sounds/beach",
+      "duration": 4.0
+    },
+    {
+      "emoji": "🏕️",
+      "name": "campfire",
+      "label": "Campfire",
+      "prompt": "campfire crackling with crickets chirping at night, outdoor camping",
+      "filename": "sounds/campfire",
+      "duration": 4.0
+    }
+  ]
+}
