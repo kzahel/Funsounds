@@ -97,6 +97,74 @@
             opacity: 0;
         }
 
+        /* Mobile touch grid */
+        #touch-grid {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            z-index: 100;
+        }
+
+        .touch-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 6rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .touch-btn:active {
+            transform: scale(0.95);
+            background: rgba(255,255,255,0.2);
+        }
+
+        .touch-btn.playing {
+            animation: pulse 0.3s ease-out;
+        }
+
+        .touch-btn .emoji {
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+
+        .touch-btn.fading .emoji {
+            opacity: 0;
+            transform: scale(1.5);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @media (max-width: 768px) {
+            #start-screen h1 {
+                font-size: 2rem;
+            }
+            #start-btn {
+                font-size: 1.5rem;
+                padding: 0.8rem 2rem;
+            }
+            .touch-btn {
+                font-size: 5rem;
+            }
+        }
+
         #instruction-hint {
             position: fixed;
             bottom: 20px;
@@ -117,6 +185,13 @@
 
     <div id="play-area">
         <div id="instruction-hint">Hold Escape to exit</div>
+    </div>
+
+    <div id="touch-grid">
+        <button class="touch-btn" data-index="0"><span class="emoji"></span></button>
+        <button class="touch-btn" data-index="1"><span class="emoji"></span></button>
+        <button class="touch-btn" data-index="2"><span class="emoji"></span></button>
+        <button class="touch-btn" data-index="3"><span class="emoji"></span></button>
     </div>
 
     <script src="app.js"></script>

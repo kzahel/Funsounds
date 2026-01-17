@@ -1,0 +1,18 @@
+[project]
+name = "funsounds"
+version = "0.1.0"
+description = "Generate sound effects using AudioCraft's AudioGen"
+requires-python = ">=3.9"
+
+# Note: Due to audiocraft's strict pinned dependencies that don't build on newer systems,
+# install manually with:
+#   uv venv --python 3.9 --seed
+#   source .venv/bin/activate
+#   BLIS_ARCH=generic pip install blis
+#   pip install av==14.0.0
+#   pip install audiocraft --no-deps
+#   BLIS_ARCH=generic pip install einops flashy hydra-core hydra_colorlog julius num2words sentencepiece spacy xformers transformers demucs
+#   pip install encodec librosa protobuf torchmetrics
+
+[project.scripts]
+makesound = "makesound:main"

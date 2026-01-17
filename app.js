@@ -5,6 +5,11 @@
     let isPlaying = false;
     let escapeHeldStart = null;
     const ESCAPE_HOLD_TIME = 1500; // Hold escape for 1.5 seconds to exit
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                     (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+
+    // Track which sounds are assigned to each button
+    let buttonSounds = [null, null, null, null];
 
     // Load sounds data
     async function loadSounds() {
@@ -88,6 +93,63 @@
         }, 500);
     }
 
+    // Get a random sound
+    function getRandomSound() {
+        if (sounds.length === 0) return null;
+        return sounds[Math.floor(Math.random() * sounds.length)];
+    }
+
+    // Initialize a touch button with a random sound
+    function initTouchButton(index) {
+        const btn = document.querySelector(`.touch-btn[data-index="${index}"]`);
+        if (!btn) return;
+
+        const soundData = getRandomSound();
+        buttonSounds[index] = soundData;
+
+        const emojiSpan = btn.querySelector('.emoji');
+        if (emojiSpan && soundData) {
+            emojiSpan.textContent = soundData.emoji;
+        }
+    }
+
+    // Initialize all touch buttons
+    function initAllTouchButtons() {
+        for (let i = 0; i < 4; i++) {
+            initTouchButton(i);
+        }
+    }
+
+    // Handle touch button tap
+    function handleTouchButton(index) {
+        const btn = document.querySelector(`.touch-btn[data-index="${index}"]`);
+        const soundData = buttonSounds[index];
+        if (!btn || !soundData) return;
+
+        // Play the sound
+        const audio = new Audio(`${soundData.filename}.mp3`);
+        audio.volume = 0.7;
+        audio.play().catch(err => console.log('Audio play failed:', err));
+
+        // Add playing animation
+        btn.classList.add('playing');
+        setTimeout(() => btn.classList.remove('playing'), 300);
+
+        // Fade out the emoji and replace with new one
+        btn.classList.add('fading');
+        const duration = (soundData.duration || 3) * 1000;
+
+        // When audio ends, show new emoji
+        const replaceEmoji = () => {
+            btn.classList.remove('fading');
+            initTouchButton(index);
+        };
+
+        audio.addEventListener('ended', replaceEmoji, { once: true });
+        // Fallback timeout
+        setTimeout(replaceEmoji, duration + 500);
+    }
+
     // Enter fullscreen
     async function enterFullscreen() {
         const elem = document.documentElement;
@@ -122,7 +184,14 @@
         const success = await enterFullscreen();
 
         document.getElementById('start-screen').style.display = 'none';
-        document.getElementById('play-area').style.display = 'block';
+
+        if (isMobile) {
+            document.getElementById('touch-grid').style.display = 'grid';
+            initAllTouchButtons();
+        } else {
+            document.getElementById('play-area').style.display = 'block';
+        }
+
         isPlaying = true;
 
         // Try to keep keyboard focus by focusing the document
@@ -133,6 +202,7 @@
     function stopPlaying() {
         document.getElementById('start-screen').style.display = 'block';
         document.getElementById('play-area').style.display = 'none';
+        document.getElementById('touch-grid').style.display = 'none';
         isPlaying = false;
         escapeHeldStart = null;
     }
@@ -229,6 +299,15 @@
                 }
             }
         }, true);
+
+        // Touch button handlers
+        document.querySelectorAll('.touch-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const index = parseInt(btn.dataset.index, 10);
+                handleTouchButton(index);
+            });
+        });
     }
 
     // Start when DOM is ready
