@@ -166,9 +166,16 @@
         const duration = (soundData.duration || 3) * 1000;
 
         // When audio ends, show new emoji
+        let replaced = false;
         const replaceEmoji = () => {
-            btn.classList.remove('fading');
+            if (replaced) return;
+            replaced = true;
+            // Set new emoji while still faded (invisible)
             initTouchButton(index);
+            // Small delay to ensure content is set, then fade in
+            requestAnimationFrame(() => {
+                btn.classList.remove('fading');
+            });
         };
 
         audio.addEventListener('ended', replaceEmoji, { once: true });
