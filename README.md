@@ -1,5 +1,7 @@
 # funsounds
 
+**[Demo](https://kyle.graehl.org/Funsounds/)** 🚀
+
 Generate sound effects from text prompts using [AudioCraft's AudioGen](https://github.com/facebookresearch/audiocraft/).
 
 ## Requirements
