@@ -121,22 +121,48 @@
     }
 
     // Handle touch button tap
-    function handleTouchButton(index) {
+    async function handleTouchButton(index) {
         const btn = document.querySelector(`.touch-btn[data-index="${index}"]`);
         const soundData = buttonSounds[index];
         if (!btn || !soundData) return;
 
-        // Play the sound
-        const audio = new Audio(`${soundData.filename}.mp3`);
+        // Prevent double-taps while loading
+        if (btn.classList.contains('charging')) return;
+
+        // Start charging animation immediately
+        btn.classList.add('charging');
+
+        // Preload the audio
+        const audio = new Audio();
         audio.volume = 0.7;
-        audio.play().catch(err => console.log('Audio play failed:', err));
+        audio.preload = 'auto';
 
-        // Add playing animation
-        btn.classList.add('playing');
-        setTimeout(() => btn.classList.remove('playing'), 300);
+        // Wait for audio to be ready
+        const audioReady = new Promise((resolve) => {
+            audio.addEventListener('canplaythrough', resolve, { once: true });
+            audio.addEventListener('error', resolve, { once: true }); // Don't block on error
+            // Fallback timeout in case canplaythrough doesn't fire
+            setTimeout(resolve, 500);
+        });
 
-        // Fade out the emoji and replace with new one
+        audio.src = `${soundData.filename}.mp3`;
+
+        await audioReady;
+
+        // Play the audio
+        try {
+            await audio.play();
+        } catch (err) {
+            console.log('Audio play failed:', err);
+        }
+
+        // Small delay after audio starts to sync visual
+        await new Promise(r => setTimeout(r, 30));
+
+        // Remove charging, trigger fade
+        btn.classList.remove('charging');
         btn.classList.add('fading');
+
         const duration = (soundData.duration || 3) * 1000;
 
         // When audio ends, show new emoji
