@@ -214,7 +214,9 @@
 
     // Start playing
     async function startPlaying() {
-        const success = await enterFullscreen();
+        if (isMobile) {
+            await enterFullscreen();
+        }
 
         document.getElementById('start-screen').style.display = 'none';
 
@@ -266,7 +268,7 @@
     function handleKeyUp(event) {
         if (event.key === 'Escape') {
             if (escapeHeldStart && (Date.now() - escapeHeldStart) >= ESCAPE_HOLD_TIME) {
-                exitFullscreen();
+                if (isMobile) exitFullscreen();
                 stopPlaying();
             }
             escapeHeldStart = null;
@@ -276,13 +278,14 @@
     // Check if escape is still being held
     function checkEscapeHold() {
         if (escapeHeldStart && (Date.now() - escapeHeldStart) >= ESCAPE_HOLD_TIME) {
-            exitFullscreen();
+            if (isMobile) exitFullscreen();
             stopPlaying();
         }
     }
 
-    // Handle fullscreen change
+    // Handle fullscreen change (only relevant on mobile)
     function handleFullscreenChange() {
+        if (!isMobile) return;
         const isFullscreen = document.fullscreenElement ||
                             document.webkitFullscreenElement ||
                             document.msFullscreenElement;
