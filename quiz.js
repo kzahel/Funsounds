@@ -8,6 +8,8 @@
     let quizMode = 'objects';
     let difficulty = 2;
     let firstRound = true;
+    let starsEarned = 0;
+    const STARS_TO_WIN = 5;
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                      (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
@@ -262,6 +264,71 @@
         speechSynthesis.speak(utter);
     }
 
+    function initStarBar() {
+        starsEarned = 0;
+        const bar = document.getElementById('star-bar');
+        bar.innerHTML = '';
+        for (let i = 0; i < STARS_TO_WIN; i++) {
+            const slot = document.createElement('span');
+            slot.className = 'star-slot';
+            slot.textContent = '\u2B50';
+            bar.appendChild(slot);
+        }
+    }
+
+    function awardStar() {
+        const slots = document.querySelectorAll('.star-slot');
+        if (starsEarned < slots.length) {
+            slots[starsEarned].classList.add('earned');
+        }
+        starsEarned++;
+    }
+
+    function playFinale() {
+        const overlay = document.getElementById('finale-overlay');
+        overlay.innerHTML = '';
+        overlay.classList.add('active');
+
+        // Spawn stars that roam around
+        const stars = [];
+        for (let i = 0; i < STARS_TO_WIN; i++) {
+            const star = document.createElement('div');
+            star.className = 'finale-star roaming';
+            star.textContent = '\u2B50';
+            star.style.left = (15 + Math.random() * 70) + 'vw';
+            star.style.top = (15 + Math.random() * 60) + 'vh';
+            star.style.animationDuration = (2 + Math.random() * 2) + 's';
+            star.style.animationDelay = (Math.random() * 0.5) + 's';
+            overlay.appendChild(star);
+            stars.push(star);
+        }
+
+        // Play big celebration sounds
+        spawnConfetti();
+        playCheer();
+        setTimeout(spawnConfetti, 800);
+
+        // After roaming, one star grows huge
+        setTimeout(() => {
+            stars.forEach(s => { s.classList.remove('roaming'); s.style.opacity = '0'; s.style.transition = 'opacity 0.5s'; });
+            const big = document.createElement('div');
+            big.className = 'finale-star grow';
+            big.textContent = '\u2B50';
+            big.style.left = '50%';
+            big.style.top = '50%';
+            big.style.fontSize = '4rem';
+            overlay.appendChild(big);
+        }, 3000);
+
+        // Return to main screen
+        setTimeout(() => {
+            overlay.classList.remove('active');
+            overlay.innerHTML = '';
+            if (isMobile) exitFullscreen();
+            stopQuiz();
+        }, 5000);
+    }
+
     async function startRound() {
         roundLocked = false;
         const { answer, choices } = pickChoicesForMode();
@@ -311,6 +378,18 @@
         if (btn.dataset.key === currentAnswer.key) {
             roundLocked = true;
             btn.classList.add('correct');
+            awardStar();
+
+            const isLastStar = starsEarned >= STARS_TO_WIN;
+
+            // After object sound + cheer, either next round or finale
+            const afterCheer = () => {
+                if (isLastStar) {
+                    setTimeout(playFinale, 500);
+                } else {
+                    startRound();
+                }
+            };
 
             // Play the object's sound first (if it has one), then cheer
             if (currentAnswer.filename) {
@@ -325,15 +404,14 @@
                     cheered = true;
                     spawnConfetti();
                     playCheer();
+                    setTimeout(afterCheer, 2500);
                 };
                 objAudio.addEventListener('ended', doCheer, { once: true });
                 setTimeout(doCheer, dur + 300);
-
-                setTimeout(() => { startRound(); }, dur + 3000);
             } else {
                 spawnConfetti();
                 playCheer();
-                setTimeout(() => { startRound(); }, 3000);
+                setTimeout(afterCheer, 2500);
             }
         } else {
             // Brief X overlay
@@ -369,6 +447,7 @@
 
         speechSynthesis.getVoices();
         firstRound = true;
+        initStarBar();
         await startRound();
     }
 
@@ -377,6 +456,9 @@
         document.getElementById('start-screen').style.display = 'block';
         document.getElementById('quiz-screen').style.display = 'none';
         document.getElementById('confetti-container').innerHTML = '';
+        const overlay = document.getElementById('finale-overlay');
+        overlay.classList.remove('active');
+        overlay.innerHTML = '';
         quizActive = false;
         escapeHeldStart = null;
     }
