@@ -18,7 +18,9 @@
         1: { choiceCount: 2, label: 'Easy' },
         2: { choiceCount: 4, label: 'Normal' },
         3: { choiceCount: 6, label: 'Hard' },
+        4: { choiceCount: 4, label: 'Expert' },
     };
+    let expertUnlocked = false;
 
     // Object quiz: tiered by familiarity
     const OBJECTS_EASY = new Set([
@@ -168,52 +170,88 @@
         return arr[Math.floor(Math.random() * arr.length)];
     }
 
+    function getNameForChoice(c) {
+        if (quizMode === 'objects') return c.name;
+        if (quizMode === 'colors') return c.name;
+        if (quizMode === 'alphabet') return c;
+        if (quizMode === 'numbers') return String(c);
+        return String(c);
+    }
+
+    function buildExpertSpeech(answer, choices) {
+        const otherNames = choices
+            .filter(c => c.key !== answer.key)
+            .map(c => c.key);
+        const listed = otherNames.join(', ');
+        if (firstRound) {
+            return `I see ${listed}. Which one is missing?`;
+        }
+        return `${listed}. What's missing?`;
+    }
+
     function pickChoicesForMode() {
+        const isExpert = difficulty === 4;
         const numChoices = DIFFICULTY[difficulty].choiceCount;
 
         if (quizMode === 'objects') {
-            const nameSet = difficulty === 1 ? OBJECTS_EASY : difficulty === 2 ? OBJECTS_NORMAL : OBJECTS_HARD;
+            const nameSet = isExpert ? OBJECTS_NORMAL : difficulty === 1 ? OBJECTS_EASY : difficulty === 2 ? OBJECTS_NORMAL : OBJECTS_HARD;
             const pool = sounds.filter(s => nameSet.has(s.name));
             const answer = pickRandom(pool);
             const others = shuffle(pool.filter(s => s.name !== answer.name)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
+            const mapped = choices.map(c => ({ key: c.name, display: c.emoji, renderType: 'emoji' }));
+            const speech = isExpert
+                ? buildExpertSpeech({ key: answer.name }, mapped)
+                : firstRound ? `Where is the ${answer.name}?` : answer.name;
             return {
-                answer: { key: answer.name, speech: firstRound ? `Where is the ${answer.name}?` : answer.name, filename: answer.filename, duration: answer.duration },
-                choices: choices.map(c => ({ key: c.name, display: c.emoji, renderType: 'emoji' })),
+                answer: { key: answer.name, speech, filename: answer.filename, duration: answer.duration },
+                choices: mapped,
             };
         }
 
         if (quizMode === 'alphabet') {
-            const pool = difficulty === 1 ? ALPHA_EASY : ALPHA_ALL;
+            const pool = isExpert ? ALPHA_ALL : difficulty === 1 ? ALPHA_EASY : ALPHA_ALL;
             const answer = pickRandom(pool);
             const others = shuffle(pool.filter(l => l !== answer)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
+            const mapped = choices.map(c => ({ key: c, display: c, renderType: 'text' }));
+            const speech = isExpert
+                ? buildExpertSpeech({ key: answer }, mapped)
+                : firstRound ? `Where is the letter ${answer}?` : answer;
             return {
-                answer: { key: answer, speech: firstRound ? `Where is the letter ${answer}?` : answer },
-                choices: choices.map(c => ({ key: c, display: c, renderType: 'text' })),
+                answer: { key: answer, speech },
+                choices: mapped,
             };
         }
 
         if (quizMode === 'colors') {
-            const pool = difficulty === 1 ? COLORS_EASY : difficulty === 2 ? COLORS_NORMAL : COLORS_HARD;
+            const pool = isExpert ? COLORS_NORMAL : difficulty === 1 ? COLORS_EASY : difficulty === 2 ? COLORS_NORMAL : COLORS_HARD;
             const answer = pickRandom(pool);
             const conflicts = getColorConflicts(answer.key);
             const others = shuffle(pool.filter(c => c.key !== answer.key && !conflicts.has(c.key))).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
+            const mapped = choices.map(c => ({ key: c.key, css: c.css, renderType: 'color' }));
+            const speech = isExpert
+                ? buildExpertSpeech({ key: answer.key }, mapped)
+                : firstRound ? `Where is ${answer.name}?` : answer.name;
             return {
-                answer: { key: answer.key, speech: firstRound ? `Where is ${answer.name}?` : answer.name },
-                choices: choices.map(c => ({ key: c.key, css: c.css, renderType: 'color' })),
+                answer: { key: answer.key, speech },
+                choices: mapped,
             };
         }
 
         if (quizMode === 'numbers') {
-            const pool = difficulty === 1 ? NUMBERS_EASY : difficulty === 2 ? NUMBERS_NORMAL : NUMBERS_HARD;
+            const pool = isExpert ? NUMBERS_NORMAL : difficulty === 1 ? NUMBERS_EASY : difficulty === 2 ? NUMBERS_NORMAL : NUMBERS_HARD;
             const answer = pickRandom(pool);
             const others = shuffle(pool.filter(n => n !== answer)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
+            const mapped = choices.map(c => ({ key: String(c), display: String(c), renderType: 'text' }));
+            const speech = isExpert
+                ? buildExpertSpeech({ key: String(answer) }, mapped)
+                : firstRound ? `Where is the number ${answer}?` : String(answer);
             return {
-                answer: { key: String(answer), speech: firstRound ? `Where is the number ${answer}?` : String(answer) },
-                choices: choices.map(c => ({ key: String(c), display: String(c), renderType: 'text' })),
+                answer: { key: String(answer), speech },
+                choices: mapped,
             };
         }
     }
@@ -498,8 +536,34 @@
         if (!isFullscreen) stopQuiz();
     }
 
+    function unlockExpert() {
+        if (expertUnlocked) return;
+        expertUnlocked = true;
+        const slider = document.getElementById('difficulty-slider');
+        slider.max = '4';
+        const label = document.getElementById('difficulty-label');
+        label.textContent = DIFFICULTY[parseInt(slider.value)].label;
+        // Flash the label to hint something happened
+        label.style.color = '#ffd93d';
+        setTimeout(() => { label.style.color = ''; }, 1500);
+    }
+
     async function init() {
         await loadQuizSounds();
+
+        // Secret expert unlock: tap title 5 times
+        let titleTaps = 0;
+        let titleTapTimer = null;
+        const title = document.querySelector('#start-screen h1');
+        title.addEventListener('click', () => {
+            titleTaps++;
+            clearTimeout(titleTapTimer);
+            titleTapTimer = setTimeout(() => { titleTaps = 0; }, 2000);
+            if (titleTaps >= 5) {
+                titleTaps = 0;
+                unlockExpert();
+            }
+        });
 
         // Mode selector
         document.querySelectorAll('.mode-btn').forEach(btn => {
