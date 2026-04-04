@@ -49,7 +49,7 @@
         { key: 'green',  name: 'green',  css: '#2ecc71' },
         { key: 'yellow', name: 'yellow', css: '#f1c40f' },
     ];
-    const COLORS_ALL = [
+    const COLORS_NORMAL = [
         ...COLORS_EASY,
         { key: 'orange', name: 'orange', css: '#e67e22' },
         { key: 'purple', name: 'purple', css: '#9b59b6' },
@@ -57,6 +57,25 @@
         { key: 'white',  name: 'white',  css: '#ecf0f1' },
         { key: 'brown',  name: 'brown',  css: '#8B4513' },
         { key: 'pink',   name: 'pink',   css: '#ff69b4' },
+    ];
+    const COLORS_HARD = [
+        ...COLORS_NORMAL,
+        { key: 'turquoise',  name: 'turquoise',  css: '#1abc9c' },
+        { key: 'magenta',    name: 'magenta',     css: '#ff00ff' },
+        { key: 'gold',       name: 'gold',        css: '#ffd700' },
+        { key: 'navy',       name: 'navy',        css: '#1a3a5c' },
+        { key: 'lime',       name: 'lime',        css: '#32cd32' },
+        { key: 'coral',      name: 'coral',       css: '#ff7f50' },
+        { key: 'lavender',   name: 'lavender',    css: '#b57edc' },
+        { key: 'teal',       name: 'teal',        css: '#008080' },
+        { key: 'maroon',     name: 'maroon',      css: '#800000' },
+        { key: 'peach',      name: 'peach',       css: '#ffb07c' },
+        { key: 'olive',      name: 'olive',       css: '#808000' },
+        { key: 'salmon',     name: 'salmon',      css: '#fa8072' },
+        { key: 'crimson',    name: 'crimson',     css: '#dc143c' },
+        { key: 'indigo',     name: 'indigo',      css: '#4b0082' },
+        { key: 'beige',      name: 'beige',       css: '#f5f5dc' },
+        { key: 'silver',     name: 'silver',      css: '#c0c0c0' },
     ];
 
     // Numbers
@@ -149,7 +168,7 @@
         }
 
         if (quizMode === 'colors') {
-            const pool = difficulty === 1 ? COLORS_EASY : COLORS_ALL;
+            const pool = difficulty === 1 ? COLORS_EASY : difficulty === 2 ? COLORS_NORMAL : COLORS_HARD;
             const answer = pickRandom(pool);
             const others = shuffle(pool.filter(c => c.key !== answer.key)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
