@@ -196,7 +196,7 @@
             #start-screen h1 {
                 font-size: 2rem;
             }
-            #start-btn, #quiz-btn {
+            #start-btn, #quiz-btn, #memory-btn {
                 font-size: 1.5rem;
                 padding: 0.8rem 2rem;
             }
@@ -567,6 +567,181 @@
             }
         }
 
+        /* Player control */
+        #player-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            margin: 1rem auto 0;
+            color: white;
+            font-size: 1.1rem;
+        }
+
+        #player-control label {
+            font-weight: 600;
+        }
+
+        .player-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .player-btn.selected {
+            border-color: #6bcb77;
+            background: rgba(107,203,119,0.25);
+        }
+
+        /* Memory button */
+        #memory-btn {
+            font-size: 2rem;
+            padding: 1rem 3rem;
+            border: none;
+            border-radius: 50px;
+            background: #6bcb77;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 1rem;
+        }
+
+        #memory-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        }
+
+        #memory-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Memory screen */
+        #memory-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            flex-direction: column;
+        }
+
+        #memory-header {
+            padding: 0.5rem;
+        }
+
+        #memory-scores {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            color: white;
+            font-size: 1.3rem;
+        }
+
+        .memory-player {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            opacity: 0.4;
+            transition: opacity 0.3s, background 0.3s;
+        }
+
+        .memory-player.active {
+            opacity: 1;
+            background: rgba(255,255,255,0.15);
+            box-shadow: 0 0 10px rgba(255,217,61,0.3);
+        }
+
+        .player-score {
+            font-weight: 700;
+        }
+
+        /* Memory grid */
+        #memory-grid {
+            display: grid;
+            gap: 6px;
+            padding: 8px;
+            flex: 1;
+            align-content: center;
+        }
+
+        /* Card flip */
+        .memory-card {
+            perspective: 600px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            aspect-ratio: 1;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.5s;
+            transform-style: preserve-3d;
+        }
+
+        .memory-card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 10px;
+        }
+
+        .card-front {
+            background: rgba(255,255,255,0.15);
+            font-size: 1.8rem;
+            color: rgba(255,255,255,0.3);
+        }
+
+        .card-back {
+            background: rgba(255,255,255,0.1);
+            transform: rotateY(180deg);
+            font-size: 2.5rem;
+        }
+
+        .memory-card.matched .card-inner {
+            box-shadow: 0 0 12px rgba(0,255,100,0.3);
+        }
+
+        .memory-card.matched {
+            pointer-events: none;
+        }
+
+        #memory-grid.grid-small .card-back {
+            font-size: 1.6rem;
+        }
+
+        #memory-grid.grid-small .card-front {
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 768px) {
+            #memory-btn {
+                font-size: 1.5rem;
+                padding: 0.8rem 2rem;
+            }
+        }
+
         #instruction-hint {
             position: fixed;
             bottom: 20px;
@@ -610,6 +785,13 @@
         </div>
 
         <button id="quiz-btn">Start Quiz</button>
+
+        <div id="player-control">
+            <label>Players</label>
+            <button class="player-btn selected" data-players="1">1</button>
+            <button class="player-btn" data-players="2">2</button>
+        </div>
+        <button id="memory-btn">Memory Game</button>
     </div>
 
     <div id="play-area">
@@ -626,9 +808,26 @@
         <div id="finale-overlay"></div>
     </div>
 
+    <div id="memory-screen">
+        <div id="memory-header">
+            <div id="memory-scores">
+                <span class="memory-player active" id="memory-p1">
+                    <span class="player-name">P1</span>
+                    <span class="player-score">0</span>
+                </span>
+                <span class="memory-player" id="memory-p2">
+                    <span class="player-name">P2</span>
+                    <span class="player-score">0</span>
+                </span>
+            </div>
+        </div>
+        <div id="memory-grid"></div>
+    </div>
+
     <div id="touch-grid"></div>
 
     <script src="app.js"></script>
     <script src="quiz.js"></script>
+    <script src="memory.js"></script>
 </body>
 </html>
