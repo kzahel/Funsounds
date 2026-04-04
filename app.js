@@ -8,8 +8,30 @@
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                      (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
 
+    const BUTTON_COUNTS = { 1: 2, 2: 4, 3: 6 };
+
     // Track which sounds are assigned to each button
-    let buttonSounds = [null, null, null, null];
+    let buttonSounds = [];
+    let buttonCount = 4;
+
+    function getDifficulty() {
+        const slider = document.getElementById('difficulty-slider');
+        return slider ? parseInt(slider.value) : 2;
+    }
+
+    // Say the name of the sound using TTS
+    function speakName(soundData) {
+        if (!soundData) return;
+        const utter = new SpeechSynthesisUtterance(soundData.name);
+        utter.rate = 0.9;
+        utter.pitch = 1.1;
+        utter.volume = 1;
+        const voices = speechSynthesis.getVoices();
+        const preferred = voices.find(v => v.lang.startsWith('en') && v.name.includes('Female')) ||
+                          voices.find(v => v.lang.startsWith('en'));
+        if (preferred) utter.voice = preferred;
+        speechSynthesis.speak(utter);
+    }
 
     // Load sounds data
     async function loadSounds() {
@@ -20,7 +42,6 @@
             console.log(`Loaded ${sounds.length} sounds`);
         } catch (error) {
             console.error('Failed to load sounds:', error);
-            // Fallback: show error to user
             alert('Could not load sounds. Please make sure toddler_sounds.json is available.');
         }
     }
@@ -44,6 +65,9 @@
     // Play a sound and show emoji
     function playSound(soundData) {
         if (!soundData) return;
+
+        // Say the word first
+        speakName(soundData);
 
         // Create audio element
         const audio = new Audio(`${soundData.filename}.mp3`);
@@ -113,9 +137,38 @@
         }
     }
 
-    // Initialize all touch buttons
-    function initAllTouchButtons() {
-        for (let i = 0; i < 4; i++) {
+    // Build the touch grid dynamically based on difficulty
+    function buildTouchGrid() {
+        buttonCount = BUTTON_COUNTS[getDifficulty()] || 4;
+        buttonSounds = new Array(buttonCount).fill(null);
+
+        const grid = document.getElementById('touch-grid');
+        grid.innerHTML = '';
+
+        // Set grid layout
+        if (buttonCount <= 2) {
+            grid.style.gridTemplateColumns = '1fr 1fr';
+            grid.style.gridTemplateRows = '1fr';
+        } else if (buttonCount <= 4) {
+            grid.style.gridTemplateColumns = '1fr 1fr';
+            grid.style.gridTemplateRows = '1fr 1fr';
+        } else {
+            grid.style.gridTemplateColumns = '1fr 1fr 1fr';
+            grid.style.gridTemplateRows = '1fr 1fr';
+        }
+
+        for (let i = 0; i < buttonCount; i++) {
+            const btn = document.createElement('button');
+            btn.className = 'touch-btn';
+            btn.dataset.index = i;
+            const span = document.createElement('span');
+            span.className = 'emoji';
+            btn.appendChild(span);
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleTouchButton(i);
+            });
+            grid.appendChild(btn);
             initTouchButton(i);
         }
     }
@@ -128,6 +181,9 @@
 
         // Prevent double-taps while loading
         if (btn.classList.contains('charging')) return;
+
+        // Say the word first
+        speakName(soundData);
 
         // Start charging animation immediately
         btn.classList.add('charging');
@@ -221,8 +277,8 @@
         document.getElementById('start-screen').style.display = 'none';
 
         if (isMobile) {
+            buildTouchGrid();
             document.getElementById('touch-grid').style.display = 'grid';
-            initAllTouchButtons();
         } else {
             document.getElementById('play-area').style.display = 'block';
         }
@@ -335,15 +391,6 @@
                 }
             }
         }, true);
-
-        // Touch button handlers
-        document.querySelectorAll('.touch-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const index = parseInt(btn.dataset.index, 10);
-                handleTouchButton(index);
-            });
-        });
     }
 
     // Start when DOM is ready
