@@ -9,6 +9,7 @@
     let difficulty = 2;
     let firstRound = true;
     let starsEarned = 0;
+    let lostStarThisRound = false;
     const STARS_TO_WIN = 5;
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
@@ -322,6 +323,15 @@
         starsEarned++;
     }
 
+    function removeStar() {
+        if (starsEarned <= 0) return;
+        starsEarned--;
+        const slots = document.querySelectorAll('.star-slot');
+        if (starsEarned < slots.length) {
+            slots[starsEarned].classList.remove('earned');
+        }
+    }
+
     function playFinale() {
         const overlay = document.getElementById('finale-overlay');
         overlay.innerHTML = '';
@@ -369,6 +379,7 @@
 
     async function startRound() {
         roundLocked = false;
+        lostStarThisRound = false;
         const { answer, choices } = pickChoicesForMode();
         currentAnswer = answer;
 
@@ -430,10 +441,10 @@
             };
 
             // Play the object's sound first (if it has one), then cheer
+            // Cap wait so cheer isn't too delayed on long sounds
             if (currentAnswer.filename) {
                 const objAudio = new Audio(`${currentAnswer.filename}.mp3`);
                 objAudio.volume = 0.7;
-                const dur = (currentAnswer.duration || 3) * 1000;
                 objAudio.play().catch(() => {});
 
                 let cheered = false;
@@ -445,13 +456,18 @@
                     setTimeout(afterCheer, 2500);
                 };
                 objAudio.addEventListener('ended', doCheer, { once: true });
-                setTimeout(doCheer, dur + 300);
+                setTimeout(doCheer, 1500);
             } else {
                 spawnConfetti();
                 playCheer();
                 setTimeout(afterCheer, 2500);
             }
         } else {
+            // Lose one star per round on wrong answer
+            if (!lostStarThisRound) {
+                lostStarThisRound = true;
+                removeStar();
+            }
             // Brief X overlay
             if (btn.querySelector('.wrong-x')) return;
             const x = document.createElement('div');
