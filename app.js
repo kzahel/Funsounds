@@ -304,7 +304,7 @@
 
         // Also start on any key press from start screen
         document.addEventListener('keydown', (e) => {
-            if (!isPlaying && e.key !== 'Escape') {
+            if (!isPlaying && e.key !== 'Escape' && document.getElementById('start-screen').style.display !== 'none') {
                 startPlaying();
             }
         }, { once: false });

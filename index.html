@@ -184,11 +184,281 @@
             #start-screen h1 {
                 font-size: 2rem;
             }
-            #start-btn {
+            #start-btn, #quiz-btn {
                 font-size: 1.5rem;
                 padding: 0.8rem 2rem;
             }
+            #mode-selector {
+                max-width: 280px;
+            }
+            .mode-btn .mode-icon {
+                font-size: 1.8rem;
+            }
+            .mode-btn .mode-label {
+                font-size: 0.85rem;
+            }
             .touch-btn {
+                font-size: 5rem;
+            }
+        }
+
+        /* Mode selector */
+        #mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 1.5rem auto;
+            max-width: 340px;
+        }
+
+        .mode-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0.8rem 0.5rem;
+            border: 3px solid rgba(255,255,255,0.2);
+            border-radius: 16px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            cursor: pointer;
+            transition: transform 0.15s, border-color 0.2s, background 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .mode-btn .mode-icon {
+            font-size: 2.2rem;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+
+        .mode-btn .mode-label {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .mode-btn.selected {
+            border-color: #ffd93d;
+            background: rgba(255,255,255,0.2);
+            box-shadow: 0 0 20px rgba(255,217,61,0.3);
+        }
+
+        .mode-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Difficulty slider */
+        #difficulty-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+            margin: 1rem auto;
+            color: white;
+            font-size: 1.1rem;
+        }
+
+        #difficulty-control label {
+            font-weight: 600;
+        }
+
+        #difficulty-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 120px;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.3);
+            outline: none;
+        }
+
+        #difficulty-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #ffd93d;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        #difficulty-label {
+            min-width: 60px;
+            font-weight: 600;
+        }
+
+        #quiz-btn {
+            font-size: 2rem;
+            padding: 1rem 3rem;
+            border: none;
+            border-radius: 50px;
+            background: #ff6b9d;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 1rem;
+        }
+
+        #quiz-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        }
+
+        #quiz-btn:active {
+            transform: scale(0.98);
+        }
+
+        #quiz-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            flex-direction: column;
+        }
+
+        #quiz-prompt {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 15vh;
+            min-height: 60px;
+        }
+
+        #quiz-speaker {
+            font-size: 4rem;
+            background: rgba(255,255,255,0.15);
+            border: none;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #quiz-speaker:active {
+            transform: scale(0.9);
+            background: rgba(255,255,255,0.3);
+        }
+
+        #quiz-speaker.speaking {
+            animation: speaker-pulse 0.6s ease-in-out infinite;
+        }
+
+        @keyframes speaker-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        #quiz-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            flex: 1;
+        }
+
+        .quiz-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 6rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: transform 0.15s, background 0.2s;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .quiz-btn:active {
+            transform: scale(0.95);
+        }
+
+        .quiz-btn.correct {
+            animation: correct-flash 0.5s ease-out;
+            background: rgba(0, 255, 100, 0.4);
+        }
+
+        @keyframes correct-flash {
+            0% { background: rgba(0, 255, 100, 0.1); transform: scale(1); }
+            50% { background: rgba(0, 255, 100, 0.5); transform: scale(1.08); }
+            100% { background: rgba(0, 255, 100, 0.4); transform: scale(1); }
+        }
+
+        .quiz-btn.fade-in .emoji {
+            animation: quiz-fade-in 0.4s ease-out;
+        }
+
+        @keyframes quiz-fade-in {
+            0% { opacity: 0; transform: scale(0.5) rotate(-10deg); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); }
+        }
+
+        /* Text choices (letters, numbers) */
+        .text-choice {
+            color: white;
+            font-weight: 700;
+        }
+
+        /* Color swatches */
+        .color-swatch {
+            width: 60%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            border: 4px solid rgba(255,255,255,0.3);
+            animation: quiz-fade-in 0.4s ease-out;
+        }
+
+        /* Confetti */
+        #confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .confetti-piece {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            top: -10px;
+            animation: confetti-fall linear forwards;
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(0) rotate(0deg) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(720deg) scale(0.5);
+                opacity: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #quiz-speaker {
+                font-size: 3rem;
+                width: 64px;
+                height: 64px;
+            }
+            .quiz-btn {
                 font-size: 5rem;
             }
         }
@@ -207,12 +477,47 @@
 <body>
     <div id="start-screen">
         <h1>Fun Sounds!</h1>
-        <p>Press any key to hear sounds and see emojis!</p>
-        <button id="start-btn">Start Playing</button>
+        <p>Pick a game!</p>
+        <button id="start-btn">Free Play</button>
+
+        <div id="mode-selector">
+            <button class="mode-btn selected" data-mode="objects">
+                <span class="mode-icon">🐶</span>
+                <span class="mode-label">Objects</span>
+            </button>
+            <button class="mode-btn" data-mode="alphabet">
+                <span class="mode-icon">🔤</span>
+                <span class="mode-label">Letters</span>
+            </button>
+            <button class="mode-btn" data-mode="colors">
+                <span class="mode-icon">🌈</span>
+                <span class="mode-label">Colors</span>
+            </button>
+            <button class="mode-btn" data-mode="numbers">
+                <span class="mode-icon">🔢</span>
+                <span class="mode-label">Numbers</span>
+            </button>
+        </div>
+
+        <div id="difficulty-control">
+            <label for="difficulty-slider">Difficulty</label>
+            <input type="range" id="difficulty-slider" min="1" max="3" value="2" step="1">
+            <span id="difficulty-label">Normal</span>
+        </div>
+
+        <button id="quiz-btn">Start Quiz</button>
     </div>
 
     <div id="play-area">
         <div id="instruction-hint">Hold Escape to exit</div>
+    </div>
+
+    <div id="quiz-screen">
+        <div id="quiz-prompt">
+            <button id="quiz-speaker">🔊</button>
+        </div>
+        <div id="quiz-grid"></div>
+        <div id="confetti-container"></div>
     </div>
 
     <div id="touch-grid">
@@ -223,5 +528,6 @@
     </div>
 
     <script src="app.js"></script>
+    <script src="quiz.js"></script>
 </body>
 </html>
