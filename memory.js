@@ -141,6 +141,7 @@
         grid.innerHTML = '';
         grid.className = '';
         grid.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
+        grid.style.gridTemplateRows = `repeat(${config.rows}, 1fr)`;
 
         if (config.pairs >= 15) {
             grid.classList.add('grid-small');
