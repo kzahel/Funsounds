@@ -154,6 +154,10 @@
             const btn = document.createElement('button');
             btn.className = 'touch-btn';
             btn.dataset.index = i;
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handleTouchButton(i);
+            }, { passive: false });
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 handleTouchButton(i);

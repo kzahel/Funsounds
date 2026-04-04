@@ -289,6 +289,10 @@
                 btn.appendChild(span);
             }
 
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                handleQuizTap(btn);
+            }, { passive: false });
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 handleQuizTap(btn);
@@ -310,6 +314,14 @@
             spawnConfetti();
             playCheer();
             setTimeout(() => { startRound(); }, 3000);
+        } else {
+            // Brief X overlay
+            if (btn.querySelector('.wrong-x')) return;
+            const x = document.createElement('div');
+            x.className = 'wrong-x';
+            x.textContent = '\u2717';
+            btn.appendChild(x);
+            setTimeout(() => { if (x.parentNode) x.remove(); }, 600);
         }
     }
 
@@ -405,11 +417,13 @@
 
         document.getElementById('quiz-btn').addEventListener('click', startQuiz);
 
-        document.getElementById('quiz-speaker').addEventListener('click', () => {
+        const speakerHandler = () => {
             if (currentAnswer && !roundLocked) {
                 speak(currentAnswer.speech);
             }
-        });
+        };
+        document.getElementById('quiz-speaker').addEventListener('touchstart', (e) => { e.preventDefault(); speakerHandler(); }, { passive: false });
+        document.getElementById('quiz-speaker').addEventListener('click', speakerHandler);
 
         document.addEventListener('keydown', handleKeyDown, true);
         document.addEventListener('keyup', handleKeyUp, true);
