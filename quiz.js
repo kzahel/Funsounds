@@ -176,7 +176,7 @@
             const others = shuffle(pool.filter(s => s.name !== answer.name)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
-                answer: { key: answer.name, speech: firstRound ? `Where is the ${answer.name}?` : answer.name },
+                answer: { key: answer.name, speech: firstRound ? `Where is the ${answer.name}?` : answer.name, filename: answer.filename, duration: answer.duration },
                 choices: choices.map(c => ({ key: c.name, display: c.emoji, renderType: 'emoji' })),
             };
         }
@@ -311,9 +311,30 @@
         if (btn.dataset.key === currentAnswer.key) {
             roundLocked = true;
             btn.classList.add('correct');
-            spawnConfetti();
-            playCheer();
-            setTimeout(() => { startRound(); }, 3000);
+
+            // Play the object's sound first (if it has one), then cheer
+            if (currentAnswer.filename) {
+                const objAudio = new Audio(`${currentAnswer.filename}.mp3`);
+                objAudio.volume = 0.7;
+                const dur = (currentAnswer.duration || 3) * 1000;
+                objAudio.play().catch(() => {});
+
+                let cheered = false;
+                const doCheer = () => {
+                    if (cheered) return;
+                    cheered = true;
+                    spawnConfetti();
+                    playCheer();
+                };
+                objAudio.addEventListener('ended', doCheer, { once: true });
+                setTimeout(doCheer, dur + 300);
+
+                setTimeout(() => { startRound(); }, dur + 3000);
+            } else {
+                spawnConfetti();
+                playCheer();
+                setTimeout(() => { startRound(); }, 3000);
+            }
         } else {
             // Brief X overlay
             if (btn.querySelector('.wrong-x')) return;
