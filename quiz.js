@@ -132,7 +132,7 @@
             const others = shuffle(pool.filter(s => s.name !== answer.name)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
-                answer: { key: answer.name, speech: firstRound ? `Where is the ${answer.label || answer.name}?` : answer.label || answer.name },
+                answer: { key: answer.name, speech: firstRound ? `Where is the ${answer.name}?` : answer.name },
                 choices: choices.map(c => ({ key: c.name, display: c.emoji, renderType: 'emoji' })),
             };
         }
