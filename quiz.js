@@ -78,6 +78,31 @@
         { key: 'silver',     name: 'silver',      css: '#c0c0c0' },
     ];
 
+    // Colors that look too similar — never show together
+    const COLOR_CONFLICTS = [
+        ['red', 'crimson', 'maroon'],
+        ['yellow', 'gold'],
+        ['white', 'beige', 'silver'],
+        ['blue', 'navy', 'indigo'],
+        ['green', 'lime', 'olive', 'teal'],
+        ['purple', 'lavender', 'indigo', 'magenta'],
+        ['pink', 'magenta', 'salmon', 'coral'],
+        ['orange', 'coral', 'peach', 'salmon'],
+        ['brown', 'maroon', 'olive'],
+        ['turquoise', 'teal'],
+    ];
+
+    function getColorConflicts(key) {
+        const conflicts = new Set();
+        for (const group of COLOR_CONFLICTS) {
+            if (group.includes(key)) {
+                for (const k of group) conflicts.add(k);
+            }
+        }
+        conflicts.delete(key);
+        return conflicts;
+    }
+
     // Numbers
     const NUMBERS_EASY = [1, 2, 3, 4, 5];
     const NUMBERS_NORMAL = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -170,7 +195,8 @@
         if (quizMode === 'colors') {
             const pool = difficulty === 1 ? COLORS_EASY : difficulty === 2 ? COLORS_NORMAL : COLORS_HARD;
             const answer = pickRandom(pool);
-            const others = shuffle(pool.filter(c => c.key !== answer.key)).slice(0, numChoices - 1);
+            const conflicts = getColorConflicts(answer.key);
+            const others = shuffle(pool.filter(c => c.key !== answer.key && !conflicts.has(c.key))).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
                 answer: { key: answer.key, speech: firstRound ? `Where is ${answer.name}?` : answer.name },
@@ -310,7 +336,7 @@
 
         speechSynthesis.getVoices();
         firstRound = true;
-        startRound();
+        await startRound();
     }
 
     function stopQuiz() {
