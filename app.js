@@ -4,25 +4,51 @@
     let sounds = [];
     let isPlaying = false;
     let escapeHeldStart = null;
-    const ESCAPE_HOLD_TIME = 1500; // Hold escape for 1.5 seconds to exit
+    const ESCAPE_HOLD_TIME = 1500;
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                      (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
 
-    const BUTTON_COUNTS = { 1: 2, 2: 4, 3: 6 };
+    const BUTTON_COUNTS = { 1: 4, 2: 6, 3: 12 };
 
-    // Track which sounds are assigned to each button
-    let buttonSounds = [];
+    let buttonItems = [];
     let buttonCount = 4;
+
+    // Alphabet items
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+    // Color items
+    const COLORS = [
+        { display: null, css: '#e74c3c', name: 'red' },
+        { display: null, css: '#3498db', name: 'blue' },
+        { display: null, css: '#2ecc71', name: 'green' },
+        { display: null, css: '#f1c40f', name: 'yellow' },
+        { display: null, css: '#e67e22', name: 'orange' },
+        { display: null, css: '#9b59b6', name: 'purple' },
+        { display: null, css: '#2c3e50', name: 'black' },
+        { display: null, css: '#ecf0f1', name: 'white' },
+        { display: null, css: '#8B4513', name: 'brown' },
+        { display: null, css: '#ff69b4', name: 'pink' },
+        { display: null, css: '#1abc9c', name: 'turquoise' },
+        { display: null, css: '#ffd700', name: 'gold' },
+    ];
+
+    // Number items
+    const NUMBERS_EASY = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const NUMBERS_HARD = [];
+    for (let i = 1; i <= 20; i++) NUMBERS_HARD.push(i);
 
     function getDifficulty() {
         const slider = document.getElementById('difficulty-slider');
         return slider ? parseInt(slider.value) : 2;
     }
 
-    // Say the name of the sound using TTS
-    function speakName(soundData) {
-        if (!soundData) return;
-        const utter = new SpeechSynthesisUtterance(soundData.name);
+    function getMode() {
+        const sel = document.querySelector('.mode-btn.selected');
+        return sel ? sel.dataset.mode : 'objects';
+    }
+
+    function speakText(text) {
+        const utter = new SpeechSynthesisUtterance(text);
         utter.rate = 0.9;
         utter.pitch = 1.1;
         utter.volume = 1;
@@ -33,137 +59,101 @@
         speechSynthesis.speak(utter);
     }
 
-    // Load sounds data
     async function loadSounds() {
         try {
             const response = await fetch('toddler_sounds.json');
             const data = await response.json();
             sounds = data.sounds;
-            console.log(`Loaded ${sounds.length} sounds`);
         } catch (error) {
             console.error('Failed to load sounds:', error);
-            alert('Could not load sounds. Please make sure toddler_sounds.json is available.');
         }
     }
 
-    // Get a sound based on the key pressed
-    function getSoundForKey(key) {
-        if (sounds.length === 0) return null;
+    function pickRandom(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
 
-        // Create a simple hash from the key to get consistent sound per key
-        let hash = 0;
-        const keyStr = key.toLowerCase();
-        for (let i = 0; i < keyStr.length; i++) {
-            hash = ((hash << 5) - hash) + keyStr.charCodeAt(i);
-            hash = hash & hash; // Convert to 32bit integer
+    // Generate a random item based on current mode
+    function getRandomItem() {
+        const mode = getMode();
+
+        if (mode === 'objects') {
+            const s = pickRandom(sounds);
+            return { display: s.emoji, name: s.name, renderType: 'emoji', sound: s };
         }
-
-        const index = Math.abs(hash) % sounds.length;
-        return sounds[index];
+        if (mode === 'alphabet') {
+            const letter = pickRandom(ALPHABET);
+            return { display: letter, name: letter, renderType: 'text' };
+        }
+        if (mode === 'colors') {
+            const c = pickRandom(COLORS);
+            return { display: null, css: c.css, name: c.name, renderType: 'color' };
+        }
+        if (mode === 'numbers') {
+            const pool = getDifficulty() >= 3 ? NUMBERS_HARD : NUMBERS_EASY;
+            const n = pickRandom(pool);
+            return { display: String(n), name: String(n), renderType: 'text' };
+        }
+        // fallback
+        const s = pickRandom(sounds);
+        return { display: s.emoji, name: s.name, renderType: 'emoji', sound: s };
     }
 
-    // Play a sound and show emoji
-    function playSound(soundData) {
-        if (!soundData) return;
+    // Render an item into a button
+    function renderItemIntoButton(btn, item) {
+        // Clear existing content
+        const existing = btn.querySelector('.emoji, .color-swatch');
+        if (existing) existing.remove();
 
-        // Say the word first
-        speakName(soundData);
-
-        // Create audio element
-        const audio = new Audio(`${soundData.filename}.mp3`);
-        audio.volume = 0.7;
-
-        // Create emoji element
-        const emoji = document.createElement('div');
-        emoji.className = 'emoji-display';
-        emoji.textContent = soundData.emoji;
-
-        // Random position (with padding so it doesn't go off screen)
-        const padding = 100;
-        const x = padding + Math.random() * (window.innerWidth - padding * 2 - 150);
-        const y = padding + Math.random() * (window.innerHeight - padding * 2 - 150);
-
-        emoji.style.left = `${x}px`;
-        emoji.style.top = `${y}px`;
-
-        const playArea = document.getElementById('play-area');
-        playArea.appendChild(emoji);
-
-        // Play the audio
-        audio.play().catch(err => {
-            console.log('Audio play failed:', err);
-        });
-
-        // Remove emoji when audio ends (or after duration if audio fails)
-        const duration = (soundData.duration || 3) * 1000;
-
-        audio.addEventListener('ended', () => {
-            fadeOutEmoji(emoji);
-        });
-
-        // Fallback timeout in case audio doesn't fire ended event
-        setTimeout(() => {
-            fadeOutEmoji(emoji);
-        }, duration + 500);
+        if (item.renderType === 'color') {
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.background = item.css;
+            btn.appendChild(swatch);
+        } else {
+            const span = document.createElement('span');
+            span.className = 'emoji';
+            span.textContent = item.display;
+            if (item.renderType === 'text') span.classList.add('text-choice');
+            btn.appendChild(span);
+        }
     }
 
-    function fadeOutEmoji(emoji) {
-        if (emoji.classList.contains('fading')) return;
-        emoji.classList.add('fading');
-        setTimeout(() => {
-            if (emoji.parentNode) {
-                emoji.parentNode.removeChild(emoji);
-            }
-        }, 500);
-    }
-
-    // Get a random sound
-    function getRandomSound() {
-        if (sounds.length === 0) return null;
-        return sounds[Math.floor(Math.random() * sounds.length)];
-    }
-
-    // Initialize a touch button with a random sound
     function initTouchButton(index) {
         const btn = document.querySelector(`.touch-btn[data-index="${index}"]`);
         if (!btn) return;
 
-        const soundData = getRandomSound();
-        buttonSounds[index] = soundData;
-
-        const emojiSpan = btn.querySelector('.emoji');
-        if (emojiSpan && soundData) {
-            emojiSpan.textContent = soundData.emoji;
-        }
+        const item = getRandomItem();
+        buttonItems[index] = item;
+        renderItemIntoButton(btn, item);
     }
 
-    // Build the touch grid dynamically based on difficulty
     function buildTouchGrid() {
-        buttonCount = BUTTON_COUNTS[getDifficulty()] || 4;
-        buttonSounds = new Array(buttonCount).fill(null);
+        buttonCount = BUTTON_COUNTS[getDifficulty()] || 6;
+        buttonItems = new Array(buttonCount).fill(null);
 
         const grid = document.getElementById('touch-grid');
         grid.innerHTML = '';
+        grid.classList.remove('grid-large');
 
         // Set grid layout
-        if (buttonCount <= 2) {
+        if (buttonCount <= 4) {
             grid.style.gridTemplateColumns = '1fr 1fr';
-            grid.style.gridTemplateRows = '1fr';
-        } else if (buttonCount <= 4) {
-            grid.style.gridTemplateColumns = '1fr 1fr';
-            grid.style.gridTemplateRows = '1fr 1fr';
-        } else {
+            grid.style.gridTemplateRows = buttonCount <= 2 ? '1fr' : '1fr 1fr';
+        } else if (buttonCount <= 6) {
             grid.style.gridTemplateColumns = '1fr 1fr 1fr';
             grid.style.gridTemplateRows = '1fr 1fr';
+        } else {
+            // 12 buttons: 4x3
+            grid.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
+            grid.style.gridTemplateRows = '1fr 1fr 1fr';
+            grid.classList.add('grid-large');
         }
 
         for (let i = 0; i < buttonCount; i++) {
             const btn = document.createElement('button');
             btn.className = 'touch-btn';
             btn.dataset.index = i;
-            const span = document.createElement('span');
-            span.className = 'emoji';
-            btn.appendChild(span);
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 handleTouchButton(i);
@@ -173,106 +163,131 @@
         }
     }
 
-    // Handle touch button tap
-    async function handleTouchButton(index) {
-        const btn = document.querySelector(`.touch-btn[data-index="${index}"]`);
-        const soundData = buttonSounds[index];
-        if (!btn || !soundData) return;
+    // Desktop: play sound and show item on screen
+    function playSoundDesktop(item) {
+        if (!item) return;
 
-        // Prevent double-taps while loading
-        if (btn.classList.contains('charging')) return;
+        speakText(item.name);
 
-        // Say the word first
-        speakName(soundData);
+        // Create display element
+        const el = document.createElement('div');
+        el.className = 'emoji-display';
 
-        // Start charging animation immediately
-        btn.classList.add('charging');
-
-        // Preload the audio
-        const audio = new Audio();
-        audio.volume = 0.7;
-        audio.preload = 'auto';
-
-        // Wait for audio to be ready
-        const audioReady = new Promise((resolve) => {
-            audio.addEventListener('canplaythrough', resolve, { once: true });
-            audio.addEventListener('error', resolve, { once: true }); // Don't block on error
-            // Fallback timeout in case canplaythrough doesn't fire
-            setTimeout(resolve, 500);
-        });
-
-        audio.src = `${soundData.filename}.mp3`;
-
-        await audioReady;
-
-        // Play the audio
-        try {
-            await audio.play();
-        } catch (err) {
-            console.log('Audio play failed:', err);
+        if (item.renderType === 'color') {
+            el.style.width = '120px';
+            el.style.height = '120px';
+            el.style.borderRadius = '50%';
+            el.style.background = item.css;
+            el.style.border = '4px solid rgba(255,255,255,0.3)';
+            el.style.fontSize = '0';
+        } else if (item.renderType === 'text') {
+            el.textContent = item.display;
+            el.style.color = 'white';
+            el.style.fontWeight = '700';
+        } else {
+            el.textContent = item.display;
         }
 
-        // Small delay after audio starts to sync visual
-        await new Promise(r => setTimeout(r, 30));
+        const padding = 100;
+        const x = padding + Math.random() * (window.innerWidth - padding * 2 - 150);
+        const y = padding + Math.random() * (window.innerHeight - padding * 2 - 150);
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
 
-        // Remove charging, trigger fade
+        document.getElementById('play-area').appendChild(el);
+
+        // Play sound effect if it's an object with a sound file
+        let duration = 3000;
+        if (item.sound) {
+            const audio = new Audio(`${item.sound.filename}.mp3`);
+            audio.volume = 0.7;
+            audio.play().catch(() => {});
+            duration = (item.sound.duration || 3) * 1000;
+            audio.addEventListener('ended', () => fadeOutEmoji(el));
+        }
+
+        setTimeout(() => fadeOutEmoji(el), duration + 500);
+    }
+
+    function fadeOutEmoji(emoji) {
+        if (emoji.classList.contains('fading')) return;
+        emoji.classList.add('fading');
+        setTimeout(() => {
+            if (emoji.parentNode) emoji.parentNode.removeChild(emoji);
+        }, 500);
+    }
+
+    async function handleTouchButton(index) {
+        const btn = document.querySelector(`.touch-btn[data-index="${index}"]`);
+        const item = buttonItems[index];
+        if (!btn || !item) return;
+
+        if (btn.classList.contains('charging')) return;
+
+        speakText(item.name);
+
+        btn.classList.add('charging');
+
+        // If object mode, play the sound file
+        let audio = null;
+        if (item.sound) {
+            audio = new Audio();
+            audio.volume = 0.7;
+            audio.preload = 'auto';
+
+            const audioReady = new Promise((resolve) => {
+                audio.addEventListener('canplaythrough', resolve, { once: true });
+                audio.addEventListener('error', resolve, { once: true });
+                setTimeout(resolve, 500);
+            });
+
+            audio.src = `${item.sound.filename}.mp3`;
+            await audioReady;
+
+            try { await audio.play(); } catch (err) {}
+            await new Promise(r => setTimeout(r, 30));
+        } else {
+            // For non-sound modes, brief pause for the TTS
+            await new Promise(r => setTimeout(r, 400));
+        }
+
         btn.classList.remove('charging');
         btn.classList.add('fading');
 
-        const duration = (soundData.duration || 3) * 1000;
+        const duration = item.sound ? (item.sound.duration || 3) * 1000 : 1500;
 
-        // When audio ends, show new emoji
         let replaced = false;
-        const replaceEmoji = () => {
+        const replaceItem = () => {
             if (replaced) return;
             replaced = true;
-            // Set new emoji while still faded (invisible)
             initTouchButton(index);
-            // Small delay to ensure content is set, then fade in
-            requestAnimationFrame(() => {
-                btn.classList.remove('fading');
-            });
+            requestAnimationFrame(() => { btn.classList.remove('fading'); });
         };
 
-        audio.addEventListener('ended', replaceEmoji, { once: true });
-        // Fallback timeout
-        setTimeout(replaceEmoji, duration + 500);
+        if (audio) {
+            audio.addEventListener('ended', replaceItem, { once: true });
+        }
+        setTimeout(replaceItem, duration + 500);
     }
 
-    // Enter fullscreen
     async function enterFullscreen() {
         const elem = document.documentElement;
         try {
-            if (elem.requestFullscreen) {
-                await elem.requestFullscreen();
-            } else if (elem.webkitRequestFullscreen) {
-                await elem.webkitRequestFullscreen();
-            } else if (elem.msRequestFullscreen) {
-                await elem.msRequestFullscreen();
-            }
+            if (elem.requestFullscreen) await elem.requestFullscreen();
+            else if (elem.webkitRequestFullscreen) await elem.webkitRequestFullscreen();
+            else if (elem.msRequestFullscreen) await elem.msRequestFullscreen();
             return true;
-        } catch (error) {
-            console.log('Fullscreen request failed:', error);
-            return false;
-        }
+        } catch (error) { return false; }
     }
 
-    // Exit fullscreen
     function exitFullscreen() {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
-        }
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        else if (document.msExitFullscreen) document.msExitFullscreen();
     }
 
-    // Start playing
     async function startPlaying() {
-        if (isMobile) {
-            await enterFullscreen();
-        }
+        if (isMobile) await enterFullscreen();
 
         document.getElementById('start-screen').style.display = 'none';
 
@@ -284,12 +299,9 @@
         }
 
         isPlaying = true;
-
-        // Try to keep keyboard focus by focusing the document
         document.body.focus();
     }
 
-    // Stop playing
     function stopPlaying() {
         document.getElementById('start-screen').style.display = 'block';
         document.getElementById('play-area').style.display = 'none';
@@ -298,29 +310,22 @@
         escapeHeldStart = null;
     }
 
-    // Handle key down
     function handleKeyDown(event) {
         if (!isPlaying) return;
 
-        // Handle escape key - require holding it
         if (event.key === 'Escape') {
-            if (!escapeHeldStart) {
-                escapeHeldStart = Date.now();
-            }
+            if (!escapeHeldStart) escapeHeldStart = Date.now();
             event.preventDefault();
             return;
         }
 
-        // Prevent default for all keys to stop browser shortcuts
         event.preventDefault();
         event.stopPropagation();
 
-        // Play sound for this key
-        const soundData = getSoundForKey(event.key || event.code);
-        playSound(soundData);
+        const item = getRandomItem();
+        playSoundDesktop(item);
     }
 
-    // Handle key up
     function handleKeyUp(event) {
         if (event.key === 'Escape') {
             if (escapeHeldStart && (Date.now() - escapeHeldStart) >= ESCAPE_HOLD_TIME) {
@@ -331,7 +336,6 @@
         }
     }
 
-    // Check if escape is still being held
     function checkEscapeHold() {
         if (escapeHeldStart && (Date.now() - escapeHeldStart) >= ESCAPE_HOLD_TIME) {
             if (isMobile) exitFullscreen();
@@ -339,61 +343,44 @@
         }
     }
 
-    // Handle fullscreen change (only relevant on mobile)
     function handleFullscreenChange() {
         if (!isMobile) return;
         const isFullscreen = document.fullscreenElement ||
                             document.webkitFullscreenElement ||
                             document.msFullscreenElement;
-
-        if (!isFullscreen && isPlaying) {
-            stopPlaying();
-        }
+        if (!isFullscreen && isPlaying) stopPlaying();
     }
 
-    // Initialize
     async function init() {
         await loadSounds();
 
-        // Start button click
         document.getElementById('start-btn').addEventListener('click', startPlaying);
 
-        // Also start on any key press from start screen
         document.addEventListener('keydown', (e) => {
             if (!isPlaying && e.key !== 'Escape' && document.getElementById('start-screen').style.display !== 'none') {
                 startPlaying();
             }
         }, { once: false });
 
-        // Key handlers
         document.addEventListener('keydown', handleKeyDown, true);
         document.addEventListener('keyup', handleKeyUp, true);
-
-        // Check escape hold periodically
         setInterval(checkEscapeHold, 100);
 
-        // Fullscreen change handler
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
         document.addEventListener('msfullscreenchange', handleFullscreenChange);
 
-        // Prevent context menu
         document.addEventListener('contextmenu', (e) => {
             if (isPlaying) e.preventDefault();
         });
 
-        // Prevent some keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (isPlaying) {
-                // Block F keys, Ctrl combos, etc.
-                if (e.ctrlKey || e.altKey || e.metaKey) {
-                    e.preventDefault();
-                }
+            if (isPlaying && (e.ctrlKey || e.altKey || e.metaKey)) {
+                e.preventDefault();
             }
         }, true);
     }
 
-    // Start when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
