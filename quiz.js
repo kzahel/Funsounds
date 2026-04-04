@@ -7,6 +7,7 @@
     let roundLocked = false;
     let quizMode = 'objects';
     let difficulty = 2;
+    let firstRound = true;
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                      (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
@@ -131,7 +132,7 @@
             const others = shuffle(pool.filter(s => s.name !== answer.name)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
-                answer: { key: answer.name, speech: `Where is the ${answer.label || answer.name}?` },
+                answer: { key: answer.name, speech: firstRound ? `Where is the ${answer.label || answer.name}?` : answer.label || answer.name },
                 choices: choices.map(c => ({ key: c.name, display: c.emoji, renderType: 'emoji' })),
             };
         }
@@ -142,7 +143,7 @@
             const others = shuffle(pool.filter(l => l !== answer)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
-                answer: { key: answer, speech: `Where is the letter ${answer}?` },
+                answer: { key: answer, speech: firstRound ? `Where is the letter ${answer}?` : answer },
                 choices: choices.map(c => ({ key: c, display: c, renderType: 'text' })),
             };
         }
@@ -153,7 +154,7 @@
             const others = shuffle(pool.filter(c => c.key !== answer.key)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
-                answer: { key: answer.key, speech: `Where is ${answer.name}?` },
+                answer: { key: answer.key, speech: firstRound ? `Where is ${answer.name}?` : answer.name },
                 choices: choices.map(c => ({ key: c.key, css: c.css, renderType: 'color' })),
             };
         }
@@ -164,7 +165,7 @@
             const others = shuffle(pool.filter(n => n !== answer)).slice(0, numChoices - 1);
             const choices = shuffle([answer, ...others]);
             return {
-                answer: { key: String(answer), speech: `Where is the number ${answer}?` },
+                answer: { key: String(answer), speech: firstRound ? `Where is the number ${answer}?` : String(answer) },
                 choices: choices.map(c => ({ key: String(c), display: String(c), renderType: 'text' })),
             };
         }
@@ -252,6 +253,7 @@
 
         await new Promise(r => setTimeout(r, 400));
         await speak(answer.speech);
+        firstRound = false;
     }
 
     function handleQuizTap(btn) {
@@ -288,6 +290,7 @@
         quizActive = true;
 
         speechSynthesis.getVoices();
+        firstRound = true;
         startRound();
     }
 
