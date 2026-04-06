@@ -305,9 +305,11 @@ function renderCenter(): void {
 
 function renderHand(): void {
   const handEl = document.getElementById('uno-hand')!;
+  const wrapperEl = document.getElementById('uno-hand-wrapper')!;
   const human = players[humanIndex];
   if (!human) return;
   const isMyTurn = currentPlayerIdx === humanIndex && !gameOver && !animating;
+  wrapperEl.classList.toggle('my-turn', isMyTurn);
   let html = '';
   for (const card of human.hand) {
     const playable = isMyTurn && canPlayCard(card) && !awaitingColorPick;
