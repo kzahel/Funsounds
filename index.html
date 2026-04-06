@@ -42,9 +42,25 @@
             opacity: 0.9;
         }
 
+        .game-card {
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            padding: 1.5rem 1.2rem;
+            margin: 1rem auto;
+            max-width: 400px;
+        }
+
+        .game-card h2 {
+            color: white;
+            font-size: 1.3rem;
+            margin: 0 0 0.8rem;
+            opacity: 0.85;
+        }
+
         #start-btn {
-            font-size: 2rem;
-            padding: 1rem 3rem;
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
             border: none;
             border-radius: 50px;
             background: white;
@@ -197,9 +213,8 @@
             #start-screen h1 {
                 font-size: 2rem;
             }
-            #start-btn, #quiz-btn, #memory-btn {
-                font-size: 1.5rem;
-                padding: 0.8rem 2rem;
+            .game-card {
+                margin: 0.8rem 1rem;
             }
             #mode-selector {
                 max-width: 280px;
@@ -302,8 +317,8 @@
         }
 
         #quiz-btn {
-            font-size: 2rem;
-            padding: 1rem 3rem;
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
             border: none;
             border-radius: 50px;
             background: #ff6b9d;
@@ -311,7 +326,6 @@
             cursor: pointer;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             transition: transform 0.2s, box-shadow 0.2s;
-            margin-top: 1rem;
         }
 
         #quiz-btn:hover {
@@ -604,8 +618,8 @@
 
         /* Memory button */
         #memory-btn {
-            font-size: 2rem;
-            padding: 1rem 3rem;
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
             border: none;
             border-radius: 50px;
             background: #6bcb77;
@@ -613,7 +627,7 @@
             cursor: pointer;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             transition: transform 0.2s, box-shadow 0.2s;
-            margin-top: 1rem;
+            margin-top: 0.8rem;
         }
 
         #memory-btn:hover {
@@ -738,8 +752,8 @@
 
         @media (max-width: 768px) {
             #memory-btn {
-                font-size: 1.5rem;
-                padding: 0.8rem 2rem;
+                font-size: 1.3rem;
+                padding: 0.7rem 1.8rem;
             }
         }
 
@@ -781,8 +795,8 @@
             background: rgba(255,217,61,0.2);
         }
         #uno-btn {
-            font-size: 2rem;
-            padding: 1rem 3rem;
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
             border: none;
             border-radius: 50px;
             background: #f59e0b;
@@ -790,7 +804,7 @@
             cursor: pointer;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             transition: transform 0.2s, box-shadow 0.2s;
-            margin-top: 1rem;
+            margin-top: 0.8rem;
         }
         #uno-btn:hover { transform: scale(1.05); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
         #uno-btn:active { transform: scale(0.98); }
@@ -1150,7 +1164,7 @@
             #uno-direction { right: -35px; font-size: 1.5rem; }
             .uno-cpick-btn { width: 64px; height: 64px; }
             #uno-uno-btn { bottom: 115px; width: 70px; height: 70px; }
-            #uno-btn { font-size: 1.5rem; padding: 0.8rem 2rem; }
+            #uno-btn { font-size: 1.3rem; padding: 0.7rem 1.8rem; }
         }
     </style>
 </head>
@@ -1158,43 +1172,50 @@
     <div id="start-screen">
         <h1>Fun Sounds!</h1>
         <p>Pick a game!</p>
-        <button id="start-btn">Free Play</button>
 
-        <div id="mode-selector">
-            <button class="mode-btn selected" data-mode="objects">
-                <span class="mode-icon">🐶</span>
-                <span class="mode-label">Objects</span>
-            </button>
-            <button class="mode-btn" data-mode="alphabet">
-                <span class="mode-icon">🔤</span>
-                <span class="mode-label">Letters</span>
-            </button>
-            <button class="mode-btn" data-mode="colors">
-                <span class="mode-icon">🌈</span>
-                <span class="mode-label">Colors</span>
-            </button>
-            <button class="mode-btn" data-mode="numbers">
-                <span class="mode-icon">🔢</span>
-                <span class="mode-label">Numbers</span>
-            </button>
+        <div class="game-card">
+            <h2>Free Play / Quiz</h2>
+            <div id="mode-selector">
+                <button class="mode-btn selected" data-mode="objects">
+                    <span class="mode-icon">🐶</span>
+                    <span class="mode-label">Objects</span>
+                </button>
+                <button class="mode-btn" data-mode="alphabet">
+                    <span class="mode-icon">🔤</span>
+                    <span class="mode-label">Letters</span>
+                </button>
+                <button class="mode-btn" data-mode="colors">
+                    <span class="mode-icon">🌈</span>
+                    <span class="mode-label">Colors</span>
+                </button>
+                <button class="mode-btn" data-mode="numbers">
+                    <span class="mode-icon">🔢</span>
+                    <span class="mode-label">Numbers</span>
+                </button>
+            </div>
+            <div id="difficulty-control">
+                <label for="difficulty-slider">Difficulty</label>
+                <input type="range" id="difficulty-slider" min="1" max="3" value="2" step="1">
+                <span id="difficulty-label">Normal</span>
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+                <button id="start-btn">Free Play</button>
+                <button id="quiz-btn">Start Quiz</button>
+            </div>
         </div>
 
-        <div id="difficulty-control">
-            <label for="difficulty-slider">Difficulty</label>
-            <input type="range" id="difficulty-slider" min="1" max="3" value="2" step="1">
-            <span id="difficulty-label">Normal</span>
+        <div class="game-card">
+            <h2>Memory Game</h2>
+            <div id="player-control">
+                <label>Players</label>
+                <button class="player-btn selected" data-players="1">1</button>
+                <button class="player-btn" data-players="2">2</button>
+            </div>
+            <button id="memory-btn">Memory Game</button>
         </div>
 
-        <button id="quiz-btn">Start Quiz</button>
-
-        <div id="player-control">
-            <label>Players</label>
-            <button class="player-btn selected" data-players="1">1</button>
-            <button class="player-btn" data-players="2">2</button>
-        </div>
-        <button id="memory-btn">Memory Game</button>
-
-        <div style="margin-top:1.2rem;">
+        <div class="game-card">
+            <h2>Uno</h2>
             <div class="uno-config-group">
                 <label>AI</label>
                 <button class="uno-config-btn selected" data-ai-count="1">1</button>
@@ -1211,8 +1232,8 @@
                 <button class="uno-config-btn selected" data-uno-rules="beginner">Beginner</button>
                 <button class="uno-config-btn" data-uno-rules="intermediate">Intermediate</button>
             </div>
+            <button id="uno-btn">Uno!</button>
         </div>
-        <button id="uno-btn">Uno!</button>
     </div>
 
     <div id="play-area">
