@@ -601,15 +601,29 @@ async function executeDrawPending(playerIdx: number): Promise<void> {
   const count = pendingDraw;
   pendingDraw = 0;
 
+  speakText(`${player.name === 'You' ? 'You draw' : player.name + ' draws'} ${count}!`, { rate: 1.1, pitch: 1.2 });
+  flashMessage(`${player.name} draws ${count}!`, '#ff6b9d');
+
   for (let i = 0; i < count; i++) {
     const card = drawFromPile();
     if (!card) break;
     player.hand.push(card);
+    // Animate each card flying from draw pile
+    const fromRect = getRect('#uno-draw-pile .uno-pile-card');
+    render();
+    if (player.isHuman) {
+      const toRect = getRect('#uno-hand');
+      await animateCardMove(cardHtml(card, true, 'uno-flying'), fromRect, toRect, 250, true);
+    } else {
+      const aiEls = document.querySelectorAll('.uno-ai-player');
+      const aiIdx = playerIdx > humanIndex ? playerIdx - 1 : playerIdx;
+      const toRect = aiEls[aiIdx]?.getBoundingClientRect() ?? fromRect;
+      await animateCardMove(cardHtml(card, false, 'uno-flying'), fromRect, toRect, 250);
+    }
+    await delay(100);
   }
-  flashMessage(`${player.name} draws ${count}!`, '#ff6b9d');
   animating = false;
   render();
-  await delay(600);
 }
 
 async function executeDrawOne(playerIdx: number): Promise<void> {
@@ -635,29 +649,52 @@ async function executeDrawOne(playerIdx: number): Promise<void> {
   render();
 }
 
+function playCardSound(value: CardValue): void {
+  switch (value) {
+    case 'reverse':
+      speakText('Reverse!', { rate: 1.1, pitch: 0.8 });
+      break;
+    case 'skip':
+      speakText('Skip!', { rate: 1.2, pitch: 1.3 });
+      break;
+    case 'draw2':
+      speakText('Plus two!', { rate: 1.1, pitch: 1.0 });
+      break;
+    case 'wild':
+      speakText('Wild card!', { rate: 1.0, pitch: 1.2 });
+      break;
+    case 'wild4':
+      speakText('Plus four!', { rate: 1.0, pitch: 0.9 });
+      break;
+  }
+}
+
 function applyEffects(card: UnoCard): void {
+  playCardSound(card.value);
   switch (card.value) {
     case 'reverse':
       direction = (direction === 1 ? -1 : 1) as 1 | -1;
       if (players.length === 2) {
-        // Acts as skip in 2-player
         currentPlayerIdx = nextPlayer(currentPlayerIdx);
       }
-      flashMessage(direction === 1 ? '→ Reversed!' : '← Reversed!', '#c084fc');
+      flashMessage(direction === 1 ? '⟲ Reversed!' : '⟳ Reversed!', '#c084fc');
       break;
     case 'skip':
       if (ruleset === 'intermediate') {
         pendingSkip = true;
+        flashMessage('Skip incoming!', '#ff6b9d');
       } else {
         currentPlayerIdx = nextPlayer(currentPlayerIdx);
-        flashMessage('Skip!', '#ff6b9d');
+        flashMessage('⊘ Skip!', '#ff6b9d');
       }
       break;
     case 'draw2':
       pendingDraw += 2;
+      flashMessage(`+${pendingDraw}!`, '#e53e3e');
       break;
     case 'wild4':
       pendingDraw += 4;
+      flashMessage(`+${pendingDraw}!`, '#e53e3e');
       break;
   }
 }
