@@ -1,0 +1,31 @@
+import type { UnoCard, UnoPlayer, Ruleset, Theme, CardColor } from './types';
+import type { SoundEntry } from '../types';
+
+export const state = {
+  players: [] as UnoPlayer[],
+  drawPile: [] as UnoCard[],
+  discardPile: [] as UnoCard[],
+  currentPlayerIdx: 0,
+  direction: 1 as 1 | -1,
+  currentColor: 'red' as CardColor,
+  pendingDraw: 0,
+  pendingSkip: false,
+  ruleset: 'beginner' as Ruleset,
+  theme: 'classic' as Theme,
+  gameActive: false,
+  gameOver: false,
+  showAiHands: false,
+  nextCardId: 0,
+  sounds: [] as SoundEntry[],
+  emojiValues: [] as string[],
+  unoTimerId: null as number | null,
+  unoDeadline: 0,
+  unoRafId: 0,
+  animating: false,
+  turnLock: false,
+  humanIndex: 0,
+  aiCount: 1,
+  awaitingColorPick: false,
+  pendingWildCard: null as UnoCard | null,
+  hasDrawnThisTurn: false,
+};
