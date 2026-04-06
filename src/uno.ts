@@ -198,25 +198,27 @@ function animateCardMove(
     wrapper.innerHTML = html;
     const el = wrapper.firstElementChild as HTMLElement;
     el.style.position = 'fixed';
-    el.style.left = fromRect.left + 'px';
-    el.style.top = fromRect.top + 'px';
-    el.style.width = fromRect.width + 'px';
-    el.style.height = fromRect.height + 'px';
     el.style.zIndex = '5000';
-    el.style.transition = `all ${duration}ms cubic-bezier(.4,.0,.2,1)`;
     el.style.pointerEvents = 'none';
-    if (flip) {
-      el.style.transform = 'rotateY(180deg)';
-    }
+    // Keep card at its natural CSS size, only animate position via transform
+    const startX = fromRect.left + fromRect.width / 2;
+    const startY = fromRect.top + fromRect.height / 2;
+    const endX = toRect.left + toRect.width / 2;
+    const endY = toRect.top + toRect.height / 2;
+    // Center the card on the start point
+    const cardW = el.offsetWidth || 60;
+    const cardH = el.offsetHeight || 90;
+    el.style.left = '0px';
+    el.style.top = '0px';
+    const flipStr = flip ? ' rotateY(180deg)' : '';
+    el.style.transform = `translate(${startX - cardW / 2}px, ${startY - cardH / 2}px)${flipStr}`;
+    el.style.transition = `transform ${duration}ms cubic-bezier(.4,.0,.2,1)`;
     document.body.appendChild(el);
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        el.style.left = toRect.left + 'px';
-        el.style.top = toRect.top + 'px';
-        el.style.width = toRect.width + 'px';
-        el.style.height = toRect.height + 'px';
-        if (flip) el.style.transform = 'rotateY(0deg)';
+        const flipEnd = flip ? ' rotateY(0deg)' : '';
+        el.style.transform = `translate(${endX - cardW / 2}px, ${endY - cardH / 2}px)${flipEnd}`;
       });
     });
 
@@ -280,9 +282,8 @@ function renderCenter(): void {
 
   // Draw pile
   const isHumanTurn = currentPlayerIdx === humanIndex && !gameOver && !animating && !awaitingColorPick;
-  const mustDraw = isHumanTurn && pendingDraw > 0 && !hasPlayableCard(players[humanIndex].hand);
-  const canVoluntaryDraw = isHumanTurn && pendingDraw === 0 && !pendingSkip && !hasPlayableCard(players[humanIndex].hand);
-  const drawClass = mustDraw || canVoluntaryDraw ? ' drawable' : '';
+  const canDraw = isHumanTurn && !pendingSkip;
+  const drawClass = canDraw ? ' drawable' : '';
   drawEl.innerHTML = `<div class="uno-card uno-back uno-pile-card${drawClass}">` +
     `<span class="uno-card-val">UNO</span>` +
     `<span class="uno-pile-count">${drawPile.length}</span></div>`;
@@ -343,10 +344,8 @@ function renderStatus(): void {
       el.textContent = canDeflect
         ? 'Play a Skip to deflect, or get skipped!'
         : 'You are skipped!';
-    } else if (hasPlayableCard(players[humanIndex].hand)) {
-      el.textContent = 'Your turn! Play a card.';
     } else {
-      el.textContent = 'No playable card. Tap the draw pile.';
+      el.textContent = 'Your turn! Play a card or draw.';
     }
   } else {
     el.textContent = `${players[currentPlayerIdx].name} is thinking...`;
@@ -737,8 +736,6 @@ async function humanDraw(): Promise<void> {
     await runTurn();
     return;
   }
-
-  if (hasPlayableCard(players[humanIndex].hand)) return;
 
   await executeDrawOne(humanIndex);
   await delay(400);
