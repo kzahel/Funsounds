@@ -190,25 +190,24 @@ export function animateOverlay(
     el.style.position = 'fixed';
     el.style.zIndex = '5000';
     el.style.pointerEvents = 'none';
+    el.style.left = '0px';
+    el.style.top = '0px';
 
-    // Measure card dimensions from the element
-    document.body.appendChild(el);
-    const cardW = el.offsetWidth;
-    const cardH = el.offsetHeight;
-
+    // Position at source BEFORE appending to avoid a flash at (0,0)
+    const cardW = fromRect.width;
+    const cardH = fromRect.height;
     const startX = fromRect.left + fromRect.width / 2 - cardW / 2;
     const startY = fromRect.top + fromRect.height / 2 - cardH / 2;
     const endX = toRect.left + toRect.width / 2 - cardW / 2;
     const endY = toRect.top + toRect.height / 2 - cardH / 2;
 
-    el.style.left = '0px';
-    el.style.top = '0px';
     el.style.transform = `translate(${startX}px, ${startY}px)`;
-    el.style.transition = `transform ${duration}ms cubic-bezier(.4,0,.2,1)`;
+    document.body.appendChild(el);
 
-    // Force layout
+    // Force layout so browser registers start position before transition
     el.offsetHeight;
 
+    el.style.transition = `transform ${duration}ms cubic-bezier(.4,0,.2,1)`;
     el.style.transform = `translate(${endX}px, ${endY}px)`;
 
     const cleanup = () => { if (el.parentNode) el.remove(); resolve(); };
