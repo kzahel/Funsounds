@@ -130,10 +130,11 @@ function applyEffects(card: UnoCard): void {
   }
 }
 
-function checkWin(playerIdx: number): boolean {
+async function checkWin(playerIdx: number): Promise<boolean> {
   if (state.players[playerIdx].hand.length === 0) {
     state.gameOver = true;
     render();
+    await delay(1200);
     showGameOver(playerIdx);
     return true;
   }
@@ -148,6 +149,7 @@ function checkUno(playerIdx: number): void {
       startUnoTimer();
     } else {
       player.calledUno = true;
+      speakText('UNO!', { rate: 1.2, pitch: 1.0 });
       flashMessage(`${player.name}: UNO!`, '#ffd93d');
     }
   }
@@ -183,28 +185,43 @@ async function executePlay(playerIdx: number, card: UnoCard): Promise<void> {
   const cardIdx = player.hand.findIndex(c => c.id === card.id);
   if (cardIdx < 0) { state.animating = false; return; }
 
-  // Get the card's current position before any DOM changes
-  const fromEl = document.querySelector(`[data-card-id="${card.id}"]`);
-  const fromRect = fromEl ? fromEl.getBoundingClientRect() : getRect('#uno-hand');
   const toRect = getRect('#uno-discard-area');
 
-  // Snapshot hand positions before removal
-  const before = snapshotHand();
+  if (player.isHuman) {
+    // Get the card's current position before any DOM changes
+    const fromEl = document.querySelector(`[data-card-id="${card.id}"]`);
+    const fromRect = fromEl ? fromEl.getBoundingClientRect() : getRect('#uno-hand');
 
-  // Remove card from hand state
-  player.hand.splice(cardIdx, 1);
+    // Snapshot hand positions before removal
+    const before = snapshotHand();
 
-  // Hide the source card immediately (it will be removed by reconcile)
-  if (fromEl) (fromEl as HTMLElement).style.visibility = 'hidden';
+    // Remove card from hand state
+    player.hand.splice(cardIdx, 1);
 
-  // Reconcile hand DOM (removed card disappears, others shift)
-  reconcileHand();
+    // Hide the source card immediately (it will be removed by reconcile)
+    if (fromEl) (fromEl as HTMLElement).style.visibility = 'hidden';
 
-  // Animate: overlay flies to discard + remaining cards slide into place
-  await Promise.all([
-    animateOverlay(cardHtml(card, true, 'uno-flying'), fromRect, toRect, ANIM_MS),
-    flipAnimateHand(before, undefined, undefined, ANIM_MS),
-  ]);
+    // Reconcile hand DOM (removed card disappears, others shift)
+    reconcileHand();
+
+    // Animate: overlay flies to discard + remaining cards slide into place
+    await Promise.all([
+      animateOverlay(cardHtml(card, true, 'uno-flying'), fromRect, toRect, ANIM_MS),
+      flipAnimateHand(before, undefined, undefined, ANIM_MS),
+    ]);
+  } else {
+    // AI play: animate from the AI player's area to the discard pile
+    const aiEls = document.querySelectorAll('.uno-ai-player');
+    const aiIdx = playerIdx > state.humanIndex ? playerIdx - 1 : playerIdx;
+    const fromRect = aiEls[aiIdx]?.getBoundingClientRect() ?? getRect('#uno-ai-area');
+
+    // Remove card from hand state and update AI area
+    player.hand.splice(cardIdx, 1);
+    renderAiArea();
+
+    // Animate card flying from AI area to discard
+    await animateOverlay(cardHtml(card, true, 'uno-flying'), fromRect, toRect, ANIM_MS);
+  }
 
   state.discardPile.push(card);
   if (card.color !== 'wild') {
@@ -425,7 +442,7 @@ async function aiTurn(playerIdx: number): Promise<void> {
         await executePlay(playerIdx, stackCard);
         if (stackCard.color === 'wild') state.currentColor = aiPickColor(playerIdx);
         applyEffects(stackCard);
-        if (checkWin(playerIdx)) return;
+        if (await checkWin(playerIdx)) return;
         checkUno(playerIdx);
         state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
         await runTurn();
@@ -443,7 +460,7 @@ async function aiTurn(playerIdx: number): Promise<void> {
     await executePlay(playerIdx, card);
     if (card.color === 'wild') state.currentColor = aiPickColor(playerIdx);
     applyEffects(card);
-    if (checkWin(playerIdx)) return;
+    if (await checkWin(playerIdx)) return;
     checkUno(playerIdx);
     await delay(400);
     state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
@@ -470,7 +487,7 @@ export async function humanPlay(card: UnoCard): Promise<void> {
     state.currentColor = color;
     applyEffects(card);
     render();
-    if (checkWin(state.humanIndex)) return;
+    if (await checkWin(state.humanIndex)) return;
     checkUno(state.humanIndex);
     await delay(300);
     state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
@@ -482,7 +499,7 @@ export async function humanPlay(card: UnoCard): Promise<void> {
     state.pendingSkip = false;
     await executePlay(state.humanIndex, card);
     state.pendingSkip = true;
-    if (checkWin(state.humanIndex)) return;
+    if (await checkWin(state.humanIndex)) return;
     checkUno(state.humanIndex);
     state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
     await runTurn();
@@ -491,7 +508,7 @@ export async function humanPlay(card: UnoCard): Promise<void> {
 
   await executePlay(state.humanIndex, card);
   applyEffects(card);
-  if (checkWin(state.humanIndex)) return;
+  if (await checkWin(state.humanIndex)) return;
   checkUno(state.humanIndex);
   await delay(300);
   state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
@@ -537,14 +554,25 @@ export function humanEndTurn(): void {
 function showGameOver(winnerIdx: number): void {
   const overlay = document.getElementById('uno-game-over')!;
   const winner = state.players[winnerIdx];
+  const isHumanWin = winner.isHuman;
+
   overlay.style.display = 'flex';
   overlay.innerHTML = `<div class="uno-go-content">` +
-    `<h2>${winner.isHuman ? 'You win!' : winner.name + ' wins!'}</h2>` +
+    `<h2 class="uno-go-title">${isHumanWin ? 'You win!' : winner.name + ' wins!'}</h2>` +
+    `<div class="uno-go-subtitle">${isHumanWin ? 'Amazing!' : 'Better luck next time!'}</div>` +
     `<button class="uno-go-btn" id="uno-play-again">Play Again</button>` +
     `<button class="uno-go-btn uno-go-menu" id="uno-go-menu">Menu</button>` +
     `</div>`;
 
-  if (winner.isHuman) { playCheer(); spawnConfetti(); }
+  if (isHumanWin) {
+    playCheer();
+    spawnConfetti();
+    // Extra confetti bursts
+    setTimeout(() => spawnConfetti(), 800);
+    setTimeout(() => spawnConfetti(), 1600);
+  } else {
+    speakText('Game over!', { rate: 0.9, pitch: 0.7 });
+  }
 
   document.getElementById('uno-play-again')!.addEventListener('click', () => {
     overlay.style.display = 'none';

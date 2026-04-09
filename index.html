@@ -1117,6 +1117,15 @@
             0%, 100% { box-shadow: 0 0 16px rgba(245,158,11,0.3); }
             50% { box-shadow: 0 0 32px rgba(245,158,11,0.7); }
         }
+        @keyframes uno-go-pop {
+            0% { transform: scale(0.3); opacity: 0; }
+            60% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes uno-go-fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
         .uno-timer-svg {
             position: absolute;
             top: 0; left: 0;
@@ -1160,12 +1169,22 @@
             text-align: center;
             color: white;
         }
-        .uno-go-content h2 {
-            font-size: 2.5rem;
+        .uno-go-title {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+            animation: uno-go-pop 0.6s cubic-bezier(.2,1.2,.4,1) both;
+        }
+        .uno-go-subtitle {
+            font-size: 1.3rem;
             margin-bottom: 1.5rem;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            opacity: 0;
+            animation: uno-go-fade-in 0.5s ease 0.4s forwards;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
         .uno-go-btn {
+            opacity: 0;
+            animation: uno-go-fade-in 0.4s ease 0.7s forwards;
             font-size: 1.3rem;
             padding: 0.7rem 2rem;
             border: none;
