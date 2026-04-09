@@ -757,6 +757,446 @@
             }
         }
 
+        /* Flying Comments */
+        #flying-comments-btn {
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 50px;
+            background: #4d96ff;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 0.8rem;
+        }
+
+        #flying-comments-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        }
+
+        #flying-comments-btn:active {
+            transform: scale(0.98);
+        }
+
+        #flying-comments-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 15%, rgba(255,242,189,0.45) 0, rgba(255,242,189,0) 26%),
+                linear-gradient(180deg, #63b3ff 0%, #3874c8 45%, #17375d 100%);
+            overflow: hidden;
+        }
+
+        #fc-world {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        .fc-sky-layer {
+            position: absolute;
+            inset: -8% -20%;
+            pointer-events: none;
+        }
+
+        .fc-sky-back {
+            background:
+                radial-gradient(circle at 10% 20%, rgba(255,255,255,0.35) 0 40px, transparent 44px),
+                radial-gradient(circle at 30% 38%, rgba(255,255,255,0.28) 0 54px, transparent 58px),
+                radial-gradient(circle at 63% 18%, rgba(255,255,255,0.26) 0 48px, transparent 52px),
+                radial-gradient(circle at 86% 34%, rgba(255,255,255,0.32) 0 44px, transparent 49px);
+            opacity: 0.7;
+            animation: fc-clouds-back 32s linear infinite;
+        }
+
+        .fc-sky-mid {
+            background:
+                repeating-linear-gradient(
+                    115deg,
+                    transparent 0 110px,
+                    rgba(255,255,255,0.11) 110px 136px,
+                    transparent 136px 230px
+                );
+            opacity: 0.45;
+            animation: fc-clouds-mid 12s linear infinite;
+        }
+
+        .fc-horizon {
+            position: absolute;
+            left: -10vw;
+            right: -10vw;
+            bottom: -8vh;
+            height: 26vh;
+            border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+            background:
+                linear-gradient(180deg, rgba(86,173,255,0.08) 0%, rgba(17,43,78,0.2) 16%, rgba(10,20,39,0.88) 100%);
+            box-shadow: inset 0 24px 40px rgba(255,255,255,0.08);
+            pointer-events: none;
+        }
+
+        #fc-world::after {
+            content: '';
+            position: absolute;
+            inset: auto -20% 12vh -20%;
+            height: 2px;
+            background:
+                repeating-linear-gradient(90deg, rgba(255,255,255,0.22) 0 60px, transparent 60px 120px);
+            opacity: 0.25;
+            animation: fc-runway 1.2s linear infinite;
+            pointer-events: none;
+        }
+
+        #fc-hud {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .fc-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.65rem 0.95rem;
+            border-radius: 999px;
+            background: rgba(7, 18, 35, 0.34);
+            border: 1px solid rgba(255,255,255,0.14);
+            color: white;
+            font-size: 1rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .fc-pill strong {
+            font-size: 1.15rem;
+        }
+
+        .fc-pill-shield {
+            min-width: 220px;
+        }
+
+        #fc-shield-meter {
+            width: 76px;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.16);
+            overflow: hidden;
+        }
+
+        #fc-shield-fill {
+            width: 100%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #74f2ce 0%, #4d96ff 100%);
+            box-shadow: 0 0 14px rgba(116,242,206,0.4);
+        }
+
+        #fc-status {
+            position: absolute;
+            top: 84px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 240px;
+            padding: 0.45rem 0.9rem;
+            border-radius: 999px;
+            background: rgba(7, 18, 35, 0.26);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.9);
+            text-align: center;
+            font-size: 0.95rem;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        #fc-comet-layer,
+        #fc-particle-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        #fc-plane {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 72px;
+            height: 54px;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        .fc-plane-emoji {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.4rem;
+            filter: drop-shadow(0 8px 14px rgba(0,0,0,0.28));
+        }
+
+        .fc-plane-engine {
+            position: absolute;
+            left: -10px;
+            top: 22px;
+            width: 22px;
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,214,102,0.85) 48%, rgba(255,94,0,0.95) 100%);
+            filter: blur(4px);
+            animation: fc-engine 0.18s ease-in-out infinite alternate;
+        }
+
+        #fc-plane-shield {
+            position: absolute;
+            inset: -18px;
+            border-radius: 50%;
+            border: 4px solid rgba(116,242,206,0.68);
+            box-shadow: 0 0 28px rgba(116,242,206,0.34), inset 0 0 24px rgba(77,150,255,0.22);
+            background: radial-gradient(circle, rgba(116,242,206,0.12) 0%, rgba(116,242,206,0.02) 60%, transparent 100%);
+            opacity: 0;
+            transform: scale(0.88);
+            transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+        }
+
+        #fc-plane.shielding #fc-plane-shield {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        #fc-plane.recovering .fc-plane-emoji {
+            opacity: 0.72;
+        }
+
+        #fc-plane.hit .fc-plane-emoji {
+            animation: fc-plane-hit 0.28s linear;
+        }
+
+        .fc-comet {
+            position: absolute;
+            width: 98px;
+            height: 48px;
+            transform-origin: 78px 24px;
+        }
+
+        .fc-comet-trail {
+            position: absolute;
+            left: 0;
+            top: 14px;
+            width: 74px;
+            height: 20px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255,120,0,0) 0%, rgba(255,136,0,0.38) 35%, rgba(255,85,0,0.86) 70%, rgba(255,240,184,1) 100%);
+            filter: blur(7px);
+        }
+
+        .fc-comet-core {
+            position: absolute;
+            right: 0;
+            top: 2px;
+            font-size: 2.3rem;
+            text-shadow: 0 0 20px rgba(255,115,0,0.8);
+        }
+
+        .fc-particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            box-shadow: 0 0 12px rgba(255,180,82,0.35);
+            pointer-events: none;
+        }
+
+        #fc-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            justify-content: center;
+            align-items: center;
+            z-index: 40;
+            background: rgba(7,18,35,0.26);
+        }
+
+        #fc-overlay.visible {
+            display: flex;
+        }
+
+        .fc-overlay-card {
+            width: min(90vw, 420px);
+            padding: 1.7rem 1.5rem;
+            border-radius: 24px;
+            background: rgba(7,18,35,0.66);
+            border: 1px solid rgba(255,255,255,0.16);
+            text-align: center;
+            color: white;
+            box-shadow: 0 22px 60px rgba(0,0,0,0.32);
+            backdrop-filter: blur(10px);
+        }
+
+        .fc-overlay-card h2 {
+            margin-bottom: 0.7rem;
+            font-size: 2rem;
+        }
+
+        .fc-overlay-card p {
+            margin-bottom: 1.2rem;
+            line-height: 1.45;
+            color: rgba(255,255,255,0.86);
+        }
+
+        .fc-overlay-btn {
+            font-size: 1.1rem;
+            padding: 0.8rem 1.8rem;
+            border: none;
+            border-radius: 999px;
+            background: #4d96ff;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+            box-shadow: 0 10px 24px rgba(77,150,255,0.32);
+        }
+
+        .fc-overlay-btn:active {
+            transform: scale(0.97);
+        }
+
+        #fc-touch-controls {
+            display: none;
+            position: absolute;
+            left: 16px;
+            right: 16px;
+            bottom: 18px;
+            z-index: 35;
+            align-items: end;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+
+        .fc-touch-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 58px);
+            grid-template-rows: repeat(2, 58px);
+            gap: 8px;
+        }
+
+        .fc-touch-btn {
+            width: 58px;
+            height: 58px;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 18px;
+            background: rgba(7,18,35,0.34);
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .fc-touch-btn:active {
+            transform: scale(0.96);
+            background: rgba(255,255,255,0.18);
+        }
+
+        .fc-touch-btn-up {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        .fc-touch-btn-left {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .fc-touch-btn-down {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        .fc-touch-btn-right {
+            grid-column: 3;
+            grid-row: 2;
+        }
+
+        .fc-touch-btn-shield {
+            width: 92px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(116,242,206,0.48) 0%, rgba(77,150,255,0.52) 100%);
+            font-size: 1rem;
+            letter-spacing: 0.03em;
+        }
+
+        @keyframes fc-clouds-back {
+            from { transform: translateX(0); }
+            to { transform: translateX(-160px); }
+        }
+
+        @keyframes fc-clouds-mid {
+            from { transform: translateX(0); }
+            to { transform: translateX(-280px); }
+        }
+
+        @keyframes fc-runway {
+            from { transform: translateX(0); }
+            to { transform: translateX(-120px); }
+        }
+
+        @keyframes fc-engine {
+            from { transform: scaleX(0.9) translateX(0); opacity: 0.75; }
+            to { transform: scaleX(1.15) translateX(-3px); opacity: 1; }
+        }
+
+        @keyframes fc-plane-hit {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-8px) rotate(-8deg); }
+            75% { transform: translateX(6px) rotate(6deg); }
+            100% { transform: translateX(0); }
+        }
+
+        @media (hover: none), (pointer: coarse) {
+            #fc-touch-controls {
+                display: flex;
+            }
+        }
+
+        @media (max-width: 768px) {
+            #flying-comments-btn {
+                font-size: 1.3rem;
+                padding: 0.7rem 1.8rem;
+            }
+
+            #fc-hud {
+                gap: 8px;
+            }
+
+            .fc-pill {
+                font-size: 0.92rem;
+                padding: 0.55rem 0.8rem;
+            }
+
+            .fc-pill strong {
+                font-size: 1rem;
+            }
+
+            #fc-status {
+                top: 130px;
+                max-width: calc(100vw - 32px);
+                font-size: 0.88rem;
+            }
+
+            .fc-plane-emoji {
+                font-size: 3rem;
+            }
+        }
+
         #instruction-hint {
             position: fixed;
             bottom: 20px;
@@ -1260,6 +1700,11 @@
         </div>
 
         <div class="game-card">
+            <h2>Flying Comments</h2>
+            <button id="flying-comments-btn">Flying Comments</button>
+        </div>
+
+        <div class="game-card">
             <h2>Uno</h2>
             <div class="uno-config-group">
                 <label>AI</label>
@@ -1309,6 +1754,46 @@
             </div>
         </div>
         <div id="memory-grid"></div>
+    </div>
+
+    <div id="flying-comments-screen">
+        <div id="fc-world">
+            <div class="fc-sky-layer fc-sky-back"></div>
+            <div class="fc-sky-layer fc-sky-mid"></div>
+            <div class="fc-horizon"></div>
+            <div id="fc-comet-layer"></div>
+            <div id="fc-particle-layer"></div>
+            <div id="fc-plane">
+                <div class="fc-plane-engine"></div>
+                <div id="fc-plane-shield"></div>
+                <div class="fc-plane-emoji">✈️</div>
+            </div>
+        </div>
+        <div id="fc-hud">
+            <div class="fc-pill">Points <strong id="fc-score">5</strong></div>
+            <div class="fc-pill">Best <strong id="fc-best">0</strong></div>
+            <div class="fc-pill fc-pill-shield">
+                Shield <strong id="fc-shield-text">Ready</strong>
+                <div id="fc-shield-meter"><div id="fc-shield-fill"></div></div>
+            </div>
+        </div>
+        <div id="fc-status">Arrow keys move. Space shields.</div>
+        <div id="fc-overlay">
+            <div class="fc-overlay-card">
+                <h2 id="fc-overlay-title">Flying Comments</h2>
+                <p id="fc-overlay-text">Arrow keys move. Space gives you a shield for a short burst.</p>
+                <button id="fc-restart-btn" class="fc-overlay-btn">Resume</button>
+            </div>
+        </div>
+        <div id="fc-touch-controls">
+            <div class="fc-touch-pad">
+                <button class="fc-touch-btn fc-touch-btn-up" data-fc-dir="ArrowUp">↑</button>
+                <button class="fc-touch-btn fc-touch-btn-left" data-fc-dir="ArrowLeft">←</button>
+                <button class="fc-touch-btn fc-touch-btn-down" data-fc-dir="ArrowDown">↓</button>
+                <button class="fc-touch-btn fc-touch-btn-right" data-fc-dir="ArrowRight">→</button>
+            </div>
+            <button class="fc-touch-btn fc-touch-btn-shield" data-fc-shield="true">Shield</button>
+        </div>
     </div>
 
     <div id="uno-screen">
