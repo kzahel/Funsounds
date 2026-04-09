@@ -934,6 +934,20 @@
             will-change: transform;
         }
 
+        #fc-plane-cats {
+            position: absolute;
+            inset: -20px -10px auto -6px;
+            height: 26px;
+            pointer-events: none;
+        }
+
+        .fc-plane-cat {
+            position: absolute;
+            font-size: 1.2rem;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.28));
+            animation: fc-plane-cat-bob 1.6s ease-in-out infinite;
+        }
+
         .fc-plane-emoji {
             position: absolute;
             inset: 0;
@@ -989,6 +1003,12 @@
             will-change: transform;
         }
 
+        .fc-comet.fc-cat {
+            width: var(--fc-cat-size);
+            height: var(--fc-cat-size);
+            transform-origin: 50% 50%;
+        }
+
         .fc-comet-trail {
             position: absolute;
             left: 0;
@@ -1034,6 +1054,16 @@
             height: 18%;
             left: 54%;
             top: 50%;
+        }
+
+        .fc-falling-cat {
+            width: var(--fc-cat-size);
+            height: var(--fc-cat-size);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: calc(var(--fc-cat-size) * 0.9);
+            filter: drop-shadow(0 0 8px rgba(255,255,255,0.22)) drop-shadow(0 4px 8px rgba(0,0,0,0.2));
         }
 
         .fc-particle {
@@ -1189,6 +1219,11 @@
             25% { transform: translateX(-8px) rotate(-8deg); }
             75% { transform: translateX(6px) rotate(6deg); }
             100% { transform: translateX(0); }
+        }
+
+        @keyframes fc-plane-cat-bob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
         }
 
         @media (hover: none), (pointer: coarse) {
@@ -1795,6 +1830,7 @@
             <div id="fc-particle-layer"></div>
             <div id="fc-plane">
                 <div class="fc-plane-engine"></div>
+                <div id="fc-plane-cats"></div>
                 <div id="fc-plane-shield"></div>
                 <div class="fc-plane-emoji">✈️</div>
             </div>
@@ -1802,12 +1838,13 @@
         <div id="fc-hud">
             <div class="fc-pill">Points <strong id="fc-score">5</strong></div>
             <div class="fc-pill">Best <strong id="fc-best">0</strong></div>
+            <div class="fc-pill">Cats <strong id="fc-cats">0</strong></div>
             <div class="fc-pill fc-pill-shield">
                 Shield <strong id="fc-shield-text">Ready</strong>
                 <div id="fc-shield-meter"><div id="fc-shield-fill"></div></div>
             </div>
         </div>
-        <div id="fc-status">Arrow keys move. Space shields.</div>
+        <div id="fc-status">Arrow keys move. Hold Space for shield.</div>
         <div id="fc-overlay">
             <div class="fc-overlay-card">
                 <h2 id="fc-overlay-title">Flying Comets</h2>

@@ -8,12 +8,15 @@ import {
   speakText,
 } from './utils';
 
+type FallingThingKind = 'comet' | 'cat';
+
 interface Comet {
+  kind: FallingThingKind;
   el: HTMLDivElement;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
+  baseVx: number;
+  baseVy: number;
   rotation: number;
   spin: number;
   radius: number;
@@ -43,6 +46,8 @@ const HIT_RECOVERY_MS = 900;
 const MAX_COMETS = 7;
 const MIN_SPAWN_MS = 520;
 const MAX_SPAWN_MS = 980;
+const CAT_SPAWN_RATE = 0.18;
+const CAT_SLOW_RADIUS = 210;
 
 interface WorldBounds {
   width: number;
@@ -63,6 +68,7 @@ let hitRecoverUntil = 0;
 let overlayMode: 'hidden' | 'playing' | 'gameover' = 'hidden';
 let shieldHeld = false;
 let shieldVisible = false;
+let attachedCats = 0;
 
 let planeX = 0;
 let planeY = 0;
@@ -82,10 +88,12 @@ const pressedKeys = new Set<string>();
 let screenEl: HTMLElement;
 let worldEl: HTMLElement;
 let planeEl: HTMLElement;
+let planeCatsEl: HTMLElement;
 let cometLayerEl: HTMLElement;
 let particleLayerEl: HTMLElement;
 let scoreEl: HTMLElement;
 let bestEl: HTMLElement;
+let catsEl: HTMLElement;
 let shieldTextEl: HTMLElement;
 let shieldFillEl: HTMLElement;
 let statusEl: HTMLElement;
@@ -120,6 +128,7 @@ function updateBounds(): void {
 function updateHud(): void {
   scoreEl.textContent = String(score);
   bestEl.textContent = String(bestScore);
+  catsEl.textContent = String(attachedCats);
   shieldTextEl.textContent = shieldVisible ? 'On' : 'Hold Space';
   shieldFillEl.style.width = '100%';
 }
@@ -158,6 +167,18 @@ function clearEntities(): void {
   }
   while (particles.length) {
     particles.pop()!.el.remove();
+  }
+}
+
+function renderAttachedCats(): void {
+  planeCatsEl.innerHTML = '';
+  for (let i = 0; i < attachedCats; i++) {
+    const cat = document.createElement('div');
+    cat.className = 'fc-plane-cat';
+    cat.textContent = '🐱';
+    cat.style.left = `${4 + i * 18}px`;
+    cat.style.top = `${-10 - (i % 2) * 10}px`;
+    planeCatsEl.appendChild(cat);
   }
 }
 
@@ -208,25 +229,41 @@ function shatterComet(comet: Comet, awardPoint: boolean): void {
 function spawnComet(): void {
   if (comets.length >= MAX_COMETS) return;
 
+  const isCat = Math.random() < CAT_SPAWN_RATE;
   const el = document.createElement('div');
-  el.className = 'fc-comet';
-  el.innerHTML =
-    '<div class="fc-comet-trail"></div>' +
-    '<div class="fc-comet-rock">' +
-    '<span class="fc-comet-crater fc-comet-crater-a"></span>' +
-    '<span class="fc-comet-crater fc-comet-crater-b"></span>' +
-    '</div>';
+  el.className = isCat ? 'fc-comet fc-cat' : 'fc-comet';
+  el.innerHTML = isCat
+    ? '<div class="fc-falling-cat">🐱</div>'
+    : '<div class="fc-comet-trail"></div>' +
+      '<div class="fc-comet-rock">' +
+      '<span class="fc-comet-crater fc-comet-crater-a"></span>' +
+      '<span class="fc-comet-crater fc-comet-crater-b"></span>' +
+      '</div>';
   cometLayerEl.appendChild(el);
 
   const speedScale = randomBetween(0.95, 1.4);
-  const rockWidth = randomBetween(34, 62);
-  const rockHeight = rockWidth * randomBetween(0.78, 1.08);
-  const trailLength = rockWidth * randomBetween(0.95, 1.65);
-  const totalWidth = rockWidth + trailLength;
-  el.style.setProperty('--fc-comet-width', `${rockWidth}px`);
-  el.style.setProperty('--fc-comet-height', `${rockHeight}px`);
-  el.style.setProperty('--fc-comet-trail', `${trailLength}px`);
-  el.style.setProperty('--fc-comet-shadow', `${Math.max(6, rockWidth * 0.22)}px`);
+  let width = 0;
+  let height = 0;
+  let totalWidth = 0;
+
+  if (isCat) {
+    const catSize = randomBetween(34, 52);
+    width = catSize;
+    height = catSize;
+    totalWidth = catSize;
+    el.style.setProperty('--fc-cat-size', `${catSize}px`);
+  } else {
+    const rockWidth = randomBetween(34, 62);
+    const rockHeight = rockWidth * randomBetween(0.78, 1.08);
+    const trailLength = rockWidth * randomBetween(0.95, 1.65);
+    width = rockWidth;
+    height = rockHeight;
+    totalWidth = rockWidth + trailLength;
+    el.style.setProperty('--fc-comet-width', `${rockWidth}px`);
+    el.style.setProperty('--fc-comet-height', `${rockHeight}px`);
+    el.style.setProperty('--fc-comet-trail', `${trailLength}px`);
+    el.style.setProperty('--fc-comet-shadow', `${Math.max(6, rockWidth * 0.22)}px`);
+  }
 
   const edgeRoll = Math.random();
   let x = 0;
@@ -253,16 +290,17 @@ function spawnComet(): void {
 
   const angle = (Math.atan2(vy, vx) * 180) / Math.PI;
   const comet: Comet = {
+    kind: isCat ? 'cat' : 'comet',
     el,
     x,
     y,
-    vx,
-    vy,
+    baseVx: vx,
+    baseVy: vy,
     rotation: angle,
-    spin: randomBetween(-80, 80),
-    radius: Math.max(16, rockWidth * 0.34),
-    width: rockWidth,
-    height: rockHeight,
+    spin: isCat ? randomBetween(-40, 40) : randomBetween(-80, 80),
+    radius: isCat ? Math.max(15, width * 0.28) : Math.max(16, width * 0.34),
+    width,
+    height,
     totalWidth,
   };
   comets.push(comet);
@@ -273,6 +311,15 @@ function collideCircle(ax: number, ay: number, ar: number, bx: number, by: numbe
   const dy = ay - by;
   const radii = ar + br;
   return dx * dx + dy * dy <= radii * radii;
+}
+
+function collectCat(cat: Comet): void {
+  removeComet(cat);
+  attachedCats = Math.min(3, attachedCats + 1);
+  renderAttachedCats();
+  updateHud();
+  playFx('cat', 0.48, randomBetween(0.96, 1.08));
+  setStatus('Cat buddy aboard. Nearby comets slow way down.');
 }
 
 function onPlaneHit(comet: Comet): void {
@@ -327,15 +374,42 @@ function updateComets(deltaSeconds: number, now: number): void {
 
   for (let i = comets.length - 1; i >= 0; i--) {
     const comet = comets[i];
-    comet.x += comet.vx * deltaSeconds;
-    comet.y += comet.vy * deltaSeconds;
+    const cometCenterXBefore =
+      comet.kind === 'cat' ? comet.x + comet.width * 0.5 : comet.x + comet.totalWidth - comet.width * 0.42;
+    const cometCenterYBefore = comet.y + comet.height * 0.5;
+    let speedFactor = 1;
+
+    if (comet.kind === 'comet' && attachedCats > 0) {
+      const dx = cometCenterXBefore - planeCenterX;
+      const dy = cometCenterYBefore - planeCenterY;
+      const distance = Math.hypot(dx, dy);
+      const slowRadius = CAT_SLOW_RADIUS + attachedCats * 70;
+      if (distance < slowRadius) {
+        const t = distance / slowRadius;
+        const minimumSpeed = Math.max(0.04, 0.14 - attachedCats * 0.02);
+        speedFactor = minimumSpeed + (1 - minimumSpeed) * t;
+      }
+    }
+
+    comet.x += comet.baseVx * speedFactor * deltaSeconds;
+    comet.y += comet.baseVy * speedFactor * deltaSeconds;
     comet.rotation += comet.spin * deltaSeconds;
     comet.el.style.transform = `translate3d(${comet.x}px, ${comet.y}px, 0) rotate(${comet.rotation}deg)`;
 
-    const cometCenterX = comet.x + comet.totalWidth - comet.width * 0.42;
+    const cometCenterX =
+      comet.kind === 'cat' ? comet.x + comet.width * 0.5 : comet.x + comet.totalWidth - comet.width * 0.42;
     const cometCenterY = comet.y + comet.height * 0.5;
 
     if (
+      comet.kind === 'cat' &&
+      collideCircle(planeCenterX, planeCenterY, shieldOn ? SHIELD_RADIUS : 26, cometCenterX, cometCenterY, comet.radius)
+    ) {
+      collectCat(comet);
+      continue;
+    }
+
+    if (
+      comet.kind === 'comet' &&
       shieldOn &&
       collideCircle(planeCenterX, planeCenterY, SHIELD_RADIUS, cometCenterX, cometCenterY, comet.radius)
     ) {
@@ -345,6 +419,7 @@ function updateComets(deltaSeconds: number, now: number): void {
     }
 
     if (
+      comet.kind === 'comet' &&
       hitRecoverUntil <= now &&
       collideCircle(planeCenterX, planeCenterY, 24, cometCenterX, cometCenterY, comet.radius - 8)
     ) {
@@ -357,9 +432,11 @@ function updateComets(deltaSeconds: number, now: number): void {
       comet.x > bounds.width + comet.totalWidth + 80 ||
       comet.y > bounds.height + comet.height + 120
     ) {
-      addScore(1);
+      if (comet.kind === 'comet') {
+        addScore(1);
+      }
       removeComet(comet);
-      setStatus('Nice dodge.');
+      setStatus(comet.kind === 'comet' ? 'Nice dodge.' : 'A cat floated away.');
     }
   }
 }
@@ -413,10 +490,12 @@ function beginRun(): void {
   hitRecoverUntil = 0;
   shieldHeld = false;
   shieldVisible = false;
+  attachedCats = 0;
   planeX = bounds.width * 0.18;
   planeY = bounds.height * 0.5;
   pressedKeys.clear();
   clearEntities();
+  renderAttachedCats();
   syncPlane();
   updateHud();
   setStatus('Dodge the comets.');
@@ -439,11 +518,13 @@ function stopGame(): void {
   pressedKeys.clear();
   shieldHeld = false;
   shieldVisible = false;
+  attachedCats = 0;
   gameActive = false;
   cancelAnimationFrame(rafId);
   rafId = 0;
   hideOverlay();
   clearEntities();
+  renderAttachedCats();
   screenEl.style.display = 'none';
   document.getElementById('start-screen')!.style.display = 'block';
 }
@@ -549,10 +630,12 @@ function bindElements(): void {
   screenEl = document.getElementById('flying-comments-screen')!;
   worldEl = document.getElementById('fc-world')!;
   planeEl = document.getElementById('fc-plane')!;
+  planeCatsEl = document.getElementById('fc-plane-cats')!;
   cometLayerEl = document.getElementById('fc-comet-layer')!;
   particleLayerEl = document.getElementById('fc-particle-layer')!;
   scoreEl = document.getElementById('fc-score')!;
   bestEl = document.getElementById('fc-best')!;
+  catsEl = document.getElementById('fc-cats')!;
   shieldTextEl = document.getElementById('fc-shield-text')!;
   shieldFillEl = document.getElementById('fc-shield-fill')!;
   statusEl = document.getElementById('fc-status')!;
