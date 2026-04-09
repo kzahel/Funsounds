@@ -193,16 +193,19 @@ export function animateOverlay(
     el.style.left = '0px';
     el.style.top = '0px';
 
-    // Position at source BEFORE appending to avoid a flash at (0,0)
-    const cardW = fromRect.width;
-    const cardH = fromRect.height;
+    // Append hidden to measure the card's actual rendered size
+    el.style.visibility = 'hidden';
+    document.body.appendChild(el);
+    const cardW = el.offsetWidth;
+    const cardH = el.offsetHeight;
+    el.style.visibility = '';
+
     const startX = fromRect.left + fromRect.width / 2 - cardW / 2;
     const startY = fromRect.top + fromRect.height / 2 - cardH / 2;
     const endX = toRect.left + toRect.width / 2 - cardW / 2;
     const endY = toRect.top + toRect.height / 2 - cardH / 2;
 
     el.style.transform = `translate(${startX}px, ${startY}px)`;
-    document.body.appendChild(el);
 
     // Force layout so browser registers start position before transition
     el.offsetHeight;

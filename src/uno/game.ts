@@ -26,15 +26,25 @@ export function showColorPicker(): Promise<CardColor> {
       `<button class="uno-cpick-btn" data-color="${c}" style="background:${COLOR_HEX[c]}"></button>`
     ).join('');
 
-    function pick(e: Event) {
-      const btn = (e.target as HTMLElement).closest('[data-color]') as HTMLElement;
-      if (!btn) return;
+    let resolved = false;
+    function finish(color: CardColor) {
+      if (resolved) return;
+      resolved = true;
       picker.removeEventListener('click', pick);
       picker.style.display = 'none';
       state.awaitingColorPick = false;
-      resolve(btn.dataset.color as CardColor);
+      resolve(color);
+    }
+
+    function pick(e: Event) {
+      const btn = (e.target as HTMLElement).closest('[data-color]') as HTMLElement;
+      if (!btn) return;
+      finish(btn.dataset.color as CardColor);
     }
     picker.addEventListener('click', pick);
+
+    // Safety timeout: auto-pick a color if picker is stuck
+    setTimeout(() => finish(pickRandom(COLORS)), 15000);
   });
 }
 
@@ -391,6 +401,8 @@ async function runTurn(): Promise<void> {
         await delay(AI_THINK_MS);
         const skipCard = player.hand.find(c => c.value === 'skip')!;
         await executePlay(state.currentPlayerIdx, skipCard);
+        speakText('Skip!', { rate: 1.2, pitch: 1.3 });
+        flashMessage('Skip deflected!', '#ff6b9d');
         state.pendingSkip = true;
         state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
         await runTurn();
@@ -408,10 +420,50 @@ async function runTurn(): Promise<void> {
     return;
   }
 
-  // Handle pending draw in beginner mode for AI
-  if (state.pendingDraw > 0 && !player.isHuman && state.ruleset === 'beginner') {
-    await delay(AI_THINK_MS);
+  // Handle pending draw
+  if (state.pendingDraw > 0) {
+    if (state.ruleset === 'intermediate') {
+      const top = state.discardPile[state.discardPile.length - 1];
+      const canStack = (c: UnoCard) =>
+        (top?.value === 'draw2' && c.value === 'draw2') ||
+        (top?.value === 'wild4' && c.value === 'wild4');
+
+      if (player.hand.some(canStack)) {
+        if (!player.isHuman) {
+          await delay(AI_THINK_MS);
+          const stackCard = player.hand.find(canStack)!;
+          await executePlay(state.currentPlayerIdx, stackCard);
+          if (stackCard.color === 'wild') state.currentColor = aiPickColor(state.currentPlayerIdx);
+          applyEffects(stackCard);
+          playCardSound(stackCard.value);
+          flashMessage(`${player.name} stacks +${state.pendingDraw}!`, '#e53e3e');
+          if (await checkWin(state.currentPlayerIdx)) return;
+          checkUno(state.currentPlayerIdx);
+          state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
+          await runTurn();
+          return;
+        }
+        // Human can stack — give them the choice to play or draw
+        state.turnLock = false;
+        render();
+        return;
+      }
+    }
+
+    // No stackable card or beginner mode — forced draw
+    if (!player.isHuman) {
+      await delay(AI_THINK_MS);
+    }
     await executeDrawPending(state.currentPlayerIdx);
+    if (player.isHuman) {
+      state.hasDrawnThisTurn = true;
+      state.turnLock = false;
+      render();
+      return;
+    }
+    state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
+    await runTurn();
+    return;
   }
 
   // AI turn
@@ -423,35 +475,12 @@ async function runTurn(): Promise<void> {
   // Human's turn
   state.turnLock = false;
   state.hasDrawnThisTurn = false;
-
-  if (state.pendingDraw > 0 && state.ruleset === 'beginner') {
-    render();
-    return;
-  }
-
   render();
 }
 
 async function aiTurn(playerIdx: number): Promise<void> {
   const player = state.players[playerIdx];
   await delay(AI_THINK_MS);
-
-  if (state.pendingDraw > 0) {
-    if (state.ruleset === 'intermediate') {
-      const stackCard = player.hand.find(c => canPlayCard(c));
-      if (stackCard) {
-        await executePlay(playerIdx, stackCard);
-        if (stackCard.color === 'wild') state.currentColor = aiPickColor(playerIdx);
-        applyEffects(stackCard);
-        if (await checkWin(playerIdx)) return;
-        checkUno(playerIdx);
-        state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
-        await runTurn();
-        return;
-      }
-    }
-    await executeDrawPending(playerIdx);
-  }
 
   const playable = player.hand.filter(c => canPlayCard(c));
   if (playable.length > 0) {
@@ -483,10 +512,12 @@ export async function humanPlay(card: UnoCard): Promise<void> {
   clearUnoTimer();
 
   if (card.color === 'wild') {
+    const wasStacking = state.pendingDraw > 0;
     await executePlay(state.humanIndex, card);
     const color = await showColorPicker();
     state.currentColor = color;
     applyEffects(card);
+    if (wasStacking) flashMessage(`Stacked to +${state.pendingDraw}!`, '#e53e3e');
     render();
     if (await checkWin(state.humanIndex)) return;
     checkUno(state.humanIndex);
@@ -499,7 +530,26 @@ export async function humanPlay(card: UnoCard): Promise<void> {
   if (state.pendingSkip && card.value === 'skip') {
     state.pendingSkip = false;
     await executePlay(state.humanIndex, card);
+    speakText('Skip!', { rate: 1.2, pitch: 1.3 });
+    flashMessage('Skip deflected!', '#ff6b9d');
     state.pendingSkip = true;
+    if (await checkWin(state.humanIndex)) return;
+    checkUno(state.humanIndex);
+    state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
+    await runTurn();
+    return;
+  }
+
+  if (state.pendingDraw > 0 && (card.value === 'draw2' || card.value === 'wild4')) {
+    await executePlay(state.humanIndex, card);
+    if (card.value === 'wild4') {
+      const color = await showColorPicker();
+      state.currentColor = color;
+    }
+    applyEffects(card);
+    playCardSound(card.value);
+    flashMessage(`Stacked to +${state.pendingDraw}!`, '#e53e3e');
+    render();
     if (await checkWin(state.humanIndex)) return;
     checkUno(state.humanIndex);
     state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
@@ -519,7 +569,7 @@ export async function humanPlay(card: UnoCard): Promise<void> {
 export async function humanDraw(): Promise<void> {
   if (state.turnLock || state.animating || state.gameOver ||
       state.currentPlayerIdx !== state.humanIndex || state.awaitingColorPick) return;
-  if (state.hasDrawnThisTurn) return;
+  if (state.hasDrawnThisTurn || state.pendingSkip) return;
 
   state.turnLock = true;
 
@@ -537,7 +587,7 @@ export async function humanDraw(): Promise<void> {
   render();
 }
 
-export function humanEndTurn(): void {
+export async function humanEndTurn(): Promise<void> {
   if (state.turnLock || state.animating || state.gameOver ||
       state.currentPlayerIdx !== state.humanIndex) return;
   if (state.pendingSkip) {
@@ -547,7 +597,7 @@ export function humanEndTurn(): void {
   state.turnLock = true;
   state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
   state.hasDrawnThisTurn = false;
-  runTurn();
+  await runTurn();
 }
 
 // ── Game Over ──
