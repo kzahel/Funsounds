@@ -1,11 +1,11 @@
 import { initFreePlay } from './freeplay';
 import { initQuiz } from './quiz';
 import { initMemory } from './memory';
-import { initFlyingComments } from './flying-comments';
+import { initFlyingComets } from './flying-comets';
 import { initUno } from './uno/index';
 
 async function init() {
-  await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComments(), initUno()]);
+  await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComets(), initUno()]);
 }
 
 if (document.readyState === 'loading') {

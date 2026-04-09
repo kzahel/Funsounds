@@ -17,6 +17,9 @@ interface Comet {
   rotation: number;
   spin: number;
   radius: number;
+  width: number;
+  height: number;
+  totalWidth: number;
 }
 
 interface Particle {
@@ -35,14 +38,20 @@ const START_SCORE = 5;
 const PLAYER_SPEED = 380;
 const PLAYER_WIDTH = 72;
 const PLAYER_HEIGHT = 54;
-const COMET_RADIUS = 28;
 const SHIELD_RADIUS = 56;
-const SHIELD_DURATION_MS = 1500;
-const SHIELD_COOLDOWN_MS = 4200;
 const HIT_RECOVERY_MS = 900;
-const MAX_COMETS = 6;
-const MIN_SPAWN_MS = 850;
-const MAX_SPAWN_MS = 1500;
+const MAX_COMETS = 7;
+const MIN_SPAWN_MS = 520;
+const MAX_SPAWN_MS = 980;
+
+interface WorldBounds {
+  width: number;
+  height: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
 
 let gameActive = false;
 let score = START_SCORE;
@@ -50,13 +59,21 @@ let bestScore = 0;
 let lastFrame = 0;
 let rafId = 0;
 let nextSpawnAt = 0;
-let shieldActiveUntil = 0;
-let shieldReadyAt = 0;
 let hitRecoverUntil = 0;
 let overlayMode: 'hidden' | 'playing' | 'gameover' = 'hidden';
+let shieldHeld = false;
+let shieldVisible = false;
 
 let planeX = 0;
 let planeY = 0;
+let bounds: WorldBounds = {
+  width: 0,
+  height: 0,
+  minX: 24,
+  maxX: 24,
+  minY: 24,
+  maxY: 24,
+};
 
 const comets: Comet[] = [];
 const particles: Particle[] = [];
@@ -65,7 +82,6 @@ const pressedKeys = new Set<string>();
 let screenEl: HTMLElement;
 let worldEl: HTMLElement;
 let planeEl: HTMLElement;
-let shieldEl: HTMLElement;
 let cometLayerEl: HTMLElement;
 let particleLayerEl: HTMLElement;
 let scoreEl: HTMLElement;
@@ -89,9 +105,9 @@ function playFx(name: string, volume = 0.45, playbackRate = 1): void {
   audio.play().catch(() => {});
 }
 
-function getBounds() {
+function updateBounds(): void {
   const rect = worldEl.getBoundingClientRect();
-  return {
+  bounds = {
     width: rect.width,
     height: rect.height,
     minX: 24,
@@ -101,22 +117,11 @@ function getBounds() {
   };
 }
 
-function updateHud(now = performance.now()): void {
+function updateHud(): void {
   scoreEl.textContent = String(score);
   bestEl.textContent = String(bestScore);
-
-  if (shieldActiveUntil > now) {
-    const remaining = Math.max(0, shieldActiveUntil - now);
-    shieldTextEl.textContent = `On ${Math.ceil(remaining / 1000)}s`;
-    shieldFillEl.style.width = '100%';
-  } else if (shieldReadyAt <= now) {
-    shieldTextEl.textContent = 'Ready';
-    shieldFillEl.style.width = '100%';
-  } else {
-    const progress = 1 - (shieldReadyAt - now) / SHIELD_COOLDOWN_MS;
-    shieldTextEl.textContent = 'Charging';
-    shieldFillEl.style.width = `${Math.max(0, Math.min(1, progress)) * 100}%`;
-  }
+  shieldTextEl.textContent = shieldVisible ? 'On' : 'Hold Space';
+  shieldFillEl.style.width = '100%';
 }
 
 function setStatus(text: string): void {
@@ -128,8 +133,8 @@ function showOverlay(mode: 'playing' | 'gameover'): void {
   overlayEl.classList.add('visible');
 
   if (mode === 'playing') {
-    overlayTitleEl.textContent = 'Flying Comments';
-    overlayTextEl.textContent = 'Arrow keys move. Space gives you a shield for a short burst.';
+    overlayTitleEl.textContent = 'Flying Comets';
+    overlayTextEl.textContent = 'Arrow keys move. Hold Space to keep the shield up.';
     restartBtnEl.textContent = 'Resume';
   } else {
     overlayTitleEl.textContent = 'Out of Points';
@@ -144,7 +149,7 @@ function hideOverlay(): void {
 }
 
 function syncPlane(): void {
-  planeEl.style.transform = `translate(${planeX}px, ${planeY}px)`;
+  planeEl.style.transform = `translate3d(${planeX}px, ${planeY}px, 0)`;
 }
 
 function clearEntities(): void {
@@ -192,7 +197,7 @@ function removeComet(comet: Comet): void {
 }
 
 function shatterComet(comet: Comet, awardPoint: boolean): void {
-  createParticleBurst(comet.x + 12, comet.y + 12, 12);
+  createParticleBurst(comet.x + 12, comet.y + 12, 9);
   playFx('shooting_star', 0.28, 1.2);
   if (awardPoint) {
     addScore(1);
@@ -203,24 +208,62 @@ function shatterComet(comet: Comet, awardPoint: boolean): void {
 function spawnComet(): void {
   if (comets.length >= MAX_COMETS) return;
 
-  const bounds = getBounds();
   const el = document.createElement('div');
   el.className = 'fc-comet';
   el.innerHTML =
     '<div class="fc-comet-trail"></div>' +
-    '<div class="fc-comet-core">☄️</div>';
+    '<div class="fc-comet-rock">' +
+    '<span class="fc-comet-crater fc-comet-crater-a"></span>' +
+    '<span class="fc-comet-crater fc-comet-crater-b"></span>' +
+    '</div>';
   cometLayerEl.appendChild(el);
 
-  const speedScale = randomBetween(0.9, 1.35);
+  const speedScale = randomBetween(0.95, 1.4);
+  const rockWidth = randomBetween(34, 62);
+  const rockHeight = rockWidth * randomBetween(0.78, 1.08);
+  const trailLength = rockWidth * randomBetween(0.95, 1.65);
+  const totalWidth = rockWidth + trailLength;
+  el.style.setProperty('--fc-comet-width', `${rockWidth}px`);
+  el.style.setProperty('--fc-comet-height', `${rockHeight}px`);
+  el.style.setProperty('--fc-comet-trail', `${trailLength}px`);
+  el.style.setProperty('--fc-comet-shadow', `${Math.max(6, rockWidth * 0.22)}px`);
+
+  const edgeRoll = Math.random();
+  let x = 0;
+  let y = 0;
+  let vx = 0;
+  let vy = 0;
+
+  if (edgeRoll < 0.45) {
+    x = randomBetween(-40, bounds.width + 40);
+    y = randomBetween(-160, -40);
+    vx = randomBetween(-140, 140) * speedScale;
+    vy = randomBetween(220, 360) * speedScale;
+  } else if (edgeRoll < 0.8) {
+    x = bounds.width + randomBetween(40, 180);
+    y = randomBetween(-20, bounds.height * 0.9);
+    vx = -randomBetween(220, 380) * speedScale;
+    vy = randomBetween(40, 240) * speedScale;
+  } else {
+    x = bounds.width + randomBetween(20, 180);
+    y = randomBetween(-180, -40);
+    vx = -randomBetween(240, 420) * speedScale;
+    vy = randomBetween(180, 340) * speedScale;
+  }
+
+  const angle = (Math.atan2(vy, vx) * 180) / Math.PI;
   const comet: Comet = {
     el,
-    x: bounds.width + randomBetween(40, 180),
-    y: randomBetween(40, Math.max(60, bounds.height * 0.55)),
-    vx: -randomBetween(180, 310) * speedScale,
-    vy: randomBetween(80, 210) * speedScale,
-    rotation: randomBetween(150, 210),
+    x,
+    y,
+    vx,
+    vy,
+    rotation: angle,
     spin: randomBetween(-80, 80),
-    radius: COMET_RADIUS,
+    radius: Math.max(16, rockWidth * 0.34),
+    width: rockWidth,
+    height: rockHeight,
+    totalWidth,
   };
   comets.push(comet);
 }
@@ -234,7 +277,7 @@ function collideCircle(ax: number, ay: number, ar: number, bx: number, by: numbe
 
 function onPlaneHit(comet: Comet): void {
   removeComet(comet);
-  createParticleBurst(planeX + PLAYER_WIDTH / 2, planeY + PLAYER_HEIGHT / 2, 10);
+  createParticleBurst(planeX + PLAYER_WIDTH / 2, planeY + PLAYER_HEIGHT / 2, 8);
   hitRecoverUntil = performance.now() + HIT_RECOVERY_MS;
   planeEl.classList.add('hit');
   setTimeout(() => planeEl.classList.remove('hit'), 280);
@@ -248,7 +291,6 @@ function onPlaneHit(comet: Comet): void {
 }
 
 function updatePlane(deltaSeconds: number, now: number): void {
-  const bounds = getBounds();
   let dx = 0;
   let dy = 0;
 
@@ -267,29 +309,31 @@ function updatePlane(deltaSeconds: number, now: number): void {
   planeY = Math.max(bounds.minY, Math.min(bounds.maxY, planeY));
 
   const tilt = dy * 10 + dx * 4;
-  planeEl.style.transform = `translate(${planeX}px, ${planeY}px) rotate(${tilt}deg)`;
+  planeEl.style.transform = `translate3d(${planeX}px, ${planeY}px, 0) rotate(${tilt}deg)`;
 
-  const shieldOn = shieldActiveUntil > now;
-  shieldEl.classList.toggle('active', shieldOn);
+  const shieldOn = shieldHeld;
+  if (shieldVisible !== shieldOn) {
+    shieldVisible = shieldOn;
+    updateHud();
+  }
   planeEl.classList.toggle('shielding', shieldOn);
   planeEl.classList.toggle('recovering', hitRecoverUntil > now);
 }
 
 function updateComets(deltaSeconds: number, now: number): void {
-  const bounds = getBounds();
   const planeCenterX = planeX + PLAYER_WIDTH / 2;
   const planeCenterY = planeY + PLAYER_HEIGHT / 2;
-  const shieldOn = shieldActiveUntil > now;
+  const shieldOn = shieldHeld;
 
   for (let i = comets.length - 1; i >= 0; i--) {
     const comet = comets[i];
     comet.x += comet.vx * deltaSeconds;
     comet.y += comet.vy * deltaSeconds;
     comet.rotation += comet.spin * deltaSeconds;
-    comet.el.style.transform = `translate(${comet.x}px, ${comet.y}px) rotate(${comet.rotation}deg)`;
+    comet.el.style.transform = `translate3d(${comet.x}px, ${comet.y}px, 0) rotate(${comet.rotation}deg)`;
 
-    const cometCenterX = comet.x + 28;
-    const cometCenterY = comet.y + 24;
+    const cometCenterX = comet.x + comet.totalWidth - comet.width * 0.42;
+    const cometCenterY = comet.y + comet.height * 0.5;
 
     if (
       shieldOn &&
@@ -308,7 +352,11 @@ function updateComets(deltaSeconds: number, now: number): void {
       continue;
     }
 
-    if (comet.x < -120 || comet.y > bounds.height + 120) {
+    if (
+      comet.x < -comet.totalWidth - 80 ||
+      comet.x > bounds.width + comet.totalWidth + 80 ||
+      comet.y > bounds.height + comet.height + 120
+    ) {
       addScore(1);
       removeComet(comet);
       setStatus('Nice dodge.');
@@ -330,7 +378,7 @@ function updateParticles(deltaSeconds: number): void {
     particle.y += particle.vy * deltaSeconds;
     particle.vy += 300 * deltaSeconds;
     particle.rotation += particle.spin * deltaSeconds;
-    particle.el.style.transform = `translate(${particle.x}px, ${particle.y}px) rotate(${particle.rotation}deg)`;
+    particle.el.style.transform = `translate3d(${particle.x}px, ${particle.y}px, 0) rotate(${particle.rotation}deg)`;
     particle.el.style.opacity = String(Math.max(0, particle.life / particle.maxLife));
   }
 }
@@ -351,21 +399,20 @@ function gameLoop(now: number): void {
     updatePlane(deltaSeconds, now);
     updateComets(deltaSeconds, now);
     updateParticles(deltaSeconds);
-    updateHud(now);
   }
 
   rafId = requestAnimationFrame(gameLoop);
 }
 
 function beginRun(): void {
-  const bounds = getBounds();
+  updateBounds();
   score = START_SCORE;
   bestScore = Math.max(bestScore, score);
   lastFrame = 0;
   nextSpawnAt = performance.now() + 900;
-  shieldActiveUntil = 0;
-  shieldReadyAt = 0;
   hitRecoverUntil = 0;
+  shieldHeld = false;
+  shieldVisible = false;
   planeX = bounds.width * 0.18;
   planeY = bounds.height * 0.5;
   pressedKeys.clear();
@@ -384,12 +431,14 @@ async function startGame(): Promise<void> {
   screenEl.style.display = 'block';
   gameActive = true;
   beginRun();
-  speakText('Flying comments. Dodge the comets.', { rate: 1, pitch: 1.15 });
+  speakText('Flying comets. Dodge the comets.', { rate: 1, pitch: 1.15 });
   rafId = requestAnimationFrame(gameLoop);
 }
 
 function stopGame(): void {
   pressedKeys.clear();
+  shieldHeld = false;
+  shieldVisible = false;
   gameActive = false;
   cancelAnimationFrame(rafId);
   rafId = 0;
@@ -401,22 +450,26 @@ function stopGame(): void {
 
 function endRun(): void {
   overlayMode = 'gameover';
+  shieldHeld = false;
+  shieldVisible = false;
+  updateHud();
   showOverlay('gameover');
   playFx('ghost', 0.35, 0.95);
   speakText('Game over', { rate: 0.95, pitch: 0.9 });
   setStatus('Press play again or hold Escape to exit.');
 }
 
-function activateShield(): void {
-  const now = performance.now();
+function setShieldHeld(active: boolean): void {
   if (!gameActive || overlayMode !== 'hidden') return;
-  if (shieldActiveUntil > now || shieldReadyAt > now) return;
-
-  shieldActiveUntil = now + SHIELD_DURATION_MS;
-  shieldReadyAt = shieldActiveUntil + SHIELD_COOLDOWN_MS;
-  playFx('magic', 0.35, 1.1);
-  setStatus('Shield up.');
-  updateHud(now);
+  if (shieldHeld === active) return;
+  shieldHeld = active;
+  if (active) {
+    playFx('magic', 0.24, 1.1);
+    setStatus('Shield up.');
+  } else {
+    setStatus('Dodge the comets.');
+  }
+  updateHud();
 }
 
 function onKeyDown(event: KeyboardEvent): void {
@@ -424,7 +477,7 @@ function onKeyDown(event: KeyboardEvent): void {
 
   if (event.key === ' ') {
     event.preventDefault();
-    if (!event.repeat) activateShield();
+    setShieldHeld(true);
     return;
   }
 
@@ -436,6 +489,11 @@ function onKeyDown(event: KeyboardEvent): void {
 
 function onKeyUp(event: KeyboardEvent): void {
   if (!gameActive) return;
+  if (event.key === ' ') {
+    event.preventDefault();
+    setShieldHeld(false);
+    return;
+  }
   if (event.key.startsWith('Arrow')) {
     event.preventDefault();
     pressedKeys.delete(event.key);
@@ -469,13 +527,21 @@ function bindTouchControls(): void {
   });
 
   document.querySelectorAll<HTMLElement>('[data-fc-shield]').forEach((btn) => {
-    const activate = (event: Event) => {
+    const press = (event: Event) => {
       event.preventDefault();
-      activateShield();
+      setShieldHeld(true);
+    };
+    const release = (event: Event) => {
+      event.preventDefault();
+      setShieldHeld(false);
     };
 
-    btn.addEventListener('touchstart', activate, { passive: false });
-    btn.addEventListener('click', activate);
+    btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('touchend', release, { passive: false });
+    btn.addEventListener('touchcancel', release, { passive: false });
+    btn.addEventListener('mousedown', press);
+    btn.addEventListener('mouseup', release);
+    btn.addEventListener('mouseleave', release);
   });
 }
 
@@ -483,7 +549,6 @@ function bindElements(): void {
   screenEl = document.getElementById('flying-comments-screen')!;
   worldEl = document.getElementById('fc-world')!;
   planeEl = document.getElementById('fc-plane')!;
-  shieldEl = document.getElementById('fc-plane-shield')!;
   cometLayerEl = document.getElementById('fc-comet-layer')!;
   particleLayerEl = document.getElementById('fc-particle-layer')!;
   scoreEl = document.getElementById('fc-score')!;
@@ -497,7 +562,7 @@ function bindElements(): void {
   restartBtnEl = document.getElementById('fc-restart-btn') as HTMLButtonElement;
 }
 
-export async function initFlyingComments(): Promise<void> {
+export async function initFlyingComets(): Promise<void> {
   bindElements();
 
   document.getElementById('flying-comments-btn')!.addEventListener('click', startGame);
@@ -512,6 +577,16 @@ export async function initFlyingComments(): Promise<void> {
 
   window.addEventListener('blur', () => {
     pressedKeys.clear();
+    shieldHeld = false;
+    shieldVisible = false;
+    updateHud();
+  });
+
+  window.addEventListener('resize', () => {
+    updateBounds();
+    planeX = Math.max(bounds.minX, Math.min(bounds.maxX, planeX));
+    planeY = Math.max(bounds.minY, Math.min(bounds.maxY, planeY));
+    syncPlane();
   });
 
   setupEscapeHold(
@@ -528,5 +603,5 @@ export async function initFlyingComments(): Promise<void> {
   preventContextMenu(() => gameActive);
 
   updateHud();
-  setStatus('Arrow keys move. Space shields.');
+  setStatus('Arrow keys move. Hold Space for shield.');
 }

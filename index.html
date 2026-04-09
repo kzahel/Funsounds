@@ -757,7 +757,7 @@
             }
         }
 
-        /* Flying Comments */
+        /* Flying Comets */
         #flying-comments-btn {
             font-size: 1.5rem;
             padding: 0.8rem 2rem;
@@ -794,12 +794,14 @@
             position: absolute;
             inset: 0;
             overflow: hidden;
+            contain: layout paint;
         }
 
         .fc-sky-layer {
             position: absolute;
             inset: -8% -20%;
             pointer-events: none;
+            will-change: transform;
         }
 
         .fc-sky-back {
@@ -845,7 +847,7 @@
             background:
                 repeating-linear-gradient(90deg, rgba(255,255,255,0.22) 0 60px, transparent 60px 120px);
             opacity: 0.25;
-            animation: fc-runway 1.2s linear infinite;
+            animation: fc-runway 2.2s linear infinite;
             pointer-events: none;
         }
 
@@ -867,11 +869,10 @@
             gap: 0.55rem;
             padding: 0.65rem 0.95rem;
             border-radius: 999px;
-            background: rgba(7, 18, 35, 0.34);
+            background: rgba(7, 18, 35, 0.5);
             border: 1px solid rgba(255,255,255,0.14);
             color: white;
             font-size: 1rem;
-            backdrop-filter: blur(8px);
         }
 
         .fc-pill strong {
@@ -906,7 +907,7 @@
             min-width: 240px;
             padding: 0.45rem 0.9rem;
             border-radius: 999px;
-            background: rgba(7, 18, 35, 0.26);
+            background: rgba(7, 18, 35, 0.45);
             border: 1px solid rgba(255,255,255,0.12);
             color: rgba(255,255,255,0.9);
             text-align: center;
@@ -930,6 +931,7 @@
             height: 54px;
             z-index: 25;
             pointer-events: none;
+            will-change: transform;
         }
 
         .fc-plane-emoji {
@@ -939,7 +941,7 @@
             align-items: center;
             justify-content: center;
             font-size: 3.4rem;
-            filter: drop-shadow(0 8px 14px rgba(0,0,0,0.28));
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.24));
         }
 
         .fc-plane-engine {
@@ -950,7 +952,7 @@
             height: 10px;
             border-radius: 999px;
             background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,214,102,0.85) 48%, rgba(255,94,0,0.95) 100%);
-            filter: blur(4px);
+            filter: blur(2px);
             animation: fc-engine 0.18s ease-in-out infinite alternate;
         }
 
@@ -959,7 +961,7 @@
             inset: -18px;
             border-radius: 50%;
             border: 4px solid rgba(116,242,206,0.68);
-            box-shadow: 0 0 28px rgba(116,242,206,0.34), inset 0 0 24px rgba(77,150,255,0.22);
+            box-shadow: 0 0 18px rgba(116,242,206,0.28);
             background: radial-gradient(circle, rgba(116,242,206,0.12) 0%, rgba(116,242,206,0.02) 60%, transparent 100%);
             opacity: 0;
             transform: scale(0.88);
@@ -981,28 +983,57 @@
 
         .fc-comet {
             position: absolute;
-            width: 98px;
-            height: 48px;
-            transform-origin: 78px 24px;
+            width: calc(var(--fc-comet-width) + var(--fc-comet-trail));
+            height: var(--fc-comet-height);
+            transform-origin: calc(100% - (var(--fc-comet-width) * 0.38)) 50%;
+            will-change: transform;
         }
 
         .fc-comet-trail {
             position: absolute;
             left: 0;
-            top: 14px;
-            width: 74px;
-            height: 20px;
+            top: calc(var(--fc-comet-height) * 0.28);
+            width: var(--fc-comet-trail);
+            height: calc(var(--fc-comet-height) * 0.32);
             border-radius: 999px;
-            background: linear-gradient(90deg, rgba(255,120,0,0) 0%, rgba(255,136,0,0.38) 35%, rgba(255,85,0,0.86) 70%, rgba(255,240,184,1) 100%);
-            filter: blur(7px);
+            background: linear-gradient(90deg, rgba(255,120,0,0) 0%, rgba(255,133,18,0.28) 38%, rgba(255,106,24,0.8) 76%, rgba(255,235,170,1) 100%);
+            filter: blur(3px);
         }
 
-        .fc-comet-core {
+        .fc-comet-rock {
             position: absolute;
             right: 0;
-            top: 2px;
-            font-size: 2.3rem;
-            text-shadow: 0 0 20px rgba(255,115,0,0.8);
+            top: 0;
+            width: var(--fc-comet-width);
+            height: var(--fc-comet-height);
+            border-radius: 54% 46% 58% 42% / 42% 56% 44% 58%;
+            background:
+                radial-gradient(circle at 26% 28%, #93856b 0%, #7a6c56 22%, #5c5040 44%, #392f25 76%, #1c1712 100%);
+            box-shadow:
+                inset calc(var(--fc-comet-shadow) * -0.35) calc(var(--fc-comet-shadow) * -0.2) calc(var(--fc-comet-shadow) * 0.4) rgba(255,255,255,0.12),
+                inset calc(var(--fc-comet-shadow) * 0.25) calc(var(--fc-comet-shadow) * 0.3) calc(var(--fc-comet-shadow) * 0.55) rgba(0,0,0,0.3),
+                0 0 calc(var(--fc-comet-shadow) * 0.9) rgba(255,130,25,0.18);
+        }
+
+        .fc-comet-crater {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(36, 27, 20, 0.38);
+            box-shadow: inset 2px 2px 3px rgba(0,0,0,0.18);
+        }
+
+        .fc-comet-crater-a {
+            width: 22%;
+            height: 24%;
+            left: 24%;
+            top: 24%;
+        }
+
+        .fc-comet-crater-b {
+            width: 16%;
+            height: 18%;
+            left: 54%;
+            top: 50%;
         }
 
         .fc-particle {
@@ -1010,8 +1041,9 @@
             width: 10px;
             height: 10px;
             border-radius: 3px;
-            box-shadow: 0 0 12px rgba(255,180,82,0.35);
+            box-shadow: 0 0 8px rgba(255,180,82,0.28);
             pointer-events: none;
+            will-change: transform, opacity;
         }
 
         #fc-overlay {
@@ -1037,7 +1069,6 @@
             text-align: center;
             color: white;
             box-shadow: 0 22px 60px rgba(0,0,0,0.32);
-            backdrop-filter: blur(10px);
         }
 
         .fc-overlay-card h2 {
@@ -1091,11 +1122,10 @@
             height: 58px;
             border: 1px solid rgba(255,255,255,0.18);
             border-radius: 18px;
-            background: rgba(7,18,35,0.34);
+            background: rgba(7,18,35,0.48);
             color: white;
             font-size: 1.5rem;
             font-weight: 700;
-            backdrop-filter: blur(10px);
             pointer-events: auto;
             touch-action: none;
             -webkit-tap-highlight-color: transparent;
@@ -1700,8 +1730,8 @@
         </div>
 
         <div class="game-card">
-            <h2>Flying Comments</h2>
-            <button id="flying-comments-btn">Flying Comments</button>
+            <h2>Flying Comets</h2>
+            <button id="flying-comments-btn">Flying Comets</button>
         </div>
 
         <div class="game-card">
@@ -1780,8 +1810,8 @@
         <div id="fc-status">Arrow keys move. Space shields.</div>
         <div id="fc-overlay">
             <div class="fc-overlay-card">
-                <h2 id="fc-overlay-title">Flying Comments</h2>
-                <p id="fc-overlay-text">Arrow keys move. Space gives you a shield for a short burst.</p>
+                <h2 id="fc-overlay-title">Flying Comets</h2>
+                <p id="fc-overlay-text">Arrow keys move. Hold Space to keep the shield up.</p>
                 <button id="fc-restart-btn" class="fc-overlay-btn">Resume</button>
             </div>
         </div>
