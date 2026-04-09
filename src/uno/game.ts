@@ -396,6 +396,7 @@ async function runTurn(): Promise<void> {
         await runTurn();
         return;
       }
+      state.turnLock = false;
       render();
       return;
     }
