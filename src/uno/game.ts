@@ -522,6 +522,10 @@ export async function humanDraw(): Promise<void> {
 export function humanEndTurn(): void {
   if (state.turnLock || state.animating || state.gameOver ||
       state.currentPlayerIdx !== state.humanIndex) return;
+  if (state.pendingSkip) {
+    state.pendingSkip = false;
+    flashMessage('Skipped!', '#ff6b9d');
+  }
   state.turnLock = true;
   state.currentPlayerIdx = nextPlayer(state.currentPlayerIdx);
   state.hasDrawnThisTurn = false;

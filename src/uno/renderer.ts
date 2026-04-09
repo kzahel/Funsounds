@@ -297,7 +297,7 @@ export function renderStatus(): void {
     } else if (state.pendingSkip && state.ruleset === 'intermediate') {
       const canDeflect = state.players[state.humanIndex].hand.some(c => c.value === 'skip');
       el.textContent = canDeflect
-        ? 'Play a Skip to deflect, or get skipped!'
+        ? 'Play a Skip to deflect, or tap Done to get skipped!'
         : 'You are skipped!';
     } else if (state.hasDrawnThisTurn) {
       el.textContent = 'Play a card or tap Done.';
@@ -309,8 +309,10 @@ export function renderStatus(): void {
   }
 
   const doneBtn = document.getElementById('uno-done-btn')!;
-  const showDone = isHumanTurnReady() && !state.awaitingColorPick &&
-    !state.pendingSkip && state.pendingDraw === 0 && state.hasDrawnThisTurn;
+  const canAcceptSkip = state.pendingSkip && state.ruleset === 'intermediate' &&
+    state.players[state.humanIndex].hand.some(c => c.value === 'skip');
+  const showDone = isHumanTurnReady() && !state.awaitingColorPick && state.pendingDraw === 0 &&
+    ((!state.pendingSkip && state.hasDrawnThisTurn) || canAcceptSkip);
   doneBtn.style.display = showDone ? 'block' : 'none';
 }
 
