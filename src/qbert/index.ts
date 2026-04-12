@@ -30,7 +30,7 @@ let restartBtnEl: HTMLElement;
 // ---------------------------------------------------------------------------
 
 function startGame(): void {
-  screenEl.style.display = '';
+  screenEl.style.display = 'block';
   if (isMobile) enterFullscreen();
   document.getElementById('start-screen')!.style.display = 'none';
   currentLevelNum = 1;
@@ -64,14 +64,14 @@ function stopGame(): void {
   if (renderer) renderer.destroy();
 
   screenEl.style.display = 'none';
-  document.getElementById('start-screen')!.style.display = '';
+  document.getElementById('start-screen')!.style.display = 'block';
 }
 
 function showOverlay(title: string, text: string, btnText: string, onBtn: () => void): void {
   overlayTitleEl.textContent = title;
   overlayTextEl.textContent = text;
   restartBtnEl.textContent = btnText;
-  overlayEl.style.display = '';
+  overlayEl.style.display = 'flex';
   restartBtnEl.onclick = onBtn;
 }
 
