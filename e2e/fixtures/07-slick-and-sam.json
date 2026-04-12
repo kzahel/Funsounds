@@ -1,0 +1,42 @@
+{
+  "description": "Slick and Sam enemies on board: slick (green heart) at (3,1) and sam (purple heart) at (4,3). Player at (6,0). These enemies revert cube colors when they land.",
+  "assertions": {
+    "playerVisible": true,
+    "enemyCount": 2,
+    "enemyTypes": ["slick", "sam"],
+    "hudScore": "200"
+  },
+  "state": {
+    "level": {
+      "number": 5,
+      "pyramidRows": 7,
+      "numColors": 3,
+      "targetColorIndex": 2,
+      "revertsOnExtra": false,
+      "hopDurationMs": 260,
+      "enemyTickMs": 1000,
+      "discs": [{"row":3,"side":"left"},{"row":3,"side":"right"}],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":2},
+      {"row":1,"col":0,"colorIndex":2},{"row":1,"col":1,"colorIndex":2},
+      {"row":2,"col":0,"colorIndex":2},{"row":2,"col":1,"colorIndex":1},{"row":2,"col":2,"colorIndex":1},
+      {"row":3,"col":0,"colorIndex":1},{"row":3,"col":1,"colorIndex":1},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":0},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":0},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":6,"col":0,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [
+      {"id":1,"type":"slick","row":3,"col":1,"hop":null},
+      {"id":2,"type":"sam","row":4,"col":3,"hop":null}
+    ],
+    "discs": [{"row":3,"side":"left","used":false},{"row":3,"side":"right","used":false}],
+    "score": 200,
+    "lives": 3,
+    "phase": "playing",
+    "nextEnemyId": 3,
+    "freezeUntil": 0
+  }
+}

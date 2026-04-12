@@ -1,0 +1,42 @@
+{
+  "description": "Level complete: all 28 cubes changed to target color (yellow), player at row 6 col 3, score 1700 (28 cubes * 25 + 1000 level bonus), phase is level_complete",
+  "assertions": {
+    "playerVisible": true,
+    "hudScore": "1700",
+    "hudLevel": "1",
+    "totalCubes": 28,
+    "cubesAtTarget": 28,
+    "cubesAtColor0": 0,
+    "phase": "level_complete"
+  },
+  "state": {
+    "level": {
+      "number": 1,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 300,
+      "enemyTickMs": 1400,
+      "discs": [],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":1},
+      {"row":1,"col":0,"colorIndex":1},{"row":1,"col":1,"colorIndex":1},
+      {"row":2,"col":0,"colorIndex":1},{"row":2,"col":1,"colorIndex":1},{"row":2,"col":2,"colorIndex":1},
+      {"row":3,"col":0,"colorIndex":1},{"row":3,"col":1,"colorIndex":1},{"row":3,"col":2,"colorIndex":1},{"row":3,"col":3,"colorIndex":1},
+      {"row":4,"col":0,"colorIndex":1},{"row":4,"col":1,"colorIndex":1},{"row":4,"col":2,"colorIndex":1},{"row":4,"col":3,"colorIndex":1},{"row":4,"col":4,"colorIndex":1},
+      {"row":5,"col":0,"colorIndex":1},{"row":5,"col":1,"colorIndex":1},{"row":5,"col":2,"colorIndex":1},{"row":5,"col":3,"colorIndex":1},{"row":5,"col":4,"colorIndex":1},{"row":5,"col":5,"colorIndex":1},
+      {"row":6,"col":0,"colorIndex":1},{"row":6,"col":1,"colorIndex":1},{"row":6,"col":2,"colorIndex":1},{"row":6,"col":3,"colorIndex":1},{"row":6,"col":4,"colorIndex":1},{"row":6,"col":5,"colorIndex":1},{"row":6,"col":6,"colorIndex":1}
+    ],
+    "player": {"row":6,"col":3,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [],
+    "discs": [],
+    "score": 1700,
+    "lives": 3,
+    "phase": "level_complete",
+    "nextEnemyId": 1,
+    "freezeUntil": 0
+  }
+}

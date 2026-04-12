@@ -1,0 +1,44 @@
+{
+  "description": "Multiple enemy types simultaneously: coily at (4,2), red ball at (1,1), coily_ball (purple circle) at (2,0), slick at (5,4). Player at (6,3). Chaotic mid-game scene with 4 enemies.",
+  "assertions": {
+    "playerVisible": true,
+    "enemyCount": 4,
+    "enemyTypes": ["coily", "red_ball", "coily_ball", "slick"],
+    "hudLives": "2"
+  },
+  "state": {
+    "level": {
+      "number": 3,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 280,
+      "enemyTickMs": 1200,
+      "discs": [{"row":2,"side":"right"},{"row":4,"side":"left"}],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":1},
+      {"row":1,"col":0,"colorIndex":1},{"row":1,"col":1,"colorIndex":0},
+      {"row":2,"col":0,"colorIndex":0},{"row":2,"col":1,"colorIndex":1},{"row":2,"col":2,"colorIndex":0},
+      {"row":3,"col":0,"colorIndex":1},{"row":3,"col":1,"colorIndex":0},{"row":3,"col":2,"colorIndex":1},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":1},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":1},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":1},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":6,"col":3,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [
+      {"id":1,"type":"coily","row":4,"col":2,"hop":null},
+      {"id":2,"type":"red_ball","row":1,"col":1,"hop":null},
+      {"id":3,"type":"coily_ball","row":2,"col":0,"hop":null},
+      {"id":4,"type":"slick","row":5,"col":4,"hop":null}
+    ],
+    "discs": [{"row":2,"side":"right","used":false},{"row":4,"side":"left","used":false}],
+    "score": 350,
+    "lives": 2,
+    "phase": "playing",
+    "nextEnemyId": 5,
+    "freezeUntil": 0
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "description": "Game over state: player dead, 0 lives remaining, phase is 'game_over'. Score 450. Board partially completed. This is the terminal game state.",
+  "assertions": {
+    "playerAlive": false,
+    "hudLives": "0",
+    "hudScore": "450",
+    "phase": "game_over"
+  },
+  "state": {
+    "level": {
+      "number": 2,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 280,
+      "enemyTickMs": 1300,
+      "discs": [{"row":2,"side":"left"}],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":1},
+      {"row":1,"col":0,"colorIndex":1},{"row":1,"col":1,"colorIndex":1},
+      {"row":2,"col":0,"colorIndex":1},{"row":2,"col":1,"colorIndex":1},{"row":2,"col":2,"colorIndex":0},
+      {"row":3,"col":0,"colorIndex":1},{"row":3,"col":1,"colorIndex":0},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":1},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":0},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":4,"col":2,"hop":null,"alive":false,"ridingDisc":false},
+    "enemies": [
+      {"id":1,"type":"coily","row":4,"col":2,"hop":null}
+    ],
+    "discs": [{"row":2,"side":"left","used":true}],
+    "score": 450,
+    "lives": 0,
+    "phase": "game_over",
+    "nextEnemyId": 2,
+    "freezeUntil": 99999
+  }
+}

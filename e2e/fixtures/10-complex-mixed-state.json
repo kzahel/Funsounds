@@ -1,0 +1,49 @@
+{
+  "description": "Complex mixed state: level 4 with 3 colors, scattered cube progress (mix of color indices 0, 1, 2). Player at (5,2), coily at (3,1), red ball at (1,0). Two discs visible. Score 580, 2 lives. Demonstrates a realistic mid-game scene with variety.",
+  "assertions": {
+    "playerVisible": true,
+    "enemyCount": 2,
+    "enemyTypes": ["coily", "red_ball"],
+    "discCount": 2,
+    "visibleDiscCount": 2,
+    "hudScore": "580",
+    "hudLevel": "4",
+    "hudLives": "2"
+  },
+  "state": {
+    "level": {
+      "number": 4,
+      "pyramidRows": 7,
+      "numColors": 3,
+      "targetColorIndex": 2,
+      "revertsOnExtra": false,
+      "hopDurationMs": 260,
+      "enemyTickMs": 1100,
+      "discs": [{"row":2,"side":"left"},{"row":4,"side":"right"}],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":2},
+      {"row":1,"col":0,"colorIndex":2},{"row":1,"col":1,"colorIndex":1},
+      {"row":2,"col":0,"colorIndex":2},{"row":2,"col":1,"colorIndex":0},{"row":2,"col":2,"colorIndex":1},
+      {"row":3,"col":0,"colorIndex":1},{"row":3,"col":1,"colorIndex":2},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":1},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":1},{"row":4,"col":2,"colorIndex":2},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":1},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":1},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":5,"col":2,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [
+      {"id":1,"type":"coily","row":3,"col":1,"hop":null},
+      {"id":2,"type":"red_ball","row":1,"col":0,"hop":null}
+    ],
+    "discs": [
+      {"row":2,"side":"left","used":false},
+      {"row":4,"side":"right","used":false}
+    ],
+    "score": 580,
+    "lives": 2,
+    "phase": "playing",
+    "nextEnemyId": 3,
+    "freezeUntil": 0
+  }
+}

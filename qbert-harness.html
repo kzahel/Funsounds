@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q*bert Test Harness</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, #0a0a1a 0%, #1a0a3a 100%);
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #qb-hud {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 20;
+            pointer-events: none;
+        }
+        .qb-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.65rem 0.95rem;
+            border-radius: 999px;
+            background: rgba(7, 18, 35, 0.5);
+            border: 1px solid rgba(255,255,255,0.14);
+            color: white;
+            font-size: 1rem;
+        }
+        .qb-pill strong { font-size: 1.15rem; }
+        #qb-pyramid-container {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+        #qb-status {
+            position: absolute;
+            bottom: 24px;
+            left: 0; right: 0;
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 1rem;
+            z-index: 20;
+            pointer-events: none;
+        }
+        #qb-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .qb-overlay-card { text-align: center; color: white; padding: 2rem; }
+        .qb-overlay-card h2 { font-size: 2rem; margin-bottom: 0.5rem; }
+        .qb-overlay-card p { font-size: 1.2rem; margin-bottom: 1.5rem; opacity: 0.8; }
+        @keyframes qb-disc-bob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="qb-hud">
+        <div class="qb-pill">Score <strong id="qb-score">0</strong></div>
+        <div class="qb-pill">Level <strong id="qb-level">1</strong></div>
+        <div class="qb-pill">Lives <strong id="qb-lives">3</strong></div>
+    </div>
+    <div id="qb-pyramid-container"></div>
+    <div id="qb-status"></div>
+    <div id="qb-overlay" style="display:none;">
+        <div class="qb-overlay-card">
+            <h2 id="qb-overlay-title"></h2>
+            <p id="qb-overlay-text"></p>
+        </div>
+    </div>
+    <script type="module" src="/src/qbert/harness.ts"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{
+  "description": "Player mid-hop: player is animating from (1,0) to (2,1), halfway through the hop at t=0.5, should appear in the air between the two cubes with a parabolic arc",
+  "assertions": {
+    "playerVisible": true,
+    "playerAlive": true,
+    "playerMidHop": true,
+    "hudScore": "25",
+    "enemyCount": 0
+  },
+  "renderTime": 150,
+  "state": {
+    "level": {
+      "number": 1,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 300,
+      "enemyTickMs": 1400,
+      "discs": [],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":1},
+      {"row":1,"col":0,"colorIndex":1},{"row":1,"col":1,"colorIndex":0},
+      {"row":2,"col":0,"colorIndex":0},{"row":2,"col":1,"colorIndex":0},{"row":2,"col":2,"colorIndex":0},
+      {"row":3,"col":0,"colorIndex":0},{"row":3,"col":1,"colorIndex":0},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":0},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":0},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {
+      "row":1,"col":0,
+      "hop":{"fromRow":1,"fromCol":0,"toRow":2,"toCol":1,"startTime":0,"duration":300},
+      "alive":true,"ridingDisc":false
+    },
+    "enemies": [],
+    "discs": [],
+    "score": 25,
+    "lives": 3,
+    "phase": "playing",
+    "nextEnemyId": 1,
+    "freezeUntil": 0
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "description": "Coily snake chasing player: player at (5,3), coily at (3,2) closing in. Coily should display as snake emoji. Level 3 with discs visible on right side and left side.",
+  "assertions": {
+    "playerVisible": true,
+    "enemyCount": 1,
+    "enemyTypes": ["coily"],
+    "discCount": 2,
+    "hudLevel": "3"
+  },
+  "state": {
+    "level": {
+      "number": 3,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 280,
+      "enemyTickMs": 1200,
+      "discs": [{"row":2,"side":"right"},{"row":4,"side":"left"}],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":1},
+      {"row":1,"col":0,"colorIndex":1},{"row":1,"col":1,"colorIndex":1},
+      {"row":2,"col":0,"colorIndex":1},{"row":2,"col":1,"colorIndex":0},{"row":2,"col":2,"colorIndex":0},
+      {"row":3,"col":0,"colorIndex":0},{"row":3,"col":1,"colorIndex":0},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":0},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":0},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":5,"col":3,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [
+      {"id":1,"type":"coily","row":3,"col":2,"hop":null}
+    ],
+    "discs": [{"row":2,"side":"right","used":false},{"row":4,"side":"left","used":false}],
+    "score": 75,
+    "lives": 3,
+    "phase": "playing",
+    "nextEnemyId": 2,
+    "freezeUntil": 0
+  }
+}

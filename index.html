@@ -1716,6 +1716,129 @@
             #uno-uno-btn { bottom: 115px; width: 70px; height: 70px; }
             #uno-btn { font-size: 1.3rem; padding: 0.7rem 1.8rem; }
         }
+        /* Q*bert button */
+        #qbert-btn {
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 50px;
+            background: white;
+            color: #667eea;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 0.8rem;
+        }
+        #qbert-btn:hover { transform: scale(1.05); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
+        #qbert-btn:active { transform: scale(0.98); }
+
+        /* === Q*bert game screen === */
+        #qbert-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(180deg, #0a0a1a 0%, #1a0a3a 100%);
+            overflow: hidden;
+        }
+
+        #qb-pyramid-container {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #qb-hud {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .qb-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.65rem 0.95rem;
+            border-radius: 999px;
+            background: rgba(7, 18, 35, 0.5);
+            border: 1px solid rgba(255,255,255,0.14);
+            color: white;
+            font-size: 1rem;
+        }
+
+        .qb-pill strong {
+            font-size: 1.15rem;
+        }
+
+        #qb-status {
+            position: absolute;
+            bottom: 24px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 1rem;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        #qb-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #qb-overlay[style*="display: flex"], #qb-overlay:not([style*="display: none"]):not([style*="display:"]) {
+            display: flex;
+        }
+
+        .qb-overlay-card {
+            text-align: center;
+            color: white;
+            padding: 2rem;
+        }
+
+        .qb-overlay-card h2 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .qb-overlay-card p {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.8;
+        }
+
+        .qb-overlay-btn {
+            font-size: 1.3rem;
+            padding: 0.7rem 1.8rem;
+            border: none;
+            border-radius: 50px;
+            background: white;
+            color: #1a0a3a;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+
+        .qb-overlay-btn:hover { transform: scale(1.05); }
+        .qb-overlay-btn:active { transform: scale(0.98); }
+
+        @keyframes qb-disc-bob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
     </style>
 </head>
 <body>
@@ -1767,6 +1890,11 @@
         <div class="game-card">
             <h2>Flying Comets</h2>
             <button id="flying-comments-btn">Flying Comets</button>
+        </div>
+
+        <div class="game-card">
+            <h2>Q*bert</h2>
+            <button id="qbert-btn">Q*bert</button>
         </div>
 
         <div class="game-card">
@@ -1879,6 +2007,23 @@
         <button id="uno-uno-btn"></button>
         <div id="uno-color-picker"></div>
         <div id="uno-game-over"></div>
+    </div>
+
+    <div id="qbert-screen">
+        <div id="qb-hud">
+            <div class="qb-pill">Score <strong id="qb-score">0</strong></div>
+            <div class="qb-pill">Level <strong id="qb-level">1</strong></div>
+            <div class="qb-pill">Lives <strong id="qb-lives">3</strong></div>
+        </div>
+        <div id="qb-pyramid-container"></div>
+        <div id="qb-status"></div>
+        <div id="qb-overlay" style="display:none;">
+            <div class="qb-overlay-card">
+                <h2 id="qb-overlay-title"></h2>
+                <p id="qb-overlay-text"></p>
+                <button id="qb-restart-btn" class="qb-overlay-btn">Play Again</button>
+            </div>
+        </div>
     </div>
 
     <div id="touch-grid"></div>

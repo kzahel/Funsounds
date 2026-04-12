@@ -1,0 +1,44 @@
+{
+  "description": "Initial game state: player at top of pyramid, all 28 cubes at starting color (blue), level 1, no enemies, score 0, 3 lives",
+  "assertions": {
+    "playerVisible": true,
+    "playerAlive": true,
+    "hudScore": "0",
+    "hudLevel": "1",
+    "hudLives": "3",
+    "enemyCount": 0,
+    "totalCubes": 28,
+    "cubesAtColor0": 28,
+    "cubesAtTarget": 0
+  },
+  "state": {
+    "level": {
+      "number": 1,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 300,
+      "enemyTickMs": 1400,
+      "discs": [],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":0},
+      {"row":1,"col":0,"colorIndex":0},{"row":1,"col":1,"colorIndex":0},
+      {"row":2,"col":0,"colorIndex":0},{"row":2,"col":1,"colorIndex":0},{"row":2,"col":2,"colorIndex":0},
+      {"row":3,"col":0,"colorIndex":0},{"row":3,"col":1,"colorIndex":0},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":0},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":0},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":0,"col":0,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [],
+    "discs": [],
+    "score": 0,
+    "lives": 3,
+    "phase": "playing",
+    "nextEnemyId": 1,
+    "freezeUntil": 0
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "description": "One red ball enemy on the board: player at (4,2), red ball at (2,1), both at rest. Player should be visible lower in the pyramid, red ball emoji visible near the top.",
+  "assertions": {
+    "playerVisible": true,
+    "enemyCount": 1,
+    "enemyTypes": ["red_ball"],
+    "hudScore": "100",
+    "hudLives": "3"
+  },
+  "state": {
+    "level": {
+      "number": 1,
+      "pyramidRows": 7,
+      "numColors": 2,
+      "targetColorIndex": 1,
+      "revertsOnExtra": false,
+      "hopDurationMs": 300,
+      "enemyTickMs": 1400,
+      "discs": [],
+      "enemyWaves": []
+    },
+    "cubes": [
+      {"row":0,"col":0,"colorIndex":1},
+      {"row":1,"col":0,"colorIndex":1},{"row":1,"col":1,"colorIndex":0},
+      {"row":2,"col":0,"colorIndex":1},{"row":2,"col":1,"colorIndex":0},{"row":2,"col":2,"colorIndex":0},
+      {"row":3,"col":0,"colorIndex":1},{"row":3,"col":1,"colorIndex":1},{"row":3,"col":2,"colorIndex":0},{"row":3,"col":3,"colorIndex":0},
+      {"row":4,"col":0,"colorIndex":0},{"row":4,"col":1,"colorIndex":0},{"row":4,"col":2,"colorIndex":0},{"row":4,"col":3,"colorIndex":0},{"row":4,"col":4,"colorIndex":0},
+      {"row":5,"col":0,"colorIndex":0},{"row":5,"col":1,"colorIndex":0},{"row":5,"col":2,"colorIndex":0},{"row":5,"col":3,"colorIndex":0},{"row":5,"col":4,"colorIndex":0},{"row":5,"col":5,"colorIndex":0},
+      {"row":6,"col":0,"colorIndex":0},{"row":6,"col":1,"colorIndex":0},{"row":6,"col":2,"colorIndex":0},{"row":6,"col":3,"colorIndex":0},{"row":6,"col":4,"colorIndex":0},{"row":6,"col":5,"colorIndex":0},{"row":6,"col":6,"colorIndex":0}
+    ],
+    "player": {"row":4,"col":2,"hop":null,"alive":true,"ridingDisc":false},
+    "enemies": [
+      {"id":1,"type":"red_ball","row":2,"col":1,"hop":null}
+    ],
+    "discs": [],
+    "score": 100,
+    "lives": 3,
+    "phase": "playing",
+    "nextEnemyId": 2,
+    "freezeUntil": 0
+  }
+}
