@@ -5,9 +5,10 @@ import { initFlyingComets } from './flying-comets';
 import { initUno } from './uno/index';
 import { initQbert } from './qbert/index';
 import { initTrain } from './train/index';
+import { initFarm } from './farm/index';
 
 async function init() {
-  await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComets(), initUno(), initQbert(), initTrain()]);
+  await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComets(), initUno(), initQbert(), initTrain(), initFarm()]);
 }
 
 if (document.readyState === 'loading') {

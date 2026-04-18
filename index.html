@@ -1986,6 +1986,246 @@
             .tg-tool-label { font-size: 0.7rem; }
         }
 
+        /* === Farm === */
+        #farm-btn {
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 50px;
+            background: white;
+            color: #2a7d2a;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 0.8rem;
+        }
+        #farm-btn:hover { transform: scale(1.05); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
+        #farm-btn:active { transform: scale(0.98); }
+
+        #farm-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #2a5a2a;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #fg-grid-container {
+            position: absolute;
+            inset: 0 0 160px 0;
+            overflow: hidden;
+            touch-action: none;
+            background: #2b6a1d;
+        }
+
+        .fg-tile.fg-not-arable {
+            filter: brightness(0.55) saturate(0.6);
+        }
+        .fg-tile.fg-market {
+            outline: 3px solid #ffd54f;
+            outline-offset: -3px;
+            background: #c0904a !important;
+        }
+
+        .fg-crop.fg-ripe {
+            animation: fg-ripe-pulse 0.9s ease-in-out infinite;
+            filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.7));
+        }
+
+        @keyframes fg-ripe-pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1.0); }
+            50%      { transform: translate(-50%, -50%) scale(1.18); }
+        }
+
+        @keyframes fg-raindrop {
+            0%   { transform: translateY(0);    opacity: 0.85; }
+            90%  { opacity: 0.85; }
+            100% { transform: translateY(120vh); opacity: 0; }
+        }
+
+        .fg-pest-fleeing { opacity: 0.75; }
+        .fg-pest-eating  { animation: fg-nibble 0.25s ease-in-out infinite alternate; }
+        @keyframes fg-nibble {
+            from { transform: translate(-50%, -55%) rotate(-6deg); }
+            to   { transform: translate(-50%, -55%) rotate(6deg); }
+        }
+
+        #fg-toolbar {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 160px;
+            background: linear-gradient(180deg, #1a3a1a 0%, #0e220e 100%);
+            border-top: 2px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 30;
+            box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+        }
+
+        #fg-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 6px 6px 0 6px;
+            overflow-x: auto;
+        }
+
+        .fg-tab {
+            flex: 1 0 auto;
+            padding: 0.5rem 0.8rem;
+            border: none;
+            border-radius: 10px 10px 0 0;
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.75);
+            font-size: 0.95rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+        }
+        .fg-tab:active { transform: scale(0.97); }
+        .fg-tab.fg-tab-active {
+            background: rgba(255,255,255,0.16);
+            color: white;
+            font-weight: 600;
+        }
+
+        #fg-buttons {
+            flex: 1;
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            overflow-x: auto;
+            align-items: center;
+        }
+
+        .fg-tool {
+            flex: 0 0 auto;
+            min-width: 88px;
+            height: 92px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.08);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            font-size: 0.85rem;
+            transition: transform 0.1s, background 0.15s, border-color 0.15s, opacity 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .fg-tool:active { transform: scale(0.95); }
+        .fg-tool.fg-tool-active {
+            background: rgba(255,255,255,0.2);
+            border-color: #ffd54f;
+        }
+        .fg-tool.fg-tool-disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+        .fg-tool-emoji { font-size: 2.1rem; line-height: 1; }
+        .fg-tool-label { font-size: 0.85rem; opacity: 0.85; }
+        .fg-tool-price { font-size: 0.7rem; opacity: 0.8; color: #ffd54f; }
+
+        #fg-hud {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            z-index: 25;
+            pointer-events: none;
+        }
+        .fg-pill {
+            padding: 0.5rem 0.9rem;
+            background: rgba(20, 20, 20, 0.6);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 999px;
+            color: white;
+            font-size: 0.95rem;
+        }
+        .fg-pill.fg-hud-ready {
+            background: rgba(255, 213, 79, 0.85);
+            color: #2a1a00;
+            font-weight: 600;
+        }
+
+        #fg-hint {
+            position: absolute;
+            bottom: 170px;
+            left: 12px;
+            padding: 0.4rem 0.8rem;
+            background: rgba(20, 20, 20, 0.45);
+            border-radius: 999px;
+            color: rgba(255,255,255,0.85);
+            font-size: 0.85rem;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        #fg-reset-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            padding: 0.55rem 0.95rem;
+            background: rgba(20, 20, 20, 0.55);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 999px;
+            color: white;
+            font-size: 0.95rem;
+            cursor: pointer;
+            z-index: 26;
+            pointer-events: auto;
+        }
+        #fg-reset-btn:active { transform: scale(0.96); }
+
+        #fg-touchpad {
+            position: absolute;
+            left: 12px;
+            bottom: 172px;
+            display: none;
+            grid-template-columns: repeat(3, 48px);
+            grid-template-rows: repeat(3, 48px);
+            gap: 4px;
+            z-index: 28;
+        }
+        .fg-tp-btn {
+            background: rgba(20,20,20,0.55);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            font-size: 1.4rem;
+            border-radius: 8px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+            user-select: none;
+        }
+        .fg-tp-btn:active { background: rgba(255,213,79,0.3); }
+        .fg-tp-up    { grid-column: 2; grid-row: 1; }
+        .fg-tp-left  { grid-column: 1; grid-row: 2; }
+        .fg-tp-right { grid-column: 3; grid-row: 2; }
+        .fg-tp-down  { grid-column: 2; grid-row: 3; }
+
+        @media (hover: none) and (pointer: coarse) {
+            #fg-touchpad { display: grid; }
+        }
+
+        @media (max-width: 600px) {
+            #fg-toolbar { height: 150px; }
+            #fg-grid-container { inset: 0 0 150px 0; }
+            .fg-tool { min-width: 72px; height: 78px; }
+            .fg-tool-emoji { font-size: 1.8rem; }
+            .fg-tool-label { font-size: 0.72rem; }
+            #fg-hint { bottom: 160px; }
+            #fg-touchpad { bottom: 160px; }
+        }
+
     </style>
 </head>
 <body>
@@ -2047,6 +2287,11 @@
         <div class="game-card">
             <h2>Train Builder</h2>
             <button id="train-btn">Build Trains</button>
+        </div>
+
+        <div class="game-card">
+            <h2>Farm</h2>
+            <button id="farm-btn">Grow Crops</button>
         </div>
 
         <div class="game-card">
@@ -2185,6 +2430,27 @@
         <div id="tg-toolbar">
             <div id="tg-tabs"></div>
             <div id="tg-buttons"></div>
+        </div>
+    </div>
+
+    <div id="farm-screen">
+        <div id="fg-grid-container"></div>
+        <div id="fg-hud">
+            <span class="fg-pill" id="fg-hud-money">💰 $0</span>
+            <span class="fg-pill" id="fg-hud-inventory">Basket empty</span>
+            <span class="fg-pill" id="fg-hud-rain" style="display:none;">🌧️ Raining</span>
+        </div>
+        <div id="fg-hint">Arrows / WASD to move. Tap tile to use tool.</div>
+        <button id="fg-reset-btn">Reset</button>
+        <div id="fg-touchpad">
+            <button class="fg-tp-btn fg-tp-up"    data-fg-dir="up">↑</button>
+            <button class="fg-tp-btn fg-tp-left"  data-fg-dir="left">←</button>
+            <button class="fg-tp-btn fg-tp-right" data-fg-dir="right">→</button>
+            <button class="fg-tp-btn fg-tp-down"  data-fg-dir="down">↓</button>
+        </div>
+        <div id="fg-toolbar">
+            <div id="fg-tabs"></div>
+            <div id="fg-buttons"></div>
         </div>
     </div>
 
