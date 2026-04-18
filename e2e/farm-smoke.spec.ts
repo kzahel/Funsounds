@@ -67,10 +67,23 @@ test('Farm smoke — opens, tills a tile, plants a seed, and renders without err
   const cropInside = targetTile.locator('.fg-crop');
   await expect(cropInside).toHaveCount(1);
 
-  // Reset clears everything
-  await page.locator('#fg-reset-btn').click();
+  // Menu: Save to slot 1, Reset, Load from slot 1 should restore the crop
+  await page.locator('#fg-menu-btn').click();
+  await expect(page.locator('#fg-menu')).toBeVisible();
+  // Save slot 1
+  await page.locator('#fg-menu-save-rows button').nth(0).click();
+  // Reset — wipes crop
+  await page.locator('#fg-menu-reset').click();
   await page.waitForTimeout(120);
   expect(await page.locator('#fg-grid .fg-crop').count()).toBe(0);
+  // Load slot 1 — crop should come back
+  await page.locator('#fg-menu-btn').click();
+  await page.locator('#fg-menu-load-rows button').nth(0).click();
+  await page.waitForTimeout(120);
+  expect(await page.locator('#fg-grid .fg-crop').count()).toBeGreaterThanOrEqual(1);
+
+  // Season HUD pill is rendered
+  await expect(page.locator('#fg-hud-season')).toBeVisible();
 
   expect(errors).toEqual([]);
 });

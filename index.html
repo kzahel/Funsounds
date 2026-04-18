@@ -2045,6 +2045,111 @@
             100% { transform: translateY(120vh); opacity: 0; }
         }
 
+        @keyframes fg-snowflake {
+            0%   { transform: translate(0, 0) rotate(0deg);    opacity: 0.9; }
+            90%  { opacity: 0.9; }
+            100% { transform: translate(25px, 120vh) rotate(360deg); opacity: 0; }
+        }
+
+        .fg-player-boots {
+            filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.85));
+        }
+
+        #fg-menu {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(3px);
+            z-index: 50;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+        }
+        .fg-menu-card {
+            width: min(440px, 92vw);
+            max-height: 86vh;
+            overflow-y: auto;
+            background: #1a3a1a;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 1rem 1.2rem 1.2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        .fg-menu-card h2 {
+            margin: 0 0 0.8rem;
+            font-size: 1.3rem;
+        }
+        .fg-menu-card h3 {
+            margin: 0.8rem 0 0.4rem;
+            font-size: 0.95rem;
+            opacity: 0.85;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .fg-menu-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.8rem;
+        }
+        .fg-menu-btn {
+            flex: 1 1 auto;
+            padding: 0.6rem 0.9rem;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+        .fg-menu-btn:hover { background: rgba(255,255,255,0.18); }
+        .fg-menu-btn-primary {
+            background: #ffd54f;
+            color: #2a1a00;
+            font-weight: 600;
+            border-color: transparent;
+        }
+        .fg-menu-btn-primary:hover { background: #ffe07a; }
+        .fg-menu-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .fg-menu-slot-btn {
+            text-align: left;
+            padding: 0.55rem 0.8rem;
+            background: rgba(255,255,255,0.06);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.88rem;
+        }
+        .fg-menu-slot-btn:hover { background: rgba(255,255,255,0.12); }
+        .fg-menu-slot-disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        #fg-menu-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            padding: 0.55rem 0.95rem;
+            background: rgba(20, 20, 20, 0.55);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 999px;
+            color: white;
+            font-size: 0.95rem;
+            cursor: pointer;
+            z-index: 26;
+            pointer-events: auto;
+        }
+        #fg-menu-btn:active { transform: scale(0.96); }
+
         .fg-pest-fleeing { opacity: 0.75; }
         .fg-pest-eating  { animation: fg-nibble 0.25s ease-in-out infinite alternate; }
         @keyframes fg-nibble {
@@ -2168,22 +2273,6 @@
             z-index: 25;
             pointer-events: none;
         }
-
-        #fg-reset-btn {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            padding: 0.55rem 0.95rem;
-            background: rgba(20, 20, 20, 0.55);
-            border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 999px;
-            color: white;
-            font-size: 0.95rem;
-            cursor: pointer;
-            z-index: 26;
-            pointer-events: auto;
-        }
-        #fg-reset-btn:active { transform: scale(0.96); }
 
         #fg-touchpad {
             position: absolute;
@@ -2436,12 +2525,13 @@
     <div id="farm-screen">
         <div id="fg-grid-container"></div>
         <div id="fg-hud">
+            <span class="fg-pill" id="fg-hud-season">🌸 Spring · 180s</span>
             <span class="fg-pill" id="fg-hud-money">💰 $0</span>
             <span class="fg-pill" id="fg-hud-inventory">Basket empty</span>
             <span class="fg-pill" id="fg-hud-rain" style="display:none;">🌧️ Raining</span>
         </div>
         <div id="fg-hint">Arrows / WASD to move. Tap tile to use tool.</div>
-        <button id="fg-reset-btn">Reset</button>
+        <button id="fg-menu-btn">☰ Menu</button>
         <div id="fg-touchpad">
             <button class="fg-tp-btn fg-tp-up"    data-fg-dir="up">↑</button>
             <button class="fg-tp-btn fg-tp-left"  data-fg-dir="left">←</button>
@@ -2451,6 +2541,22 @@
         <div id="fg-toolbar">
             <div id="fg-tabs"></div>
             <div id="fg-buttons"></div>
+        </div>
+        <div id="fg-menu">
+            <div class="fg-menu-card">
+                <h2>Menu</h2>
+                <div class="fg-menu-actions">
+                    <button class="fg-menu-btn fg-menu-btn-primary" id="fg-menu-resume">Resume</button>
+                </div>
+                <h3>Save</h3>
+                <div class="fg-menu-rows" id="fg-menu-save-rows"></div>
+                <h3>Load</h3>
+                <div class="fg-menu-rows" id="fg-menu-load-rows"></div>
+                <div class="fg-menu-actions">
+                    <button class="fg-menu-btn" id="fg-menu-reset">Reset Game</button>
+                    <button class="fg-menu-btn" id="fg-menu-quit">Quit</button>
+                </div>
+            </div>
         </div>
     </div>
 

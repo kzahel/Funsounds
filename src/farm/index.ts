@@ -1,7 +1,21 @@
-import type { GameState, Renderer, Tool, ToolTab, Facing, CropKind } from './types';
-import { CROP_PRICE, COST_CAT, COST_SCARECROW, costToExpand } from './types';
-import { createGameState, processAction } from './engine';
-import { DomRenderer } from './renderer';
+import type { GameState, Renderer, Tool, ToolTab, Facing, CropKind, Season, SavePayload } from './types';
+import {
+  CROP_PRICE,
+  COST_CAT,
+  COST_SCARECROW,
+  COST_BEEHIVE,
+  COST_FENCE,
+  COST_BOOTS,
+  SAVE_SLOT_COUNT,
+  SAVE_VERSION,
+  SELL_PRICE,
+  costToExpand,
+  seasonSellMultiplier,
+  seasonShopMultiplier,
+  toolsEqual,
+} from './types';
+import { createGameState, processAction, currentSeason, seasonTimeRemaining, cloneState, sellValue } from './engine';
+import { DomRenderer, SEASON_EMOJI } from './renderer';
 import { isMobile, enterFullscreen, setupEscapeHold, setupFullscreenExit, preventContextMenu } from '../utils';
 
 // ---------------------------------------------------------------------------
@@ -13,9 +27,7 @@ interface ToolButton {
   label: string;
   emoji: string;
   tool: Tool;
-  /** Computed on each render — shown as a badge under the label. */
   priceLabel?: (state: GameState) => string;
-  /** When returns true, the button is visually disabled. */
   disabled?: (state: GameState) => boolean;
 }
 
@@ -39,6 +51,11 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
       { id: 'seed-tomato', label: 'Tomato', emoji: '\u{1F345}', tool: { kind: 'seed', crop: 'tomato' } },
       { id: 'seed-corn', label: 'Corn', emoji: '\u{1F33D}', tool: { kind: 'seed', crop: 'corn' } },
       { id: 'seed-pumpkin', label: 'Pumpkin', emoji: '\u{1F383}', tool: { kind: 'seed', crop: 'pumpkin' } },
+      { id: 'seed-strawberry', label: 'Strawberry', emoji: '\u{1F353}', tool: { kind: 'seed', crop: 'strawberry' } },
+      { id: 'seed-potato', label: 'Potato', emoji: '\u{1F954}', tool: { kind: 'seed', crop: 'potato' } },
+      { id: 'seed-watermelon', label: 'Watermelon', emoji: '\u{1F349}', tool: { kind: 'seed', crop: 'watermelon' } },
+      { id: 'seed-apple', label: 'Apple', emoji: '\u{1F333}', tool: { kind: 'seed', crop: 'apple' } },
+      { id: 'seed-turnip', label: 'Turnip', emoji: '\u{1FADA}', tool: { kind: 'seed', crop: 'turnip' } },
     ],
   },
   {
@@ -56,6 +73,16 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
         priceLabel: (s) => s.pendingScarecrows > 0 ? `x${s.pendingScarecrows}` : 'Buy in Shop',
         disabled: (s) => s.pendingScarecrows <= 0,
       },
+      {
+        id: 'place-beehive', label: 'Beehive', emoji: '\u{1F36F}', tool: { kind: 'place_beehive' },
+        priceLabel: (s) => s.pendingBeehives > 0 ? `x${s.pendingBeehives}` : 'Buy in Shop',
+        disabled: (s) => s.pendingBeehives <= 0,
+      },
+      {
+        id: 'place-fence', label: 'Fence', emoji: '\u{1FAB5}', tool: { kind: 'place_fence' },
+        priceLabel: (s) => s.pendingFences > 0 ? `x${s.pendingFences}` : 'Buy in Shop',
+        disabled: (s) => s.pendingFences <= 0,
+      },
     ],
   },
   {
@@ -65,22 +92,41 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
     buttons: [
       {
         id: 'buy-cat', label: 'Cat', emoji: '\u{1F408}', tool: { kind: 'buy_cat' },
-        priceLabel: () => `$${COST_CAT}`,
-        disabled: (s) => s.money < COST_CAT,
+        priceLabel: (s) => `$${seasonCost(s, COST_CAT)}`,
+        disabled: (s) => s.money < seasonCost(s, COST_CAT),
       },
       {
         id: 'buy-scarecrow', label: 'Scarecrow', emoji: '\u{1F383}', tool: { kind: 'buy_scarecrow' },
-        priceLabel: () => `$${COST_SCARECROW}`,
-        disabled: (s) => s.money < COST_SCARECROW,
+        priceLabel: (s) => `$${seasonCost(s, COST_SCARECROW)}`,
+        disabled: (s) => s.money < seasonCost(s, COST_SCARECROW),
+      },
+      {
+        id: 'buy-beehive', label: 'Beehive', emoji: '\u{1F36F}', tool: { kind: 'buy_beehive' },
+        priceLabel: (s) => `$${seasonCost(s, COST_BEEHIVE)}`,
+        disabled: (s) => s.money < seasonCost(s, COST_BEEHIVE),
+      },
+      {
+        id: 'buy-fence', label: 'Fence', emoji: '\u{1FAB5}', tool: { kind: 'buy_fence' },
+        priceLabel: (s) => `$${seasonCost(s, COST_FENCE)}`,
+        disabled: (s) => s.money < seasonCost(s, COST_FENCE),
+      },
+      {
+        id: 'buy-boots', label: 'Boots', emoji: '\u{1F462}', tool: { kind: 'buy_boots' },
+        priceLabel: (s) => s.hasBoots ? 'Owned' : `$${seasonCost(s, COST_BOOTS)}`,
+        disabled: (s) => s.hasBoots || s.money < seasonCost(s, COST_BOOTS),
       },
       {
         id: 'buy-expand', label: 'Expand', emoji: '\u{1F331}', tool: { kind: 'buy_expand' },
-        priceLabel: (s) => `$${costToExpand(s.arableRadius)}`,
-        disabled: (s) => s.money < costToExpand(s.arableRadius),
+        priceLabel: (s) => `$${seasonCost(s, costToExpand(s.arableRadius))}`,
+        disabled: (s) => s.money < seasonCost(s, costToExpand(s.arableRadius)),
       },
     ],
   },
 ];
+
+function seasonCost(state: GameState, baseCost: number): number {
+  return Math.round(baseCost * seasonShopMultiplier(currentSeason(state.time)));
+}
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -99,8 +145,61 @@ let buttonsEl: HTMLElement;
 let hudMoneyEl: HTMLElement;
 let hudInventoryEl: HTMLElement;
 let hudRainEl: HTMLElement;
+let hudSeasonEl: HTMLElement;
 let hudHintEl: HTMLElement;
-let resetBtnEl: HTMLElement;
+let menuBtnEl: HTMLElement;
+let menuOverlayEl: HTMLElement;
+let menuSaveRowsEl: HTMLElement;
+let menuLoadRowsEl: HTMLElement;
+let menuResumeBtnEl: HTMLElement;
+let menuResetBtnEl: HTMLElement;
+let menuQuitBtnEl: HTMLElement;
+
+// ---------------------------------------------------------------------------
+// Save / load
+// ---------------------------------------------------------------------------
+
+const slotKey = (slot: number): string => `funsounds-farm-slot-${slot}`;
+
+interface SlotMeta {
+  savedAt: string;
+  money: number;
+  season: Season;
+  year: number;
+}
+
+function readSlot(slot: number): SavePayload | null {
+  try {
+    const raw = localStorage.getItem(slotKey(slot));
+    if (!raw) return null;
+    const payload = JSON.parse(raw) as SavePayload;
+    if (!payload || payload.version !== SAVE_VERSION || !payload.state) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function slotMeta(slot: number): SlotMeta | null {
+  const p = readSlot(slot);
+  if (!p) return null;
+  const t = p.state.time;
+  return {
+    savedAt: p.savedAt,
+    money: p.state.money,
+    season: currentSeason(t),
+    year: Math.floor(t / (180 * 4)) + 1, // SEASON_DURATION * 4
+  };
+}
+
+function writeSlot(slot: number, st: GameState): void {
+  const payload: SavePayload = {
+    version: SAVE_VERSION,
+    savedAt: new Date().toISOString(),
+    state: cloneState(st),
+  };
+  localStorage.setItem(slotKey(slot), JSON.stringify(payload));
+}
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -119,6 +218,7 @@ function startGame(): void {
   buildToolbar();
   selectToolButton(TOOLBAR[0].tab, TOOLBAR[0].buttons[0]);
 
+  closeMenu();
   gameActive = true;
   lastFrame = performance.now();
   rafId = requestAnimationFrame(gameLoop);
@@ -128,9 +228,9 @@ function stopGame(): void {
   gameActive = false;
   cancelAnimationFrame(rafId);
   if (renderer) renderer.destroy();
+  closeMenu();
   screenEl.style.display = 'none';
   document.getElementById('start-screen')!.style.display = 'block';
-  // Clear movement keys so they don't persist across sessions
   if (state) {
     state.player.moving = { up: false, down: false, left: false, right: false };
   }
@@ -149,30 +249,32 @@ function gameLoop(now: number): void {
 function updateHUD(): void {
   hudMoneyEl.textContent = `\u{1F4B0} $${state.money}`;
   const inv = state.inventory;
-  const total = inv.carrot + inv.tomato + inv.corn + inv.pumpkin;
   const parts: string[] = [];
-  if (inv.carrot) parts.push(`\u{1F955}${inv.carrot}`);
-  if (inv.tomato) parts.push(`\u{1F345}${inv.tomato}`);
-  if (inv.corn) parts.push(`\u{1F33D}${inv.corn}`);
-  if (inv.pumpkin) parts.push(`\u{1F383}${inv.pumpkin}`);
+  const pushIf = (qty: number, emoji: string): void => { if (qty) parts.push(`${emoji}${qty}`); };
+  pushIf(inv.carrot, '\u{1F955}');
+  pushIf(inv.tomato, '\u{1F345}');
+  pushIf(inv.corn, '\u{1F33D}');
+  pushIf(inv.pumpkin, '\u{1F383}');
+  pushIf(inv.strawberry, '\u{1F353}');
+  pushIf(inv.potato, '\u{1F954}');
+  pushIf(inv.watermelon, '\u{1F349}');
+  pushIf(inv.apple, '\u{1F34E}');
+  pushIf(inv.turnip, '\u{1FADA}');
+  pushIf(inv.honey, '\u{1F36F}');
+  const total = parts.length;
   if (total === 0) {
     hudInventoryEl.textContent = 'Basket empty';
     hudInventoryEl.classList.remove('fg-hud-ready');
   } else {
-    const value = sellValue(state.inventory);
-    hudInventoryEl.textContent = `${parts.join(' ')}  \u2192 $${value}`;
+    hudInventoryEl.textContent = `${parts.join(' ')}  \u2192 $${sellValue(state)}`;
     hudInventoryEl.classList.add('fg-hud-ready');
   }
   const raining = state.time < state.rainUntil;
   hudRainEl.style.display = raining ? 'inline-block' : 'none';
-  // Update tool button states / badges reactively
+  const season = currentSeason(state.time);
+  const remain = Math.ceil(seasonTimeRemaining(state.time));
+  hudSeasonEl.textContent = `${SEASON_EMOJI[season]} ${season[0].toUpperCase() + season.slice(1)} · ${remain}s`;
   refreshToolBadges();
-}
-
-function sellValue(inv: GameState['inventory']): number {
-  let total = 0;
-  for (const k of Object.keys(inv) as CropKind[]) total += inv[k] * CROP_PRICE[k];
-  return total;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,10 +313,10 @@ function renderTabButtons(activeTab: ToolTab): void {
       ${priceLabel ? `<span class="fg-tool-price">${priceLabel}</span>` : ''}
     `;
     el.addEventListener('click', () => {
-      // Shop/buy actions process immediately rather than as placements
-      if (btn.tool.kind === 'buy_cat' || btn.tool.kind === 'buy_scarecrow' || btn.tool.kind === 'buy_expand') {
+      const k = btn.tool.kind;
+      if (k === 'buy_cat' || k === 'buy_scarecrow' || k === 'buy_beehive'
+          || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_expand') {
         processAction(state, { type: 'place', row: 0, col: 0, tool: btn.tool });
-        // Re-render buttons because tab/tool may have been switched by engine
         renderTabButtons(state.selectedTab);
         return;
       }
@@ -236,7 +338,7 @@ function highlightSelectedButton(): void {
     const id = el.dataset.toolId!;
     const group = TOOLBAR.find((g) => g.tab === state.selectedTab)!;
     const btn = group.buttons.find((b) => b.id === id);
-    el.classList.toggle('fg-tool-active', !!btn && btn.tool === state.selectedTool);
+    el.classList.toggle('fg-tool-active', !!btn && toolsEqual(btn.tool, state.selectedTool));
   }
 }
 
@@ -261,6 +363,8 @@ function handlePointerDown(e: PointerEvent): void {
   if (!gameActive) return;
   if ((e.target as HTMLElement).closest('#fg-toolbar')) return;
   if ((e.target as HTMLElement).closest('#fg-hud')) return;
+  if ((e.target as HTMLElement).closest('#fg-menu')) return;
+  if (state.paused) return;
   e.preventDefault();
   placeAtPointer(e.clientX, e.clientY);
   (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -270,8 +374,9 @@ function placeAtPointer(clientX: number, clientY: number): void {
   const tile = renderer.screenToTile(clientX, clientY);
   if (!tile) return;
   const tool = state.selectedTool;
-  // Shop actions shouldn't be triggered by tile taps — they're button-only
-  if (tool.kind === 'buy_cat' || tool.kind === 'buy_scarecrow' || tool.kind === 'buy_expand') return;
+  const k = tool.kind;
+  if (k === 'buy_cat' || k === 'buy_scarecrow' || k === 'buy_beehive'
+      || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_expand') return;
   processAction(state, { type: 'place', row: tile.row, col: tile.col, tool });
 }
 
@@ -287,6 +392,7 @@ function dirFromKey(k: string): Facing | null {
 
 function handleKeyDown(e: KeyboardEvent): void {
   if (!gameActive) return;
+  if (state.paused) return;
   const dir = dirFromKey(e.key);
   if (!dir) return;
   e.preventDefault();
@@ -300,12 +406,11 @@ function handleKeyUp(e: KeyboardEvent): void {
   processAction(state, { type: 'set_player_moving', dir, moving: false });
 }
 
-// Touch d-pad
 function bindTouchPad(): void {
   const pad = document.getElementById('fg-touchpad');
   if (!pad) return;
   const setDir = (dir: Facing, moving: boolean): void => {
-    if (!gameActive) return;
+    if (!gameActive || state.paused) return;
     processAction(state, { type: 'set_player_moving', dir, moving });
   };
   const btns = pad.querySelectorAll<HTMLElement>('[data-fg-dir]');
@@ -321,6 +426,76 @@ function bindTouchPad(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Menu (pause + save/load)
+// ---------------------------------------------------------------------------
+
+function openMenu(): void {
+  menuOverlayEl.style.display = 'flex';
+  processAction(state, { type: 'set_paused', paused: true });
+  // Release any held movement keys
+  state.player.moving = { up: false, down: false, left: false, right: false };
+  rebuildMenuRows();
+}
+
+function closeMenu(): void {
+  if (menuOverlayEl) menuOverlayEl.style.display = 'none';
+  if (state) processAction(state, { type: 'set_paused', paused: false });
+}
+
+function formatWhen(iso: string): string {
+  const t = new Date(iso);
+  const now = Date.now();
+  const diffMs = now - t.getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return t.toLocaleDateString();
+}
+
+function rebuildMenuRows(): void {
+  menuSaveRowsEl.innerHTML = '';
+  menuLoadRowsEl.innerHTML = '';
+  for (let i = 1; i <= SAVE_SLOT_COUNT; i++) {
+    const meta = slotMeta(i);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'fg-menu-slot-btn';
+    const saveLabel = meta
+      ? `Slot ${i} · Year ${meta.year} ${meta.season} · $${meta.money} · ${formatWhen(meta.savedAt)}`
+      : `Slot ${i} · Empty`;
+    saveBtn.textContent = `Save to ${saveLabel}`;
+    saveBtn.addEventListener('click', () => {
+      writeSlot(i, state);
+      rebuildMenuRows();
+    });
+    menuSaveRowsEl.appendChild(saveBtn);
+
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'fg-menu-slot-btn';
+    loadBtn.textContent = `Load ${saveLabel}`;
+    if (!meta) {
+      loadBtn.classList.add('fg-menu-slot-disabled');
+      loadBtn.disabled = true;
+    } else {
+      loadBtn.addEventListener('click', () => loadSlot(i));
+    }
+    menuLoadRowsEl.appendChild(loadBtn);
+  }
+}
+
+function loadSlot(slot: number): void {
+  const payload = readSlot(slot);
+  if (!payload) return;
+  processAction(state, { type: 'load_state', state: payload.state });
+  // The renderer was built for the old state; rebuild so tile DOM matches.
+  renderer.rebuild(state);
+  renderTabButtons(state.selectedTab);
+  closeMenu();
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
@@ -332,8 +507,15 @@ export async function initFarm(): Promise<void> {
   hudMoneyEl = document.getElementById('fg-hud-money')!;
   hudInventoryEl = document.getElementById('fg-hud-inventory')!;
   hudRainEl = document.getElementById('fg-hud-rain')!;
+  hudSeasonEl = document.getElementById('fg-hud-season')!;
   hudHintEl = document.getElementById('fg-hint')!;
-  resetBtnEl = document.getElementById('fg-reset-btn')!;
+  menuBtnEl = document.getElementById('fg-menu-btn')!;
+  menuOverlayEl = document.getElementById('fg-menu')!;
+  menuSaveRowsEl = document.getElementById('fg-menu-save-rows')!;
+  menuLoadRowsEl = document.getElementById('fg-menu-load-rows')!;
+  menuResumeBtnEl = document.getElementById('fg-menu-resume')!;
+  menuResetBtnEl = document.getElementById('fg-menu-reset')!;
+  menuQuitBtnEl = document.getElementById('fg-menu-quit')!;
 
   document.getElementById('farm-btn')!.addEventListener('click', startGame);
 
@@ -342,20 +524,26 @@ export async function initFarm(): Promise<void> {
   window.addEventListener('keyup', handleKeyUp);
   bindTouchPad();
 
-  resetBtnEl.addEventListener('click', () => {
+  menuBtnEl.addEventListener('click', () => {
     if (!gameActive) return;
-    processAction(state, { type: 'reset' });
-    if (renderer) {
-      renderer.destroy();
-      renderer = new DomRenderer();
-      renderer.init(containerEl, state);
-    }
-    renderTabButtons(state.selectedTab);
+    if (menuOverlayEl.style.display === 'flex') closeMenu();
+    else openMenu();
   });
+  menuResumeBtnEl.addEventListener('click', closeMenu);
+  menuResetBtnEl.addEventListener('click', () => {
+    processAction(state, { type: 'reset' });
+    renderer.rebuild(state);
+    renderTabButtons(state.selectedTab);
+    closeMenu();
+  });
+  menuQuitBtnEl.addEventListener('click', stopGame);
 
   setupEscapeHold(() => gameActive, stopGame);
   setupFullscreenExit(() => gameActive, stopGame);
   preventContextMenu(() => gameActive);
 
-  void hudHintEl; // held as DOM reference but not mutated from here
+  void hudHintEl;
+  void SELL_PRICE;
+  void seasonSellMultiplier;
+  void CROP_PRICE;
 }

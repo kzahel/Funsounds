@@ -1,13 +1,12 @@
-import { isRaining, isArable } from './engine';
+import { isRaining, isArable, currentSeason } from './engine';
 import type {
   GameState,
   Renderer,
-  TileState,
   Pest,
-  Defense,
   CropKind,
   PestKind,
   Player,
+  Season,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -18,13 +17,19 @@ const TILE_BG: Record<string, string> = {
   grass: '#62a83d',
   tilled: '#8c5a2a',
   wet_tilled: '#4a321a',
+  apple_tree: '#2f6f2a',
 };
 
 const CROP_EMOJI: Record<CropKind, string> = {
   carrot: '\u{1F955}',
   tomato: '\u{1F345}',
   corn: '\u{1F33D}',
-  pumpkin: '\u{1F383}', // jack-o-lantern — playful stand-in, matches harvest seasonality
+  pumpkin: '\u{1F383}',
+  strawberry: '\u{1F353}',
+  potato: '\u{1F954}',
+  watermelon: '\u{1F349}',
+  apple: '\u{1F34E}',
+  turnip: '\u{1FADA}', // onion/turnip stand-in
 };
 
 const PEST_EMOJI: Record<PestKind, string> = {
@@ -32,10 +37,21 @@ const PEST_EMOJI: Record<PestKind, string> = {
   bird: '\u{1F426}',
 };
 
-const PLAYER_EMOJI = '\u{1F9D1}\u200D\u{1F33E}'; // farmer
+const PLAYER_EMOJI = '\u{1F9D1}\u200D\u{1F33E}';
 const MARKET_EMOJI = '\u{1F3EA}';
 const RAIN_EMOJI = '\u{1F4A7}';
+const SNOW_EMOJI = '\u2744\uFE0F';
 const CAT_EMOJI = '\u{1F408}';
+const BEEHIVE_EMOJI = '\u{1F36F}';
+const FENCE_EMOJI = '\u{1FAB5}'; // wood emoji as fence stand-in
+const APPLE_TREE_EMOJI = '\u{1F333}';
+
+const SEASON_EMOJI: Record<Season, string> = {
+  spring: '\u{1F338}',
+  summer: '\u{2600}\uFE0F',
+  fall: '\u{1F342}',
+  winter: '\u2744\uFE0F',
+};
 
 // ---------------------------------------------------------------------------
 // DomRenderer
@@ -48,9 +64,12 @@ export class DomRenderer implements Renderer {
   private defenseLayer!: HTMLElement;
   private playerLayer!: HTMLElement;
   private rainLayer!: HTMLElement;
+  private snowLayer!: HTMLElement;
 
   private tileEls: HTMLElement[] = [];
   private cropEls: (HTMLElement | null)[] = [];
+  private fenceEls: (HTMLElement | null)[] = [];
+  private treeEls: (HTMLElement | null)[] = [];
   private pestEls: Map<number, HTMLElement> = new Map();
   private defenseEls: Map<number, HTMLElement> = new Map();
   private playerEl!: HTMLElement;
@@ -79,7 +98,9 @@ export class DomRenderer implements Renderer {
     this.pestLayer = this.makeLayer('fg-pest-layer', 4);
     this.playerLayer = this.makeLayer('fg-player-layer', 5);
     this.rainLayer = this.makeLayer('fg-rain-layer', 6);
+    this.snowLayer = this.makeLayer('fg-snow-layer', 6);
     this.rainLayer.style.display = 'none';
+    this.snowLayer.style.display = 'none';
 
     this.playerEl = document.createElement('div');
     this.playerEl.className = 'fg-player';
@@ -88,12 +109,18 @@ export class DomRenderer implements Renderer {
       font-size:${this.tilePx * 0.65}px; line-height:1;
       transform:translate(-50%, -55%);
       text-shadow: 0 2px 4px rgba(0,0,0,0.4);
-      transition: none;
     `;
     this.playerEl.textContent = PLAYER_EMOJI;
     this.playerLayer.appendChild(this.playerEl);
 
     window.addEventListener('resize', this.handleResize);
+  }
+
+  /** Rebuild the tile layer — used after 'load_state' because existing per-tile DOM is stale. */
+  rebuild(state: GameState): void {
+    if (!this.container) return;
+    this.destroy();
+    this.init(this.container, state);
   }
 
   private makeLayer(id: string, z: number): HTMLElement {
@@ -109,6 +136,8 @@ export class DomRenderer implements Renderer {
     this.container.innerHTML = '';
     this.tileEls = [];
     this.cropEls = [];
+    this.fenceEls = [];
+    this.treeEls = [];
     this.pestEls.clear();
     this.defenseEls.clear();
   }
@@ -164,6 +193,8 @@ export class DomRenderer implements Renderer {
       this.gridEl.appendChild(el);
       this.tileEls.push(el);
       this.cropEls.push(null);
+      this.fenceEls.push(null);
+      this.treeEls.push(null);
     }
   }
 
@@ -183,19 +214,67 @@ export class DomRenderer implements Renderer {
     this.renderCrops(state);
     this.renderDefenses(state);
     this.renderPests(state);
-    this.renderPlayer(state.player);
+    this.renderPlayer(state.player, state.hasBoots);
     this.renderWeather(state);
   }
 
   // ---- Tiles ----
 
   private renderTiles(state: GameState): void {
+    const px = this.tilePx;
     for (let i = 0; i < state.tiles.length; i++) {
       const tile = state.tiles[i];
       const el = this.tileEls[i];
       el.style.background = TILE_BG[tile.kind];
       const arable = isArable(state, tile.row, tile.col);
       el.classList.toggle('fg-not-arable', !arable);
+
+      // Fence overlay
+      let fenceEl = this.fenceEls[i];
+      if (tile.hasFence) {
+        if (!fenceEl) {
+          fenceEl = document.createElement('span');
+          fenceEl.className = 'fg-fence';
+          fenceEl.textContent = FENCE_EMOJI;
+          fenceEl.style.cssText = `
+            position:absolute; left:50%; top:50%;
+            transform:translate(-50%, -50%);
+            font-size:${px * 0.7}px; line-height:1;
+            pointer-events:none;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.4);
+          `;
+          el.appendChild(fenceEl);
+          this.fenceEls[i] = fenceEl;
+        }
+        fenceEl.style.fontSize = px * 0.7 + 'px';
+      } else if (fenceEl) {
+        fenceEl.remove();
+        this.fenceEls[i] = null;
+      }
+
+      // Apple tree trunk under the fruit
+      let treeEl = this.treeEls[i];
+      if (tile.kind === 'apple_tree') {
+        if (!treeEl) {
+          treeEl = document.createElement('span');
+          treeEl.className = 'fg-tree';
+          treeEl.textContent = APPLE_TREE_EMOJI;
+          treeEl.style.cssText = `
+            position:absolute; left:50%; top:50%;
+            transform:translate(-50%, -50%);
+            font-size:${px * 0.9}px; line-height:1;
+            pointer-events:none;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.4);
+            z-index: 0;
+          `;
+          el.insertBefore(treeEl, el.firstChild);
+          this.treeEls[i] = treeEl;
+        }
+        treeEl.style.fontSize = px * 0.9 + 'px';
+      } else if (treeEl) {
+        treeEl.remove();
+        this.treeEls[i] = null;
+      }
     }
   }
 
@@ -225,12 +304,15 @@ export class DomRenderer implements Renderer {
           pointer-events:none;
           transition: transform 0.25s ease-out;
           text-shadow: 0 2px 3px rgba(0,0,0,0.35);
+          z-index: 1;
         `;
         tileEl.appendChild(cropEl);
         this.cropEls[i] = cropEl;
       }
       cropEl.textContent = CROP_EMOJI[tile.crop.kind];
-      cropEl.style.fontSize = px * 0.75 + 'px';
+      // Apple on tree renders smaller (nestled in the tree foliage)
+      const sizeMult = tile.kind === 'apple_tree' ? 0.45 : 0.75;
+      cropEl.style.fontSize = px * sizeMult + 'px';
       const grow = tile.crop.growth;
       const scale = 0.25 + grow * 0.9;
       const ripe = grow >= 1;
@@ -238,7 +320,6 @@ export class DomRenderer implements Renderer {
       if (!ripe) {
         cropEl.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
       } else {
-        // Let CSS keyframe drive the pulse
         cropEl.style.transform = '';
       }
     }
@@ -259,7 +340,7 @@ export class DomRenderer implements Renderer {
       let el = this.defenseEls.get(d.id);
       if (!el) {
         el = document.createElement('div');
-        el.className = d.kind === 'cat' ? 'fg-cat' : 'fg-scarecrow';
+        el.className = `fg-${d.kind}`;
         if (d.kind === 'cat') {
           el.textContent = CAT_EMOJI;
           el.style.cssText = `
@@ -269,8 +350,7 @@ export class DomRenderer implements Renderer {
             text-shadow: 0 2px 4px rgba(0,0,0,0.3);
             z-index: 3;
           `;
-        } else {
-          // Scarecrow: stacked hat + shirt with pumpkin head so it reads as a scarecrow
+        } else if (d.kind === 'scarecrow') {
           el.innerHTML = `<span class="fg-sc-hat">\u{1F454}</span><span class="fg-sc-head">\u{1F383}</span>`;
           el.style.cssText = `
             position:absolute; pointer-events:none;
@@ -279,13 +359,23 @@ export class DomRenderer implements Renderer {
             display:flex; flex-direction:column; align-items:center;
             z-index: 3;
           `;
+        } else {
+          // beehive
+          el.textContent = BEEHIVE_EMOJI;
+          el.style.cssText = `
+            position:absolute; pointer-events:none;
+            font-size:${px * 0.55}px; line-height:1;
+            transform:translate(-50%, -55%);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            z-index: 3;
+          `;
         }
         this.defenseLayer.appendChild(el);
         this.defenseEls.set(d.id, el);
       }
       el.style.left = d.x * px + 'px';
       el.style.top = d.y * px + 'px';
-      const sizePct = d.kind === 'cat' ? 0.55 : 0.5;
+      const sizePct = d.kind === 'scarecrow' ? 0.5 : 0.55;
       el.style.fontSize = px * sizePct + 'px';
     }
   }
@@ -326,24 +416,27 @@ export class DomRenderer implements Renderer {
 
   // ---- Player ----
 
-  private renderPlayer(player: Player): void {
+  private renderPlayer(player: Player, hasBoots: boolean): void {
     const px = this.tilePx;
     this.playerEl.style.left = player.x * px + 'px';
     this.playerEl.style.top = player.y * px + 'px';
     this.playerEl.style.fontSize = px * 0.65 + 'px';
-    // Subtle flip for left facing
     const flip = player.facing === 'left' ? ' scaleX(-1)' : '';
     this.playerEl.style.transform = `translate(-50%, -55%)${flip}`;
+    this.playerEl.classList.toggle('fg-player-boots', hasBoots);
   }
 
-  // ---- Weather ----
+  // ---- Weather & season ----
 
   private renderWeather(state: GameState): void {
-    if (!isRaining(state)) {
+    const season = currentSeason(state.time);
+    const wantRain = isRaining(state) && season !== 'winter';
+    const wantSnow = season === 'winter';
+
+    // Rain
+    if (!wantRain) {
       this.rainLayer.style.display = 'none';
-      return;
-    }
-    if (this.rainLayer.style.display !== 'block') {
+    } else if (this.rainLayer.style.display !== 'block') {
       this.rainLayer.style.display = 'block';
       this.rainLayer.innerHTML = '';
       const count = 24;
@@ -362,5 +455,30 @@ export class DomRenderer implements Renderer {
         this.rainLayer.appendChild(drop);
       }
     }
+
+    // Snow
+    if (!wantSnow) {
+      this.snowLayer.style.display = 'none';
+    } else if (this.snowLayer.style.display !== 'block') {
+      this.snowLayer.style.display = 'block';
+      this.snowLayer.innerHTML = '';
+      const count = 28;
+      for (let i = 0; i < count; i++) {
+        const flake = document.createElement('div');
+        flake.textContent = SNOW_EMOJI;
+        flake.style.cssText = `
+          position:absolute;
+          left:${Math.random() * 100}%;
+          top:${-5 - Math.random() * 30}%;
+          font-size:${this.tilePx * 0.3}px;
+          opacity:0.85;
+          animation: fg-snowflake ${4 + Math.random() * 3}s linear infinite;
+          animation-delay: ${-Math.random() * 4}s;
+        `;
+        this.snowLayer.appendChild(flake);
+      }
+    }
   }
 }
+
+export { SEASON_EMOJI };
