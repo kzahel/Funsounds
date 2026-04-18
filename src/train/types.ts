@@ -113,6 +113,28 @@ export interface Animal {
   moving: boolean;
   /** When true, the animal stays put and skips all AI updates. */
   perched: boolean;
+  /** For flying animals only: time at which the next poop is dropped. 0 = unscheduled. */
+  nextPoopAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Poop (dropped by flying animals; sticks to the ground until erased)
+// ---------------------------------------------------------------------------
+
+export interface Poop {
+  id: number;
+  /** Tile-space target column (where it will land). */
+  x: number;
+  /** Tile-space target row (where it will land). */
+  y: number;
+  /** Initial drop height in tiles above the landing point. */
+  fallStart: number;
+  /** Time at which the poop was dropped. */
+  startTime: number;
+  /** Fall duration in ms. */
+  duration: number;
+  /** Once true, poop is on the ground and stays until erased. */
+  landed: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,9 +167,10 @@ export interface GameState {
   tiles: TileState[];
   trains: Train[];
   animals: Animal[];
+  poops: Poop[];
   selectedTab: ToolTab;
   selectedTool: Tool;
-  /** Monotonic id counter for new trains/animals. */
+  /** Monotonic id counter for new trains/animals/poops. */
   nextId: number;
   /** True while the user is paused/editing without simulation. */
   paused: boolean;
@@ -173,6 +196,9 @@ export type GameEvent =
   | { type: 'train_removed'; trainId: number }
   | { type: 'animal_added'; animalId: number }
   | { type: 'animal_removed'; animalId: number }
+  | { type: 'poop_dropped'; id: number }
+  | { type: 'poop_landed'; id: number }
+  | { type: 'poop_removed'; id: number }
   | { type: 'cleared' };
 
 // ---------------------------------------------------------------------------

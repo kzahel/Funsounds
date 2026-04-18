@@ -99,6 +99,7 @@ function startGame(): void {
   document.getElementById('start-screen')!.style.display = 'none';
 
   state = createGameState();
+  (window as unknown as { __trainState?: GameState }).__trainState = state;
   if (renderer) renderer.destroy();
   renderer = new DomRenderer();
   renderer.init(containerEl, state);

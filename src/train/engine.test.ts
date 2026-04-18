@@ -314,3 +314,77 @@ describe('findAnimalNear', () => {
     expect(findAnimalNear(s, 5, 5, 1.0)).toBeNull();
   });
 });
+
+describe('pigeon poop', () => {
+  it('a flying pigeon drops a poop after its scheduled time', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 2, col: 3, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    // Advance 1 tick to schedule the first poop, then force the schedule
+    processAction(s, { type: 'tick', dt: 0.05, time: 100 });
+    s.animals[0].nextPoopAt = 200;
+    expect(s.poops).toHaveLength(0);
+    processAction(s, { type: 'tick', dt: 0.05, time: 250 });
+    expect(s.poops).toHaveLength(1);
+    expect(s.poops[0].landed).toBe(false);
+  });
+
+  it('a falling poop becomes landed after its duration', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    s.poops.push({ id: 99, x: 2.5, y: 3.5, fallStart: 0.4, startTime: 1000, duration: 700, landed: false });
+    processAction(s, { type: 'tick', dt: 0.05, time: 1500 });
+    expect(s.poops[0].landed).toBe(false);
+    const events = processAction(s, { type: 'tick', dt: 0.05, time: 1800 });
+    expect(s.poops[0].landed).toBe(true);
+    expect(events.some((e) => e.type === 'poop_landed' && e.id === 99)).toBe(true);
+  });
+
+  it('non-flying animals never drop poop', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 2, col: 2, tool: { kind: 'animal', animal: 'cow' }, time: 0 });
+    for (let i = 0; i < 200; i++) {
+      processAction(s, { type: 'tick', dt: 0.1, time: i * 100 });
+    }
+    expect(s.poops).toHaveLength(0);
+  });
+
+  it('a perched pigeon does not drop poop', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 2, col: 3, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    processAction(s, { type: 'set_animal_perched', id: s.animals[0].id, perched: true });
+    s.animals[0].nextPoopAt = 200;
+    for (let i = 0; i < 30; i++) {
+      processAction(s, { type: 'tick', dt: 0.1, time: i * 100 });
+    }
+    expect(s.poops).toHaveLength(0);
+  });
+
+  it('erase removes only landed poop on the targeted tile and not the underlying track', () => {
+    const s = createGameState({ rows: 4, cols: 4 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'track' }, time: 0 });
+    s.poops.push({ id: 1, x: 1.5, y: 1.5, fallStart: 0, startTime: 0, duration: 0, landed: true });
+    s.poops.push({ id: 2, x: 1.5, y: 1.5, fallStart: 0.4, startTime: 0, duration: 700, landed: false });
+    processAction(s, { type: 'erase', row: 1, col: 1 });
+    // Track still there because we cleaned the landed poop instead.
+    expect(tileAt(s, 1, 1)!.track).not.toBeNull();
+    // Landed poop gone; falling poop still in flight.
+    expect(s.poops.find((p) => p.id === 1)).toBeUndefined();
+    expect(s.poops.find((p) => p.id === 2)).toBeDefined();
+  });
+
+  it('erase removes the track once no landed poop remains', () => {
+    const s = createGameState({ rows: 4, cols: 4 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'track' }, time: 0 });
+    s.poops.push({ id: 1, x: 1.5, y: 1.5, fallStart: 0, startTime: 0, duration: 0, landed: true });
+    processAction(s, { type: 'erase', row: 1, col: 1 });
+    processAction(s, { type: 'erase', row: 1, col: 1 });
+    expect(tileAt(s, 1, 1)!.track).toBeNull();
+    expect(s.poops).toHaveLength(0);
+  });
+
+  it('clear_all wipes poops too', () => {
+    const s = createGameState({ rows: 4, cols: 4 });
+    s.poops.push({ id: 1, x: 1.5, y: 1.5, fallStart: 0, startTime: 0, duration: 0, landed: true });
+    processAction(s, { type: 'clear_all' });
+    expect(s.poops).toHaveLength(0);
+  });
+});

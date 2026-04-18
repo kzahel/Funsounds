@@ -90,10 +90,32 @@ test('Train Builder smoke — opens, places track, and renders without errors', 
   await page.waitForTimeout(50);
   await expect(pigeonEl).not.toHaveClass(/tg-perched/);
 
+  // Force the freshly un-perched pigeon to drop a poop on its next tick.
+  await page.evaluate(() => {
+    const w = window as unknown as { __trainState?: { animals: Array<{ kind: string; nextPoopAt: number }> } };
+    const s = w.__trainState;
+    if (!s) return;
+    for (const a of s.animals) {
+      if (a.kind === 'pigeon') a.nextPoopAt = 1;
+    }
+  });
+  await page.waitForTimeout(900); // > POOP_FALL_MS so it lands
+
+  const landedPoop = page.locator('.tg-poop.tg-landed');
+  expect(await landedPoop.count()).toBeGreaterThanOrEqual(1);
+
+  // Erase tool (last button on Tools tab) cleans the poop without removing other state
+  await page.locator('#tg-buttons .tg-tool').last().click();
+  const poopBox = await landedPoop.first().boundingBox();
+  await page.mouse.click(poopBox!.x + poopBox!.width / 2, poopBox!.y + poopBox!.height / 2);
+  await page.waitForTimeout(100);
+  expect(await page.locator('.tg-poop.tg-landed').count()).toBe(0);
+
   // Clear should reset everything
   await page.locator('#tg-clear-btn').click();
   await page.waitForTimeout(100);
   expect(await page.locator('.tg-animal').count()).toBe(0);
+  expect(await page.locator('.tg-poop').count()).toBe(0);
 
   expect(errors).toEqual([]);
 });

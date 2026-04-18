@@ -45,12 +45,14 @@ export class DomRenderer implements Renderer {
   private gridEl!: HTMLElement;
   private trainLayer!: HTMLElement;
   private animalLayer!: HTMLElement;
+  private poopLayer!: HTMLElement;
 
   /** SVG-based per-tile elements so we can draw track curves cleanly. */
   private tileEls: HTMLElement[] = [];
   private tileSvgs: SVGSVGElement[] = [];
   private trainEls: Map<number, HTMLElement[]> = new Map();
   private animalEls: Map<number, HTMLElement> = new Map();
+  private poopEls: Map<number, HTMLElement> = new Map();
 
   private size = { rows: 0, cols: 0 };
   private tilePx = 60;
@@ -73,6 +75,10 @@ export class DomRenderer implements Renderer {
     this.computeTileSize();
     this.buildTiles(state);
 
+    this.poopLayer = document.createElement('div');
+    this.poopLayer.style.cssText = 'position:absolute; inset:0; pointer-events:none;';
+    this.gridEl.appendChild(this.poopLayer);
+
     this.trainLayer = document.createElement('div');
     this.trainLayer.style.cssText = 'position:absolute; inset:0; pointer-events:none;';
     this.gridEl.appendChild(this.trainLayer);
@@ -91,6 +97,7 @@ export class DomRenderer implements Renderer {
     this.tileSvgs = [];
     this.trainEls.clear();
     this.animalEls.clear();
+    this.poopEls.clear();
   }
 
   private handleResize = (): void => {
@@ -167,8 +174,9 @@ export class DomRenderer implements Renderer {
     return { x, y };
   }
 
-  render(state: GameState, _now: number): void {
+  render(state: GameState, now: number): void {
     this.renderTiles(state);
+    this.renderPoops(state, now);
     this.renderTrains(state);
     this.renderAnimals(state);
   }
@@ -320,6 +328,51 @@ export class DomRenderer implements Renderer {
       const tilt = flying && !a.perched ? Math.sin(a.x + a.y) * 6 : 0;
       el.style.transform = `translate(-50%, -50%) rotate(${tilt}deg)`;
       el.classList.toggle('tg-perched', a.perched);
+    }
+  }
+
+  // ---- Poops ----
+
+  private renderPoops(state: GameState, now: number): void {
+    const px = this.tilePx;
+
+    const activeIds = new Set(state.poops.map((p) => p.id));
+    for (const [id, el] of this.poopEls) {
+      if (!activeIds.has(id)) {
+        el.remove();
+        this.poopEls.delete(id);
+      }
+    }
+
+    for (const p of state.poops) {
+      let el = this.poopEls.get(p.id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'tg-poop';
+        el.textContent = '\u{1F4A9}';
+        el.style.cssText = `
+          position:absolute; pointer-events:none;
+          line-height:1;
+          z-index: 3;
+          transform: translate(-50%, -50%);
+          text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        `;
+        this.poopLayer.appendChild(el);
+        this.poopEls.set(p.id, el);
+      }
+      // Falling: lift the poop above the landing point and shrink slightly
+      let visualY = p.y;
+      let scale = 1;
+      if (!p.landed) {
+        const t = Math.max(0, Math.min(1, (now - p.startTime) / p.duration));
+        visualY = p.y - p.fallStart * (1 - t);
+        scale = 0.6 + 0.4 * t;
+      }
+      el.style.left = p.x * px + 'px';
+      el.style.top = visualY * px + 'px';
+      el.style.fontSize = px * 0.35 + 'px';
+      el.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(2)})`;
+      el.classList.toggle('tg-landed', p.landed);
     }
   }
 }

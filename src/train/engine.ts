@@ -30,6 +30,7 @@ export function createGameState(size: GridSize = { rows: 12, cols: 18 }): GameSt
     tiles,
     trains: [],
     animals: [],
+    poops: [],
     selectedTab: 'tracks',
     selectedTool: { kind: 'track' },
     nextId: 1,
@@ -73,6 +74,7 @@ export function processAction(state: GameState, action: Action): GameEvent[] {
       }
       state.trains = [];
       state.animals = [];
+      state.poops = [];
       return [{ type: 'cleared' }];
     }
     case 'move_animal': {
@@ -195,6 +197,19 @@ function eraseAt(state: GameState, row: number, col: number): GameEvent[] {
   const tile = tileAt(state, row, col);
   if (!tile) return [];
   const events: GameEvent[] = [];
+
+  // Priority: clean up landed poop on this tile so the user can scrub the
+  // ground without accidentally erasing tracks underneath.
+  const poopsBefore = state.poops.length;
+  state.poops = state.poops.filter((p) => {
+    if (!p.landed) return true;
+    if (Math.floor(p.x) === col && Math.floor(p.y) === row) {
+      events.push({ type: 'poop_removed', id: p.id });
+      return false;
+    }
+    return true;
+  });
+  if (state.poops.length < poopsBefore) return events;
 
   // Remove trains whose head sits on this tile first
   const beforeTrains = state.trains.length;
@@ -395,13 +410,43 @@ function createAnimal(state: GameState, row: number, col: number, kind: AnimalKi
     nextDecisionAt: 0,
     moving: flying, // pigeons start flying immediately
     perched: false,
+    nextPoopAt: 0, // first tick will schedule the first drop
   };
 }
 
-function tickAnimal(state: GameState, a: Animal, dt: number, now: number): void {
+/** Poops fall for this many ms before landing. */
+const POOP_FALL_MS = 700;
+/** Initial vertical offset (in tiles) of a freshly dropped poop. */
+const POOP_FALL_HEIGHT = 0.45;
+
+function dropPoop(state: GameState, a: Animal, now: number, events: GameEvent[]): void {
+  const id = state.nextId++;
+  state.poops.push({
+    id,
+    x: a.x,
+    y: a.y,
+    fallStart: POOP_FALL_HEIGHT,
+    startTime: now,
+    duration: POOP_FALL_MS,
+    landed: false,
+  });
+  events.push({ type: 'poop_dropped', id });
+}
+
+function tickAnimal(state: GameState, a: Animal, dt: number, now: number, events: GameEvent[]): void {
   if (a.perched) return;
 
   const flying = FLYING_ANIMALS.has(a.kind);
+
+  // Pigeons (and other flyers) periodically drop a poop while in flight.
+  if (flying) {
+    if (a.nextPoopAt === 0) {
+      a.nextPoopAt = now + 1500 + Math.random() * 4000;
+    } else if (now >= a.nextPoopAt) {
+      dropPoop(state, a, now, events);
+      a.nextPoopAt = now + 2500 + Math.random() * 5500;
+    }
+  }
 
   if (now >= a.nextDecisionAt) {
     if (flying) {
@@ -469,7 +514,16 @@ export function tick(state: GameState, dt: number, now: number): GameEvent[] {
 
   // Animals
   for (const a of state.animals) {
-    tickAnimal(state, a, dt, now);
+    tickAnimal(state, a, dt, now, events);
+  }
+
+  // Poops: advance falling, mark landed when complete
+  for (const p of state.poops) {
+    if (p.landed) continue;
+    if (now >= p.startTime + p.duration) {
+      p.landed = true;
+      events.push({ type: 'poop_landed', id: p.id });
+    }
   }
 
   return events;
