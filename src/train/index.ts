@@ -1,5 +1,5 @@
 import type { GameState, Renderer, Tool, ToolTab, TrainKind, AnimalKind, TerrainType } from './types';
-import { createGameState, processAction } from './engine';
+import { createGameState, processAction, findAnimalNear } from './engine';
 import { DomRenderer } from './renderer';
 import { isMobile, enterFullscreen, setupEscapeHold, setupFullscreenExit, preventContextMenu } from '../utils';
 
@@ -58,6 +58,7 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
       { id: 'dog', label: 'Dog', emoji: '\u{1F415}', tool: { kind: 'animal', animal: 'dog' } },
       { id: 'duck', label: 'Duck', emoji: '\u{1F986}', tool: { kind: 'animal', animal: 'duck' } },
       { id: 'rabbit', label: 'Rabbit', emoji: '\u{1F407}', tool: { kind: 'animal', animal: 'rabbit' } },
+      { id: 'pigeon', label: 'Pigeon', emoji: '\u{1F54A}\uFE0F', tool: { kind: 'animal', animal: 'pigeon' } },
     ],
   },
   {
@@ -65,6 +66,7 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
     label: 'Tools',
     emoji: '\u{1F9F9}',
     buttons: [
+      { id: 'drag', label: 'Grab', emoji: '\u270B', tool: { kind: 'drag' } },
       { id: 'erase', label: 'Erase', emoji: '\u{1F9F9}', tool: { kind: 'erase' } },
     ],
   },
@@ -186,6 +188,12 @@ function highlightSelectedButton(): void {
 let dragging = false;
 let lastPlaced = { row: -1, col: -1 };
 
+// Drag-tool state for grabbing animals
+let grabbedId: number | null = null;
+let grabStartedPerched = false;
+let grabMaxDistance = 0; // tiles travelled while grabbing
+let grabLastTile = { x: 0, y: 0 };
+
 function placeAtPointer(clientX: number, clientY: number): void {
   const tile = renderer.screenToTile(clientX, clientY);
   if (!tile) return;
@@ -200,28 +208,67 @@ function placeAtPointer(clientX: number, clientY: number): void {
   }
 }
 
+/** Convert a screen point to fractional tile-space (col, row). */
+function pointerToTileSpace(clientX: number, clientY: number): { x: number; y: number } | null {
+  return renderer.screenToTileSpace(clientX, clientY);
+}
+
 function handlePointerDown(e: PointerEvent): void {
   if (!gameActive) return;
   // Don't intercept the toolbar
   if ((e.target as HTMLElement).closest('#tg-toolbar')) return;
   e.preventDefault();
+  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+
+  const tool = state.selectedTool;
+
+  if (tool.kind === 'drag') {
+    const pos = pointerToTileSpace(e.clientX, e.clientY);
+    if (!pos) return;
+    const a = findAnimalNear(state, pos.x, pos.y, 1.0);
+    if (!a) return;
+    grabbedId = a.id;
+    grabStartedPerched = a.perched;
+    grabMaxDistance = 0;
+    grabLastTile = { x: a.x, y: a.y };
+    // Free the animal so it can be moved interactively
+    processAction(state, { type: 'set_animal_perched', id: a.id, perched: false });
+    processAction(state, { type: 'move_animal', id: a.id, x: pos.x, y: pos.y });
+    return;
+  }
+
   dragging = true;
   lastPlaced = { row: -1, col: -1 };
   // For trains/animals, single tap should not flood — but for tracks/terrain dragging is fine.
-  const tool = state.selectedTool;
   const oneShot = tool.kind === 'train' || tool.kind === 'animal';
   placeAtPointer(e.clientX, e.clientY);
   if (oneShot) dragging = false;
-  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
 }
 
 function handlePointerMove(e: PointerEvent): void {
+  if (grabbedId !== null) {
+    e.preventDefault();
+    const pos = pointerToTileSpace(e.clientX, e.clientY);
+    if (!pos) return;
+    const dx = pos.x - grabLastTile.x;
+    const dy = pos.y - grabLastTile.y;
+    grabMaxDistance += Math.sqrt(dx * dx + dy * dy);
+    grabLastTile = pos;
+    processAction(state, { type: 'move_animal', id: grabbedId, x: pos.x, y: pos.y });
+    return;
+  }
   if (!dragging) return;
   e.preventDefault();
   placeAtPointer(e.clientX, e.clientY);
 }
 
 function handlePointerUp(_e: PointerEvent): void {
+  if (grabbedId !== null) {
+    const tap = grabMaxDistance < 0.3;
+    const shouldPerch = !(tap && grabStartedPerched);
+    processAction(state, { type: 'set_animal_perched', id: grabbedId, perched: shouldPerch });
+    grabbedId = null;
+  }
   dragging = false;
 }
 

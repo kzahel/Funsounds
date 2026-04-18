@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Dir, EXIT_BIT, hasExit } from './types';
 import type { Tool } from './types';
-import { createGameState, processAction, tileAt } from './engine';
+import { createGameState, processAction, tileAt, findAnimalNear } from './engine';
 
 const PLACE_TRACK: Tool = { kind: 'track' };
 
@@ -205,5 +205,112 @@ describe('exit bitmask helpers', () => {
     expect(EXIT_BIT[Dir.E]).toBe(2);
     expect(EXIT_BIT[Dir.S]).toBe(4);
     expect(EXIT_BIT[Dir.W]).toBe(8);
+  });
+});
+
+describe('pigeon (flying animal)', () => {
+  it('can be placed on water tiles, unlike ground animals', () => {
+    const s = createGameState({ rows: 4, cols: 4 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'terrain', terrain: 'water' }, time: 0 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    expect(s.animals).toHaveLength(1);
+    expect(s.animals[0].kind).toBe('pigeon');
+  });
+
+  it('actually moves when ticked (no idle phase)', () => {
+    const s = createGameState({ rows: 8, cols: 8 });
+    processAction(s, { type: 'place', row: 4, col: 4, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    const startX = s.animals[0].x;
+    const startY = s.animals[0].y;
+    for (let i = 0; i < 10; i++) {
+      processAction(s, { type: 'tick', dt: 0.05, time: i * 50 });
+    }
+    const moved = Math.hypot(s.animals[0].x - startX, s.animals[0].y - startY);
+    expect(moved).toBeGreaterThan(0.05);
+  });
+
+  it('flies over water without bouncing back', () => {
+    const s = createGameState({ rows: 4, cols: 8 });
+    // Make a strip of water across the middle
+    for (let c = 0; c < 8; c++) {
+      processAction(s, { type: 'place', row: 2, col: c, tool: { kind: 'terrain', terrain: 'water' }, time: 0 });
+    }
+    processAction(s, { type: 'place', row: 1, col: 4, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    // Force the heading straight south so it would have to cross water
+    s.animals[0].heading = Math.PI / 2;
+    s.animals[0].nextDecisionAt = 1e12; // prevent re-decision
+    s.animals[0].moving = true;
+    s.animals[0].speed = 1;
+    for (let i = 0; i < 20; i++) {
+      processAction(s, { type: 'tick', dt: 0.05, time: i * 50 });
+    }
+    expect(s.animals[0].y).toBeGreaterThan(2);
+  });
+});
+
+describe('perched animals', () => {
+  it('a perched animal does not move when ticked', () => {
+    const s = createGameState({ rows: 8, cols: 8 });
+    processAction(s, { type: 'place', row: 4, col: 4, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    const id = s.animals[0].id;
+    processAction(s, { type: 'set_animal_perched', id, perched: true });
+    const startX = s.animals[0].x;
+    const startY = s.animals[0].y;
+    for (let i = 0; i < 50; i++) {
+      processAction(s, { type: 'tick', dt: 0.05, time: i * 50 });
+    }
+    expect(s.animals[0].x).toBe(startX);
+    expect(s.animals[0].y).toBe(startY);
+  });
+
+  it('un-perching releases the animal so it moves again', () => {
+    const s = createGameState({ rows: 8, cols: 8 });
+    processAction(s, { type: 'place', row: 4, col: 4, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    const id = s.animals[0].id;
+    processAction(s, { type: 'set_animal_perched', id, perched: true });
+    const startX = s.animals[0].x;
+    processAction(s, { type: 'set_animal_perched', id, perched: false });
+    for (let i = 0; i < 30; i++) {
+      processAction(s, { type: 'tick', dt: 0.05, time: 1000 + i * 50 });
+    }
+    expect(s.animals[0].x).not.toBe(startX);
+  });
+});
+
+describe('move_animal (drag)', () => {
+  it('moves an animal to the requested coordinates', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    const id = s.animals[0].id;
+    processAction(s, { type: 'move_animal', id, x: 4.2, y: 3.1 });
+    expect(s.animals[0].x).toBeCloseTo(4.2);
+    expect(s.animals[0].y).toBeCloseTo(3.1);
+  });
+
+  it('clamps to inside the grid', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    const id = s.animals[0].id;
+    processAction(s, { type: 'move_animal', id, x: -5, y: 999 });
+    expect(s.animals[0].x).toBeGreaterThanOrEqual(0);
+    expect(s.animals[0].x).toBeLessThan(6);
+    expect(s.animals[0].y).toBeGreaterThanOrEqual(0);
+    expect(s.animals[0].y).toBeLessThan(6);
+  });
+});
+
+describe('findAnimalNear', () => {
+  it('returns the nearest animal within the radius', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'animal', animal: 'cow' }, time: 0 });
+    processAction(s, { type: 'place', row: 4, col: 4, tool: { kind: 'animal', animal: 'pigeon' }, time: 0 });
+    const a = findAnimalNear(s, 4.4, 4.6, 1.0);
+    expect(a?.kind).toBe('pigeon');
+  });
+
+  it('returns null when nothing is within the radius', () => {
+    const s = createGameState({ rows: 6, cols: 6 });
+    processAction(s, { type: 'place', row: 0, col: 0, tool: { kind: 'animal', animal: 'cow' }, time: 0 });
+    expect(findAnimalNear(s, 5, 5, 1.0)).toBeNull();
   });
 });

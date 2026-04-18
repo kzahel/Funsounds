@@ -92,7 +92,10 @@ export interface Train {
 // Animals
 // ---------------------------------------------------------------------------
 
-export type AnimalKind = 'cow' | 'sheep' | 'pig' | 'horse' | 'chicken' | 'dog' | 'duck' | 'rabbit';
+export type AnimalKind = 'cow' | 'sheep' | 'pig' | 'horse' | 'chicken' | 'dog' | 'duck' | 'rabbit' | 'pigeon';
+
+/** Pigeons fly — they ignore terrain and don't idle. Used to gate AI behaviour. */
+export const FLYING_ANIMALS: ReadonlySet<AnimalKind> = new Set<AnimalKind>(['pigeon']);
 
 export interface Animal {
   id: number;
@@ -106,8 +109,10 @@ export interface Animal {
   speed: number;
   /** Time at which the animal will choose a new heading. */
   nextDecisionAt: number;
-  /** Currently moving (true) or idle (false). */
+  /** Currently moving (true) or idle (false). Ignored when perched. */
   moving: boolean;
+  /** When true, the animal stays put and skips all AI updates. */
+  perched: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +128,8 @@ export type Tool =
   | { kind: 'terrain'; terrain: TerrainType }
   | { kind: 'train'; train: TrainKind; length: number }
   | { kind: 'animal'; animal: AnimalKind }
-  | { kind: 'erase' };
+  | { kind: 'erase' }
+  | { kind: 'drag' };
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -157,7 +163,9 @@ export type Action =
   | { type: 'tick'; dt: number; time: number }
   | { type: 'select_tool'; tool: Tool; tab: ToolTab }
   | { type: 'set_paused'; paused: boolean }
-  | { type: 'clear_all' };
+  | { type: 'clear_all' }
+  | { type: 'move_animal'; id: number; x: number; y: number }
+  | { type: 'set_animal_perched'; id: number; perched: boolean };
 
 export type GameEvent =
   | { type: 'tile_changed'; row: number; col: number }
@@ -176,5 +184,7 @@ export interface Renderer {
   render(state: GameState, now: number): void;
   /** Convert a screen-space (clientX, clientY) into a tile (row, col). Returns null off-grid. */
   screenToTile(clientX: number, clientY: number): { row: number; col: number } | null;
+  /** Convert a screen-space (clientX, clientY) into fractional tile-space (col, row). Returns null off-grid. */
+  screenToTileSpace(clientX: number, clientY: number): { x: number; y: number } | null;
   destroy(): void;
 }

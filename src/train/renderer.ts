@@ -1,4 +1,4 @@
-import { Dir, DIR_DELTA, EXIT_BIT, hasExit } from './types';
+import { Dir, DIR_DELTA, EXIT_BIT, hasExit, FLYING_ANIMALS } from './types';
 import type { GameState, Renderer, TileState, TrainCar, TrainKind, AnimalKind } from './types';
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,7 @@ const ANIMAL_EMOJI: Record<AnimalKind, string> = {
   dog: '\u{1F415}',
   duck: '\u{1F986}',
   rabbit: '\u{1F407}',
+  pigeon: '\u{1F54A}\uFE0F',
 };
 
 // ---------------------------------------------------------------------------
@@ -156,6 +157,14 @@ export class DomRenderer implements Renderer {
     const row = Math.floor(y / this.tilePx);
     if (row < 0 || row >= this.size.rows || col < 0 || col >= this.size.cols) return null;
     return { row, col };
+  }
+
+  screenToTileSpace(clientX: number, clientY: number): { x: number; y: number } | null {
+    const rect = this.gridEl.getBoundingClientRect();
+    const x = (clientX - rect.left) / this.tilePx;
+    const y = (clientY - rect.top) / this.tilePx;
+    if (x < 0 || y < 0 || x >= this.size.cols || y >= this.size.rows) return null;
+    return { x, y };
   }
 
   render(state: GameState, _now: number): void {
@@ -288,24 +297,29 @@ export class DomRenderer implements Renderer {
     }
 
     for (const a of state.animals) {
+      const flying = FLYING_ANIMALS.has(a.kind);
       let el = this.animalEls.get(a.id);
       if (!el) {
         el = document.createElement('div');
         el.className = 'tg-animal';
         el.style.cssText = `
           position:absolute; pointer-events:none;
-          font-size:${px * 0.55}px; line-height:1;
-          transform:translate(-50%, -50%);
-          z-index: 4;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+          line-height:1;
+          z-index: ${flying ? 7 : 4};
+          text-shadow: 0 ${flying ? 4 : 1}px ${flying ? 6 : 2}px rgba(0,0,0,${flying ? 0.45 : 0.3});
         `;
         el.textContent = ANIMAL_EMOJI[a.kind];
         this.animalLayer.appendChild(el);
         this.animalEls.set(a.id, el);
       }
+      const size = flying ? px * 0.6 : px * 0.55;
       el.style.left = a.x * px + 'px';
       el.style.top = a.y * px + 'px';
-      el.style.fontSize = px * 0.55 + 'px';
+      el.style.fontSize = size + 'px';
+      // Perched flyers get a small pedestal feel; un-perched flyers bob slightly via transform.
+      const tilt = flying && !a.perched ? Math.sin(a.x + a.y) * 6 : 0;
+      el.style.transform = `translate(-50%, -50%) rotate(${tilt}deg)`;
+      el.classList.toggle('tg-perched', a.perched);
     }
   }
 }

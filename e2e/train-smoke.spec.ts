@@ -51,6 +51,45 @@ test('Train Builder smoke — opens, places track, and renders without errors', 
   const animals = page.locator('.tg-animal');
   expect(await animals.count()).toBeGreaterThanOrEqual(1);
 
+  // Place a pigeon (last button on the animals tab) and verify it flies on its own
+  const animalTools = page.locator('#tg-buttons .tg-tool');
+  await animalTools.last().click();
+  const pigeonTile = await tiles.nth(40).boundingBox();
+  await page.mouse.click(pigeonTile!.x + pigeonTile!.width / 2, pigeonTile!.y + pigeonTile!.height / 2);
+  await page.waitForTimeout(50);
+  const pigeonEl = page.locator('.tg-animal').last();
+  const before = await pigeonEl.boundingBox();
+  await page.waitForTimeout(700);
+  const after = await pigeonEl.boundingBox();
+  const moved = Math.hypot((after!.x - before!.x), (after!.y - before!.y));
+  expect(moved).toBeGreaterThan(2); // pigeon should drift
+
+  // Switch to Tools tab and pick the drag tool, then drag the pigeon to a new spot
+  await page.locator('.tg-tab').nth(4).click();
+  const toolButtons = page.locator('#tg-buttons .tg-tool');
+  await toolButtons.first().click(); // Grab
+  const dragTarget = await tiles.nth(80).boundingBox();
+  const startBox = await pigeonEl.boundingBox();
+  await page.mouse.move(startBox!.x + startBox!.width / 2, startBox!.y + startBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(dragTarget!.x + 20, dragTarget!.y + 20, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(50);
+  // Pigeon should now be perched and have the perched class
+  await expect(pigeonEl).toHaveClass(/tg-perched/);
+  // And should not move on subsequent ticks
+  const perchedAt = await pigeonEl.boundingBox();
+  await page.waitForTimeout(500);
+  const stillThere = await pigeonEl.boundingBox();
+  expect(Math.hypot(stillThere!.x - perchedAt!.x, stillThere!.y - perchedAt!.y)).toBeLessThan(2);
+
+  // Tap (no drag) on the perched pigeon to release it
+  await page.mouse.move(stillThere!.x + stillThere!.width / 2, stillThere!.y + stillThere!.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(50);
+  await expect(pigeonEl).not.toHaveClass(/tg-perched/);
+
   // Clear should reset everything
   await page.locator('#tg-clear-btn').click();
   await page.waitForTimeout(100);

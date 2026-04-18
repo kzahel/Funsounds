@@ -1,4 +1,4 @@
-import { Dir, DIR_DELTA, EXIT_BIT, opposite, hasExit } from './types';
+import { Dir, DIR_DELTA, EXIT_BIT, opposite, hasExit, FLYING_ANIMALS } from './types';
 import type {
   GameState,
   TileState,
@@ -75,7 +75,45 @@ export function processAction(state: GameState, action: Action): GameEvent[] {
       state.animals = [];
       return [{ type: 'cleared' }];
     }
+    case 'move_animal': {
+      const a = state.animals.find((x) => x.id === action.id);
+      if (!a) return [];
+      a.x = clampPos(action.x, state.size.cols);
+      a.y = clampPos(action.y, state.size.rows);
+      return [];
+    }
+    case 'set_animal_perched': {
+      const a = state.animals.find((x) => x.id === action.id);
+      if (!a) return [];
+      a.perched = action.perched;
+      // When un-perching, force a fresh decision soon so the animal moves
+      if (!action.perched) a.nextDecisionAt = 0;
+      return [];
+    }
   }
+}
+
+function clampPos(v: number, max: number): number {
+  return Math.max(0.05, Math.min(max - 0.05, v));
+}
+
+/**
+ * Find the nearest animal to a tile-space coordinate within `maxDist` tiles.
+ * Used by the drag tool to grab a flying pigeon (or any other animal).
+ */
+export function findAnimalNear(state: GameState, x: number, y: number, maxDist: number): Animal | null {
+  let best: Animal | null = null;
+  let bestD2 = maxDist * maxDist;
+  for (const a of state.animals) {
+    const dx = a.x - x;
+    const dy = a.y - y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= bestD2) {
+      bestD2 = d2;
+      best = a;
+    }
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +173,8 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
       break;
 
     case 'animal':
-      if (tile.terrain === 'water') return [];
+      // Pigeons fly, so they can spawn over water
+      if (tile.terrain === 'water' && !FLYING_ANIMALS.has(tool.animal)) return [];
       const animal = createAnimal(state, row, col, tool.animal);
       state.animals.push(animal);
       events.push({ type: 'animal_added', animalId: animal.id });
@@ -143,6 +182,10 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
 
     case 'erase':
       return eraseAt(state, row, col);
+
+    case 'drag':
+      // Drag is handled at the controller level (move_animal / set_animal_perched).
+      return [];
   }
 
   return events;
@@ -341,37 +384,59 @@ function advanceCar(state: GameState, car: TrainCar, dist: number): boolean {
 // ---------------------------------------------------------------------------
 
 function createAnimal(state: GameState, row: number, col: number, kind: AnimalKind): Animal {
+  const flying = FLYING_ANIMALS.has(kind);
   return {
     id: state.nextId++,
     kind,
     x: col + 0.5,
     y: row + 0.5,
     heading: Math.random() * Math.PI * 2,
-    speed: 0.4 + Math.random() * 0.3,
+    speed: flying ? 0.9 + Math.random() * 0.4 : 0.4 + Math.random() * 0.3,
     nextDecisionAt: 0,
-    moving: false,
+    moving: flying, // pigeons start flying immediately
+    perched: false,
   };
 }
 
 function tickAnimal(state: GameState, a: Animal, dt: number, now: number): void {
+  if (a.perched) return;
+
+  const flying = FLYING_ANIMALS.has(a.kind);
+
   if (now >= a.nextDecisionAt) {
-    // Toggle moving / pick a new heading
-    a.moving = Math.random() < 0.7;
-    a.heading = Math.random() * Math.PI * 2;
-    a.speed = 0.3 + Math.random() * 0.4;
-    a.nextDecisionAt = now + 800 + Math.random() * 2200;
+    if (flying) {
+      // Flyers don't idle and prefer smoother heading changes
+      a.moving = true;
+      a.heading += (Math.random() - 0.5) * Math.PI;
+      a.speed = 0.8 + Math.random() * 0.5;
+      a.nextDecisionAt = now + 600 + Math.random() * 1400;
+    } else {
+      a.moving = Math.random() < 0.7;
+      a.heading = Math.random() * Math.PI * 2;
+      a.speed = 0.3 + Math.random() * 0.4;
+      a.nextDecisionAt = now + 800 + Math.random() * 2200;
+    }
   }
   if (!a.moving) return;
 
   const nx = a.x + Math.cos(a.heading) * a.speed * dt;
   const ny = a.y + Math.sin(a.heading) * a.speed * dt;
-  // Avoid water and grid edges
-  const tile = tileAt(state, Math.floor(ny), Math.floor(nx));
-  if (!tile || tile.terrain === 'water') {
-    // Bounce by flipping heading
+
+  // Out-of-bounds — bounce
+  if (nx < 0.05 || nx >= state.size.cols - 0.05 || ny < 0.05 || ny >= state.size.rows - 0.05) {
     a.heading += Math.PI;
     return;
   }
+
+  // Ground animals avoid water; flyers don't care
+  if (!flying) {
+    const tile = tileAt(state, Math.floor(ny), Math.floor(nx));
+    if (!tile || tile.terrain === 'water') {
+      a.heading += Math.PI;
+      return;
+    }
+  }
+
   a.x = nx;
   a.y = ny;
 }
