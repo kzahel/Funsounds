@@ -1839,6 +1839,149 @@
             50% { transform: translateY(-6px); }
         }
 
+        /* === Train track builder === */
+        #train-btn {
+            font-size: 1.5rem;
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 50px;
+            background: white;
+            color: #2a7d2a;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 0.8rem;
+        }
+        #train-btn:hover { transform: scale(1.05); box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
+        #train-btn:active { transform: scale(0.98); }
+
+        #train-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #2a5a2a;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #tg-grid-container {
+            position: absolute;
+            inset: 0 0 160px 0;
+            overflow: hidden;
+            touch-action: none;
+            background: #3a7d3a;
+        }
+
+        #tg-toolbar {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 160px;
+            background: linear-gradient(180deg, #1a3a1a 0%, #0e220e 100%);
+            border-top: 2px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 30;
+            box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+        }
+
+        #tg-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 6px 6px 0 6px;
+            overflow-x: auto;
+        }
+
+        .tg-tab {
+            flex: 1 0 auto;
+            padding: 0.5rem 0.8rem;
+            border: none;
+            border-radius: 10px 10px 0 0;
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.75);
+            font-size: 0.95rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+        }
+        .tg-tab:active { transform: scale(0.97); }
+        .tg-tab.tg-tab-active {
+            background: rgba(255,255,255,0.16);
+            color: white;
+            font-weight: 600;
+        }
+
+        #tg-buttons {
+            flex: 1;
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            overflow-x: auto;
+            align-items: center;
+        }
+
+        .tg-tool {
+            flex: 0 0 auto;
+            min-width: 84px;
+            height: 84px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.08);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            font-size: 0.85rem;
+            transition: transform 0.1s, background 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tg-tool:active { transform: scale(0.95); }
+        .tg-tool.tg-tool-active {
+            background: rgba(255,255,255,0.2);
+            border-color: #ffd54f;
+        }
+        .tg-tool-emoji { font-size: 2.1rem; line-height: 1; }
+        .tg-tool-label { font-size: 0.85rem; opacity: 0.85; }
+
+        #tg-clear-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            padding: 0.55rem 0.95rem;
+            background: rgba(20, 20, 20, 0.55);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 999px;
+            color: white;
+            font-size: 0.95rem;
+            cursor: pointer;
+            z-index: 25;
+        }
+        #tg-clear-btn:active { transform: scale(0.96); }
+
+        #tg-hint {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            padding: 0.55rem 0.95rem;
+            background: rgba(20, 20, 20, 0.45);
+            border-radius: 999px;
+            color: rgba(255,255,255,0.85);
+            font-size: 0.9rem;
+            z-index: 25;
+            pointer-events: none;
+        }
+
+        @media (max-width: 600px) {
+            #tg-toolbar { height: 140px; }
+            #tg-grid-container { inset: 0 0 140px 0; }
+            .tg-tool { min-width: 68px; height: 70px; }
+            .tg-tool-emoji { font-size: 1.7rem; }
+            .tg-tool-label { font-size: 0.7rem; }
+        }
+
     </style>
 </head>
 <body>
@@ -1895,6 +2038,11 @@
         <div class="game-card">
             <h2>Q*bert</h2>
             <button id="qbert-btn">Q*bert</button>
+        </div>
+
+        <div class="game-card">
+            <h2>Train Builder</h2>
+            <button id="train-btn">Build Trains</button>
         </div>
 
         <div class="game-card">
@@ -2023,6 +2171,16 @@
                 <p id="qb-overlay-text"></p>
                 <button id="qb-restart-btn" class="qb-overlay-btn">Play Again</button>
             </div>
+        </div>
+    </div>
+
+    <div id="train-screen">
+        <div id="tg-grid-container"></div>
+        <div id="tg-hint">Tap or drag to place</div>
+        <button id="tg-clear-btn">Clear</button>
+        <div id="tg-toolbar">
+            <div id="tg-tabs"></div>
+            <div id="tg-buttons"></div>
         </div>
     </div>
 
