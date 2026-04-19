@@ -261,7 +261,7 @@ function buildTruckMesh(): Group {
   windshield.position.set(0, 0.55, 1.45);
   g.add(windshield);
 
-  // Bed walls — positions must match Vehicle._attachBedColliders so the
+  // Bed walls — positions must match Vehicle._attachBodyColliders so the
   // visible mesh lines up with the physics collider. chassisDims=(1.9,1,4.6)
   // → side walls at x=±0.87, y=0.75, z=-1.38, tail at z=-2.3, 0.5m tall.
   const bedColor = 0xa03020;

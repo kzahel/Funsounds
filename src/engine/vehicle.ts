@@ -142,11 +142,11 @@ export class Vehicle {
     const actor = pxVehicle.physXState.physxActor.rigidBody;
     physics.scene.addActor(actor);
 
-    // Attach pickup-bed wall colliders on top of the chassis box. Vehicle 2
-    // only takes a single geometry in physXParams.create(), so we add the
-    // walls directly onto the actor after initialization. Their combined mass
-    // contribution is ignored — the chassis mass/MOI is set explicitly below.
-    this._attachBedColliders(actor);
+    // Attach pickup cab + bed-wall colliders on top of the chassis box.
+    // Vehicle 2 only takes a single geometry in physXParams.create(), so we
+    // add these directly onto the actor after initialization. Their mass
+    // contribution is ignored — chassis mass/MOI is set explicitly below.
+    this._attachBodyColliders(actor);
 
     const initPose = this._makeTransform(pose);
     actor.setGlobalPose(initPose, true);
@@ -575,27 +575,21 @@ export class Vehicle {
     }
   }
 
-  // Attach 3 thin boxes (two sides + tailgate) above the chassis to form an
-  // open cargo bed. Dimensions are derived from chassisDims so a wider or
-  // longer chassis gets proportionally sized walls. The mesh-side walls in
-  // the demo's buildTruckMesh must be kept in sync with these positions.
-  private _attachBedColliders(actor: any): void {
+  // Attach extra colliders shaping the visible body: a cab box on the front
+  // half (above the chassis top) plus 3 thin boxes (two sides + tailgate)
+  // forming an open cargo bed on the rear half. Dimensions are derived from
+  // chassisDims so a wider/longer chassis gets proportional extras. The mesh
+  // counterparts in the demo's buildTruckMesh must stay in sync with these.
+  private _attachBodyColliders(actor: any): void {
     const P = this._P;
     const d = this.props.chassisDims;
-    const wallThickness = 0.08;
-    const wallHeight = 0.5;
-    const halfH = wallHeight / 2;
-    const halfLen = d.z * 0.2;                  // bed runs 40% of chassis length
-    const centerZ = -d.z * 0.3;                 // centered on rear half
-    const sideX = d.x / 2 - wallThickness;
-    const wallY = d.y / 2 + halfH;              // sit on top of chassis box
 
     const shapeFlags = new P.PxShapeFlags(
       P.PxShapeFlagEnum.eSIMULATION_SHAPE | P.PxShapeFlagEnum.eSCENE_QUERY_SHAPE,
     );
     const filterData = new P.PxFilterData(1, 1, 0, 0);
 
-    const addWall = (halfX: number, halfY: number, halfZ: number, lx: number, ly: number, lz: number): void => {
+    const addBox = (halfX: number, halfY: number, halfZ: number, lx: number, ly: number, lz: number): void => {
       const geom = new P.PxBoxGeometry(halfX, halfY, halfZ);
       const shape = this._physics.physics.createShape(geom, this._physics.material, true, shapeFlags);
       shape.setSimulationFilterData(filterData);
@@ -610,9 +604,20 @@ export class Vehicle {
       P.destroy(t);
     };
 
-    addWall(wallThickness, halfH, halfLen, sideX, wallY, centerZ);   // right
-    addWall(wallThickness, halfH, halfLen, -sideX, wallY, centerZ);  // left
-    addWall(d.x / 2, halfH, wallThickness, 0, wallY, centerZ - halfLen); // tail
+    // Cab: sits on the front half at the visible cab mesh location (the
+    // mesh's cab is at local y=0.45, z=0.6, half-size 0.9×0.35×0.9).
+    addBox(d.x * 0.475, 0.35, d.z * 0.2, 0, d.y * 0.45, d.z * 0.13);
+
+    // Bed walls: rear-half cargo bed, open at top.
+    const wallThickness = 0.08;
+    const wallHalfH = 0.25;
+    const bedHalfLen = d.z * 0.2;
+    const bedCenterZ = -d.z * 0.3;
+    const sideX = d.x / 2 - wallThickness;
+    const wallY = d.y / 2 + wallHalfH;
+    addBox(wallThickness, wallHalfH, bedHalfLen, sideX, wallY, bedCenterZ);
+    addBox(wallThickness, wallHalfH, bedHalfLen, -sideX, wallY, bedCenterZ);
+    addBox(d.x / 2, wallHalfH, wallThickness, 0, wallY, bedCenterZ - bedHalfLen);
 
     P.destroy(shapeFlags);
     P.destroy(filterData);

@@ -183,7 +183,14 @@ export class Physics {
     // Set `globalThis.__disableBatch = true` in devtools before loading to
     // force the stock readback path for A/B perf comparisons on a build
     // that does have the batch fn.
+    // Batch path needs a matched malloc/free pair. Our fork's wasm exposes
+    // _webidl_malloc/_webidl_free; older builds only export _malloc (not
+    // _free). Without both, disable the batch path instead of crashing on
+    // the first slab resize.
+    const hasMalloc = typeof (this._P as any)._webidl_malloc === 'function';
+    const hasFree = typeof (this._P as any)._webidl_free === 'function';
     this._hasBatch = typeof this._support.PxScene_writeActiveTransforms === 'function'
+      && hasMalloc && hasFree
       && !((globalThis as any).__disableBatch);
 
     // PHYSICS_VERSION is exposed both on the module (as a convenience) and
@@ -426,11 +433,12 @@ export class Physics {
 
   private _ensureSlab(requiredSlots: number): void {
     if (requiredSlots <= this._slabCapSlots) return;
-    if (this._slabPtr) this._P._free(this._slabPtr);
+    const P = this._P as any;
+    if (this._slabPtr) P._webidl_free(this._slabPtr);
     // Grow geometrically (×2) with a floor so churn on add/remove doesn't
     // re-allocate every frame.
     const slots = Math.max(requiredSlots, this._slabCapSlots * 2, 64);
-    this._slabPtr = this._P._malloc(slots * Physics._BATCH_STRIDE * 4);
+    this._slabPtr = P._webidl_malloc(slots * Physics._BATCH_STRIDE * 4);
     this._slabCapSlots = slots;
   }
 
@@ -471,7 +479,7 @@ export class Physics {
     }
     this._bodies.clear();
     if (this._slabPtr) {
-      P._free(this._slabPtr);
+      (P as any)._webidl_free(this._slabPtr);
       this._slabPtr = 0;
       this._slabCapSlots = 0;
     }
