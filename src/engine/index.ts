@@ -16,3 +16,5 @@ export type {
   RaycastHit,
   PhysicsOptions,
 } from './physics';
+export { Vehicle, DEFAULT_VEHICLE_PROPS } from './vehicle';
+export type { VehicleProps } from './vehicle';

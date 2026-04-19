@@ -123,6 +123,8 @@ export class Physics {
   readonly scene: any;
   readonly material: any;
   readonly fixedDt: number;
+  readonly cookingParams: any;
+  readonly module: PhysXModule;
 
   private _foundation: any;
   private _allocator: any;
@@ -134,6 +136,8 @@ export class Physics {
   private _filterData: any;
 
   private _topLevel: any;
+  private _vehicleTopLevel: any;
+  private _vehicleExtInited = false;
   private _support: any;
   private _bodyExt: any;
 
@@ -158,6 +162,7 @@ export class Physics {
 
   private _bodies = new Map<number, RigidBody>();
   private _released = false;
+  private _preStepListeners: Array<(dt: number) => void> = [];
 
   static async create(opts: PhysicsOptions = {}): Promise<Physics> {
     const P = await loadPhysXModule();
@@ -166,11 +171,13 @@ export class Physics {
 
   private constructor(P: PhysXModule, opts: PhysicsOptions) {
     this._P = P;
+    this.module = P;
     this.fixedDt = opts.fixedDt ?? 1 / 60;
 
     // The d.ts types these as `static` but runtime methods live on the
     // prototype — grab the prototype once and treat it as a function bag.
     this._topLevel = P.PxTopLevelFunctions.prototype;
+    this._vehicleTopLevel = P.PxVehicleTopLevelFunctions?.prototype;
     this._support = P.SupportFunctions.prototype;
     this._bodyExt = P.PxRigidBodyExt.prototype;
     // Set `globalThis.__disableBatch = true` in devtools before loading to
@@ -203,6 +210,7 @@ export class Physics {
     P.destroy(gv);
 
     this.material = this.physics.createMaterial(0.5, 0.5, 0.2);
+    this.cookingParams = new P.PxCookingParams(this._tolerances);
     const simFlag = P.PxShapeFlagEnum?.eSIMULATION_SHAPE;
     const sqFlag = P.PxShapeFlagEnum?.eSCENE_QUERY_SHAPE;
     if (simFlag == null || sqFlag == null) {
@@ -337,6 +345,7 @@ export class Physics {
   // "next" slot for every active actor. Inactive actors keep their previous
   // pose, which is what we want — they aren't moving.
   step(): void {
+    for (const fn of this._preStepListeners) fn(this.fixedDt);
     this.scene.simulate(this.fixedDt);
     this.scene.fetchResults(true);
 
@@ -346,6 +355,37 @@ export class Physics {
     } else {
       this._stepCaptureStock();
     }
+  }
+
+  // Register a pre-step callback that runs before scene.simulate each tick.
+  // Vehicle2 needs this because vehicle.step() writes velocities directly onto
+  // the chassis actor that the following scene.simulate then integrates.
+  onPreStep(fn: (dt: number) => void): void {
+    this._preStepListeners.push(fn);
+  }
+  offPreStep(fn: (dt: number) => void): void {
+    const i = this._preStepListeners.indexOf(fn);
+    if (i >= 0) this._preStepListeners.splice(i, 1);
+  }
+
+  // PhysX Vehicle 2 needs a one-time global init that hooks the scene's
+  // simulation callbacks. Safe to call repeatedly — guarded internally.
+  initVehicleExtension(): void {
+    if (this._vehicleExtInited) return;
+    if (!this._vehicleTopLevel?.InitVehicleExtension) {
+      throw new Error('PxVehicleTopLevelFunctions not available in this binding');
+    }
+    this._vehicleTopLevel.InitVehicleExtension(this._foundation);
+    this._vehicleExtInited = true;
+  }
+
+  // Register an externally-created PxRigidActor (e.g. the vehicle's chassis
+  // that was created by EngineDriveVehicle.initialize) so it participates in
+  // batch pose capture + interpolation like any other body.
+  registerActor(actor: any, isDynamic: boolean): RigidBody {
+    const rb = new RigidBody(actor, isDynamic);
+    this._bodies.set(rb.ptr, rb);
+    return rb;
   }
 
   private _stepCaptureStock(): void {
@@ -395,6 +435,8 @@ export class Physics {
   }
 
   get batchPathActive(): boolean { return this._hasBatch; }
+  get foundation(): any { return this._foundation; }
+  get filterData(): any { return this._filterData; }
 
   // alpha ∈ [0,1]: how far we are between the last two physics ticks.
   interpolate(alpha: number): void {
@@ -419,6 +461,10 @@ export class Physics {
     if (this._released) return;
     this._released = true;
     const P = this._P;
+    if (this._vehicleExtInited && this._vehicleTopLevel?.CloseVehicleExtension) {
+      this._vehicleTopLevel.CloseVehicleExtension();
+      this._vehicleExtInited = false;
+    }
     for (const rb of this._bodies.values()) {
       this.scene.removeActor(rb.actor);
       rb.actor.release();
@@ -441,6 +487,7 @@ export class Physics {
     this._foundation.release();
     P.destroy(this._filterData);
     P.destroy(this._shapeFlags);
+    P.destroy(this.cookingParams);
     P.destroy(this._sceneDesc);
     P.destroy(this._tolerances);
     P.destroy(this._errorCb);
