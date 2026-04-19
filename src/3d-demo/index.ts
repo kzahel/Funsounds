@@ -9,7 +9,8 @@ import {
   Vector3,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Engine, Physics, Vehicle, createToonMaterial } from '../engine';
+import { Engine, Physics, RigidBody, Vehicle, createToonMaterial } from '../engine';
+import { TruckAudio } from './audio';
 
 const CUBE_COLORS = [
   0xe8564a, 0xffd24a, 0x9a66ff, 0x7cbf4a, 0x4ac4e8, 0xff8a3d, 0xfde14a, 0xff6ba0,
@@ -46,6 +47,34 @@ async function start(): Promise<void> {
   engine.scene.add(ground);
   physics.createStaticPlane({ pos: { x: 0, y: 0, z: 0 } });
 
+  // Audio is lazy-constructed on first user gesture (browsers block
+  // AudioContext until then). Engine rumble + bonk-on-collision both live
+  // inside TruckAudio.
+  const audio = new TruckAudio();
+  const kickAudio = (): void => {
+    audio.start();
+    audio.resume();
+  };
+  window.addEventListener('keydown', kickAudio);
+  window.addEventListener('pointerdown', kickAudio);
+
+  // Cubes we track for collision bonks. A sudden linear-velocity delta from
+  // one frame to the next is our impact proxy — avoids adding a PhysX contact
+  // listener to the engine for what the demo needs.
+  interface TrackedCube {
+    body: RigidBody;
+    lastVx: number; lastVy: number; lastVz: number;
+    primed: boolean;     // skip the first delta; initial lv may reflect a
+                         // just-applied impulse (e.g. lobbed cube).
+    lastBonk: number;    // performance.now() of the most recent bonk; used
+                         // for per-body cooldown so a cube rattling on the
+                         // floor doesn't chatter.
+  }
+  const tracked: TrackedCube[] = [];
+  const trackCube = (body: RigidBody): void => {
+    tracked.push({ body, lastVx: 0, lastVy: 0, lastVz: 0, primed: false, lastBonk: 0 });
+  };
+
   if (spawnCubes) {
     // Drivable cube pile centered at the origin. The truck spawns offset on
     // +Z and faces -Z so it's pointed straight at the pile.
@@ -72,6 +101,7 @@ async function start(): Promise<void> {
             1,
           );
           body.setMesh(mesh);
+          trackCube(body);
         }
       }
     }
@@ -111,6 +141,7 @@ async function start(): Promise<void> {
         0.5,
       );
       body.setMesh(mesh);
+      trackCube(body);
     }
   }
 
@@ -164,6 +195,30 @@ async function start(): Promise<void> {
       const p = truck.wheelLocalPoses[i];
       wheelMeshes[i].position.set(p.pos.x, p.pos.y, p.pos.z);
       wheelMeshes[i].quaternion.set(p.quat!.x, p.quat!.y, p.quat!.z, p.quat!.w);
+    }
+
+    audio.updateEngine(truck.engineRpm, up || down);
+
+    // Collision detection via per-cube velocity deltas. Threshold rejects the
+    // ~0.16 m/s frame-to-frame drift from gravity-only fall; genuine impacts
+    // (cube landing, truck plowing through pile) easily exceed several m/s.
+    const now = performance.now();
+    const BONK_DV = 2.2;
+    const BONK_COOLDOWN_MS = 80;
+    for (const tc of tracked) {
+      const lv = tc.body.actor.getLinearVelocity();
+      if (tc.primed) {
+        const dvx = lv.x - tc.lastVx;
+        const dvy = lv.y - tc.lastVy;
+        const dvz = lv.z - tc.lastVz;
+        const dv = Math.hypot(dvx, dvy, dvz);
+        if (dv > BONK_DV && now - tc.lastBonk > BONK_COOLDOWN_MS) {
+          audio.bonk(dv);
+          tc.lastBonk = now;
+        }
+      }
+      tc.lastVx = lv.x; tc.lastVy = lv.y; tc.lastVz = lv.z;
+      tc.primed = true;
     }
   });
 
@@ -232,6 +287,7 @@ async function start(): Promise<void> {
       y: (lobDir.y * speed + arc) * cubeMass,
       z: (lobDir.z * speed + 0) * cubeMass,
     });
+    trackCube(body);
   }
 
   engine.start();
