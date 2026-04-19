@@ -10,13 +10,16 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // Bench and demo pull from the vendored build so the patched wasm is picked up.
-      'physx-js-webidl': resolve(__dirname, 'vendor/physx-js-webidl/dist/physx-js-webidl.mjs'),
+      // Use the prebuilt artifact from third_party/physx-webidl/ instead of
+      // the stock npm package — our fork adds PxScene_writeActiveTransforms
+      // for batch pose readback. See scripts/rebuild-physx-webidl.sh to
+      // regenerate the artifact from the kzahel/physx-js-webidl fork.
+      'physx-js-webidl': resolve(__dirname, 'third_party/physx-webidl/physx-js-webidl.mjs'),
     },
   },
   server: {
     fs: {
-      allow: [resolve(__dirname), resolve(__dirname, 'vendor')],
+      allow: [resolve(__dirname), resolve(__dirname, 'third_party')],
     },
   },
   build: {
