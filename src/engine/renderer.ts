@@ -35,7 +35,7 @@ export class Engine {
       canvas: this.canvas,
       antialias: config.antialias ?? false,
     });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(config.pixelRatio ?? Math.min(window.devicePixelRatio, 1));
     this.renderer.setSize(this.canvas.clientWidth || 800, this.canvas.clientHeight || 600, false);
 
     this.scene = new Scene();
@@ -98,6 +98,11 @@ export class Engine {
     this.stop();
     window.removeEventListener('resize', this._onResize);
     this.renderer.dispose();
+  }
+
+  setPixelRatio(ratio: number): void {
+    this.renderer.setPixelRatio(ratio);
+    this._onResize();
   }
 
   private _onResize = (): void => {
