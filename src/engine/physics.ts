@@ -21,6 +21,11 @@ export interface PhysicsOptions {
   fixedDt?: number;
 }
 
+// Collision filter category bits — see the PxFilterData setup in the Physics
+// constructor for the full pair-matrix.
+export const FILTER_NORMAL = 1 << 0;
+export const FILTER_WHEEL = 1 << 1;
+
 // physx-js-webidl ships both the .mjs factory and .wasm alongside it. Its
 // emscripten shim resolves the wasm via `new URL('...', import.meta.url)`,
 // which Vite rewrites correctly for both dev and build. No explicit
@@ -133,7 +138,8 @@ export class Physics {
   private _sceneDesc: any;
   private _dispatcher: any;
   private _shapeFlags: any;
-  private _filterData: any;
+  private _filterDataStatic: any;
+  private _filterDataDynamic: any;
 
   private _topLevel: any;
   private _vehicleTopLevel: any;
@@ -224,14 +230,21 @@ export class Physics {
       throw new Error(`PxShapeFlagEnum values unresolved: sim=${simFlag} sq=${sqFlag}`);
     }
     this._shapeFlags = new P.PxShapeFlags(sqFlag | simFlag);
-    // PhysX's DefaultFilterShader only reports a pair as colliding when
-    //   (shapeA.simulationFilterData.word0 & shapeB.simulationFilterData.word1) != 0
-    // and vice-versa. Shapes created by `physics.createShape(...)` have all
-    // four words = 0 by default, so pairs short-circuit to no-collision and
-    // bodies fall through everything. Giving every shape the same non-zero
-    // mask in word0 & word1 restores the expected "collide with everything"
-    // behaviour. Callers who need filtering can override after createXxx.
-    this._filterData = new P.PxFilterData(1, 1, 0, 0);
+    // PhysX's DefaultFilterShader reports a pair as colliding when
+    //   (a.word0 & b.word1) != 0 || (b.word0 & a.word1) != 0
+    // We carve a 2-bit category space so vehicle wheels (which become real
+    // PhysX shapes when their SIMULATION_SHAPE flag is raised) only pair with
+    // dynamic bodies — not the ground or the chassis they're attached to.
+    //   bit 0 = FILTER_NORMAL (statics, chassis, body colliders, dynamics)
+    //   bit 1 = FILTER_WHEEL  (vehicle wheels, dynamics)
+    // Pairs:
+    //   static(1,1)  vs dynamic(3,3): 1&3 = 1  → pair
+    //   static(1,1)  vs wheel(2,2):   1&2 = 0, 2&1 = 0 → no pair
+    //   dynamic(3,3) vs wheel(2,2):   3&2 = 2  → pair
+    this._filterDataStatic = new P.PxFilterData(FILTER_NORMAL, FILTER_NORMAL, 0, 0);
+    this._filterDataDynamic = new P.PxFilterData(
+      FILTER_NORMAL | FILTER_WHEEL, FILTER_NORMAL | FILTER_WHEEL, 0, 0,
+    );
 
     this._scratchVec = new P.PxVec3(0, 0, 0);
     this._scratchOrigin = new P.PxVec3(0, 0, 0);
@@ -248,7 +261,7 @@ export class Physics {
     const t = this._buildTransform(pose);
     const actor = this.physics.createRigidDynamic(t);
     const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
-    shape.setSimulationFilterData(this._filterData);
+    shape.setSimulationFilterData(this._filterDataDynamic);
     actor.attachShape(shape);
     this._bodyExt.setMassAndUpdateInertia(actor, mass);
     this.scene.addActor(actor);
@@ -261,13 +274,104 @@ export class Physics {
     return rb;
   }
 
+  createDynamicSphere(radius: number, pose: Pose, mass = 1): RigidBody {
+    const P = this._P;
+    const geom = new P.PxSphereGeometry(radius);
+    const t = this._buildTransform(pose);
+    const actor = this.physics.createRigidDynamic(t);
+    const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
+    shape.setSimulationFilterData(this._filterDataDynamic);
+    actor.attachShape(shape);
+    this._bodyExt.setMassAndUpdateInertia(actor, mass);
+    this.scene.addActor(actor);
+    P.destroy(geom);
+    P.destroy(t);
+    shape.release();
+
+    const rb = new RigidBody(actor, true);
+    this._bodies.set(rb.ptr, rb);
+    return rb;
+  }
+
+  // PxCapsuleGeometry's long axis is +X in local space. Caller is responsible
+  // for orienting the actor via pose.quat so the capsule spans the desired
+  // world-space segment.
+  createDynamicCapsule(radius: number, halfHeight: number, pose: Pose, mass = 1): RigidBody {
+    const P = this._P;
+    const geom = new P.PxCapsuleGeometry(radius, halfHeight);
+    const t = this._buildTransform(pose);
+    const actor = this.physics.createRigidDynamic(t);
+    const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
+    shape.setSimulationFilterData(this._filterDataDynamic);
+    actor.attachShape(shape);
+    this._bodyExt.setMassAndUpdateInertia(actor, mass);
+    this.scene.addActor(actor);
+    P.destroy(geom);
+    P.destroy(t);
+    shape.release();
+
+    const rb = new RigidBody(actor, true);
+    this._bodies.set(rb.ptr, rb);
+    return rb;
+  }
+
+  // Connects two bodies at a shared world point with a spherical (ball) joint.
+  // `worldAnchor` is the world-space attachment point; we compute each body's
+  // local frame from its current global pose so both sides agree on the anchor.
+  // Optional `swingLimitRad` / `twistLimitRad` clamp how far the joint can flex
+  // (undefined = no limit).
+  createSphericalJoint(
+    a: RigidBody, b: RigidBody, worldAnchor: Vec3Like,
+    limitConeYRad?: number, limitConeZRad?: number,
+  ): any {
+    const P = this._P;
+    const frameA = this._localFrameAt(a, worldAnchor);
+    const frameB = this._localFrameAt(b, worldAnchor);
+    const joint = P.PxTopLevelFunctions.prototype.SphericalJointCreate(
+      this.physics, a.actor, frameA, b.actor, frameB,
+    );
+    if (limitConeYRad != null && limitConeZRad != null) {
+      const cone = new P.PxJointLimitCone(limitConeYRad, limitConeZRad);
+      joint.setLimitCone(cone);
+      joint.setSphericalJointFlag(P.PxSphericalJointFlagEnum.eLIMIT_ENABLED, true);
+      P.destroy(cone);
+    }
+    P.destroy(frameA);
+    P.destroy(frameB);
+    return joint;
+  }
+
+  private _localFrameAt(body: RigidBody, worldAnchor: Vec3Like): any {
+    const P = this._P;
+    const t = body.actor.getGlobalPose();
+    // world-to-local for a point: rotate (anchor - body.pos) by conjugate of
+    // body's rotation. Using the compact v' = v + 2·(q.xyz × (q.xyz × v + w·v))
+    // formula, negating q.xyz gives the inverse rotation.
+    const dx = worldAnchor.x - t.p.x;
+    const dy = worldAnchor.y - t.p.y;
+    const dz = worldAnchor.z - t.p.z;
+    const qx = -t.q.x, qy = -t.q.y, qz = -t.q.z, qw = t.q.w;
+    const tx = 2 * (qy * dz - qz * dy);
+    const ty = 2 * (qz * dx - qx * dz);
+    const tz = 2 * (qx * dy - qy * dx);
+    const lx = dx + qw * tx + (qy * tz - qz * ty);
+    const ly = dy + qw * ty + (qz * tx - qx * tz);
+    const lz = dz + qw * tz + (qx * ty - qy * tx);
+    const frame = new P.PxTransform(P.PxIDENTITYEnum.PxIdentity);
+    this._scratchPoseVec.set_x(lx);
+    this._scratchPoseVec.set_y(ly);
+    this._scratchPoseVec.set_z(lz);
+    frame.set_p(this._scratchPoseVec);
+    return frame;
+  }
+
   createStaticBox(halfExtents: Vec3Like, pose: Pose): RigidBody {
     const P = this._P;
     const geom = new P.PxBoxGeometry(halfExtents.x, halfExtents.y, halfExtents.z);
     const t = this._buildTransform(pose);
     const actor = this.physics.createRigidStatic(t);
     const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
-    shape.setSimulationFilterData(this._filterData);
+    shape.setSimulationFilterData(this._filterDataStatic);
     actor.attachShape(shape);
     this.scene.addActor(actor);
     P.destroy(geom);
@@ -291,7 +395,7 @@ export class Physics {
       const t = this._buildTransform(pose);
       actor = this.physics.createRigidStatic(t);
       const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
-      shape.setSimulationFilterData(this._filterData);
+      shape.setSimulationFilterData(this._filterDataStatic);
       actor.attachShape(shape);
       P.destroy(geom);
       P.destroy(t);
@@ -301,9 +405,9 @@ export class Physics {
       actor = this._topLevel.CreatePlane(this.physics, plane, this.material);
       // CreatePlane auto-creates a shape on the actor. Retrieve it via
       // SupportFunctions (there's no exposed PxArray_PxShapePtr helper) and
-      // stamp the collide-with-everything filter data onto it.
+      // stamp the static filter data onto it.
       const autoShape = this._support.PxActor_getShape(actor, 0);
-      autoShape.setSimulationFilterData(this._filterData);
+      autoShape.setSimulationFilterData(this._filterDataStatic);
       P.destroy(plane);
     }
     this.scene.addActor(actor);
@@ -444,7 +548,9 @@ export class Physics {
 
   get batchPathActive(): boolean { return this._hasBatch; }
   get foundation(): any { return this._foundation; }
-  get filterData(): any { return this._filterData; }
+  get filterData(): any { return this._filterDataStatic; }
+  get filterDataStatic(): any { return this._filterDataStatic; }
+  get filterDataDynamic(): any { return this._filterDataDynamic; }
 
   // alpha ∈ [0,1]: how far we are between the last two physics ticks.
   interpolate(alpha: number): void {
@@ -493,7 +599,8 @@ export class Physics {
     this.material.release();
     this.physics.release();
     this._foundation.release();
-    P.destroy(this._filterData);
+    P.destroy(this._filterDataStatic);
+    P.destroy(this._filterDataDynamic);
     P.destroy(this._shapeFlags);
     P.destroy(this.cookingParams);
     P.destroy(this._sceneDesc);

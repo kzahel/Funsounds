@@ -1,4 +1,5 @@
 import type { Physics, RigidBody, Vec3Like, QuatLike, Pose } from './physics';
+import { FILTER_NORMAL, FILTER_WHEEL } from './physics';
 
 // PhysX Vehicle 2 port of fabmax/kool's Vehicle.web.kt, trimmed for a 4-wheel
 // engine-driven vehicle. Uses the raycast road-geometry query (not sweep), so
@@ -462,13 +463,23 @@ export class Vehicle {
     v.physXParams.physxActorShapeFlags.raise(P.PxShapeFlagEnum.eSIMULATION_SHAPE);
     v.physXParams.physxActorShapeFlags.raise(P.PxShapeFlagEnum.eSCENE_QUERY_SHAPE);
 
-    // Collide chassis with everything using the same (1,1) bitmask that the
-    // rest of our bodies use.
-    const chassisFilter = new P.PxFilterData(1, 1, 0, 0);
+    // Wheel shape flags: also a real simulation shape so cubes (and other
+    // dynamics) physically bounce off the wheels. Vehicle 2 updates each wheel
+    // shape's local pose every step, so the colliders track suspension travel
+    // and steer angle automatically — nothing to wire up per tick on our end.
+    v.physXParams.physxActorWheelShapeFlags.raise(P.PxShapeFlagEnum.eSIMULATION_SHAPE);
+
+    // Filter data: chassis sits in FILTER_NORMAL (collides with ground +
+    // dynamics, just like every other (1,1) static). Wheels sit in
+    // FILTER_WHEEL (only pairs with dynamics, which carry both bits). This is
+    // what keeps wheels from fighting the road raycast for ground contact and
+    // from picking up internal contacts against their own chassis box.
+    const chassisFilter = new P.PxFilterData(FILTER_NORMAL, FILTER_NORMAL, 0, 0);
     this._copyFilterData(chassisFilter, v.physXParams.physxActorSimulationFilterData);
     this._copyFilterData(chassisFilter, v.physXParams.physxActorQueryFilterData);
-    this._copyFilterData(chassisFilter, v.physXParams.physxActorWheelSimulationFilterData);
-    this._copyFilterData(chassisFilter, v.physXParams.physxActorWheelQueryFilterData);
+    const wheelFilter = new P.PxFilterData(FILTER_WHEEL, FILTER_WHEEL, 0, 0);
+    this._copyFilterData(wheelFilter, v.physXParams.physxActorWheelSimulationFilterData);
+    this._copyFilterData(wheelFilter, v.physXParams.physxActorWheelQueryFilterData);
 
     const chassisGeom = new P.PxBoxGeometry(p.chassisDims.x / 2, p.chassisDims.y / 2, p.chassisDims.z / 2);
     const materialFriction = new P.PxVehiclePhysXMaterialFriction();
@@ -493,7 +504,7 @@ export class Vehicle {
     // Destroying chassisGeom here was producing "Gu::computeBounds: Unknown
     // shape type" crashes once scene.addActor processed the chassis shape.
     this._heldRefs.push(
-      materialFriction, chassisGeom, chassisFilter, shapeLocal, cm,
+      materialFriction, chassisGeom, chassisFilter, wheelFilter, shapeLocal, cm,
       roadQueryFilter, roadFilterData, roadQueryFlags,
     );
   }
@@ -587,7 +598,9 @@ export class Vehicle {
     const shapeFlags = new P.PxShapeFlags(
       P.PxShapeFlagEnum.eSIMULATION_SHAPE | P.PxShapeFlagEnum.eSCENE_QUERY_SHAPE,
     );
-    const filterData = new P.PxFilterData(1, 1, 0, 0);
+    // Cab + bed walls share the chassis category so they collide with ground
+    // and cubes but not with the wheels (wheels live in FILTER_WHEEL).
+    const filterData = new P.PxFilterData(FILTER_NORMAL, FILTER_NORMAL, 0, 0);
 
     const addBox = (halfX: number, halfY: number, halfZ: number, lx: number, ly: number, lz: number): void => {
       const geom = new P.PxBoxGeometry(halfX, halfY, halfZ);
