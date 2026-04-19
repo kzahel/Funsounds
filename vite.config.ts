@@ -30,7 +30,8 @@ export default defineConfig({
         'qbert-harness': resolve(__dirname, 'qbert-harness.html'),
         '3d-demo': resolve(__dirname, '3d-demo.html'),
         'physics-demo': resolve(__dirname, 'physics-demo.html'),
-        'physics-bench': resolve(__dirname, 'physics-bench.html'),
+        // Add 'physics-bench' back once physics-bench.html is committed.
+        // Rollup input paths must exist at build time or CI fails.
       },
     },
   },
