@@ -67,20 +67,25 @@ test('Farm smoke — opens, tills a tile, plants a seed, and renders without err
   const cropInside = targetTile.locator('.fg-crop');
   await expect(cropInside).toHaveCount(1);
 
-  // Menu: Save to slot 1, Reset, Load from slot 1 should restore the crop
+  // Menu: Save to slot 1, Reset, Load from slot 1 should restore the crop.
+  // A fresh state spawns wild sunflowers on non-arable tiles, so crop count
+  // after reset is > 0 (sunflowers), and after load is strictly higher (sunflowers + carrot).
+  const cropCountBeforeSave = await page.locator('#fg-grid .fg-crop').count();
   await page.locator('#fg-menu-btn').click();
   await expect(page.locator('#fg-menu')).toBeVisible();
   // Save slot 1
   await page.locator('#fg-menu-save-rows button').nth(0).click();
-  // Reset — wipes crop
+  // Reset — wipes carrot, respawns fresh wild sunflowers
   await page.locator('#fg-menu-reset').click();
   await page.waitForTimeout(120);
-  expect(await page.locator('#fg-grid .fg-crop').count()).toBe(0);
-  // Load slot 1 — crop should come back
+  const cropCountAfterReset = await page.locator('#fg-grid .fg-crop').count();
+  expect(cropCountAfterReset).toBeGreaterThan(0); // wild sunflowers
+  expect(cropCountAfterReset).toBeLessThan(cropCountBeforeSave); // carrot is gone
+  // Load slot 1 — carrot should come back alongside the sunflowers on the saved map
   await page.locator('#fg-menu-btn').click();
   await page.locator('#fg-menu-load-rows button').nth(0).click();
   await page.waitForTimeout(120);
-  expect(await page.locator('#fg-grid .fg-crop').count()).toBeGreaterThanOrEqual(1);
+  expect(await page.locator('#fg-grid .fg-crop').count()).toBeGreaterThanOrEqual(cropCountBeforeSave);
 
   // Season HUD pill is rendered
   await expect(page.locator('#fg-hud-season')).toBeVisible();

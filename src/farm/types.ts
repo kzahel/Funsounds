@@ -42,7 +42,8 @@ export type CropKind =
   | 'potato'
   | 'watermelon'
   | 'apple'
-  | 'turnip';
+  | 'turnip'
+  | 'sunflower';
 
 /** Base grow time (seconds on wet soil) per crop. Seasonal multipliers apply on top. */
 export const CROP_GROW_SECONDS: Record<CropKind, number> = {
@@ -55,6 +56,7 @@ export const CROP_GROW_SECONDS: Record<CropKind, number> = {
   watermelon: 100,
   apple: 120, // first fruit; subsequent fruits use APPLE_REGROW_SECONDS
   turnip: 45,
+  sunflower: 60, // unused for wild; would apply if plantable later
 };
 
 /** After the first apple, the tree regrows fruit faster. */
@@ -71,6 +73,7 @@ export const CROP_PRICE: Record<CropKind, number> = {
   watermelon: 20,
   apple: 8,
   turnip: 5,
+  sunflower: 3,
 };
 
 /** Units delivered to inventory per harvested crop. */
@@ -84,6 +87,25 @@ export const CROP_YIELD: Record<CropKind, number> = {
   watermelon: 1,
   apple: 1,
   turnip: 1,
+  sunflower: 1,
+};
+
+/**
+ * Seed cost at plant time (season multiplier applies on top).
+ * Sunflowers aren't plantable from the toolbar — only gatherable in the wild —
+ * so the entry is 0 for type completeness.
+ */
+export const SEED_COST: Record<CropKind, number> = {
+  carrot: 2,
+  tomato: 3,
+  corn: 3,
+  pumpkin: 5,
+  strawberry: 1,
+  potato: 2,
+  watermelon: 8,
+  apple: 8,
+  turnip: 2,
+  sunflower: 0,
 };
 
 /**
@@ -100,6 +122,7 @@ export const CROP_SEASONS: Record<CropKind, ReadonlySet<Season>> = {
   watermelon: new Set<Season>(['summer']),
   apple: new Set<Season>(['spring', 'summer', 'fall', 'winter']),
   turnip: new Set<Season>(['winter']),
+  sunflower: new Set<Season>(['spring', 'summer', 'fall', 'winter']),
 };
 
 export interface Crop {
@@ -110,6 +133,8 @@ export interface Crop {
   plantedAt: number;
   /** Apple trees flip this to true after the first harvest so regrow uses the faster cycle. */
   hasYielded?: boolean;
+  /** Wild plant (e.g. map-spawned sunflower). Ignored by pests; tile stays grass after harvest. */
+  wild?: boolean;
 }
 
 export interface TileState {
@@ -182,6 +207,8 @@ export interface Defense {
   moving: boolean;
   /** Beehives: time of next honey drop. Unused for other kinds. */
   nextHoneyAt?: number;
+  /** Beehives: jars of honey accumulated on the hive. Transferred to inventory on walk-over. */
+  honey?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +225,7 @@ export interface Inventory {
   watermelon: number;
   apple: number;
   turnip: number;
+  sunflower: number;
   honey: number;
 }
 
@@ -239,7 +267,6 @@ export type ToolTab = 'farm' | 'seeds' | 'defense' | 'shop';
 export type Tool =
   | { kind: 'till' }
   | { kind: 'water' }
-  | { kind: 'pick' }
   | { kind: 'seed'; crop: CropKind }
   | { kind: 'place_cat' }
   | { kind: 'place_scarecrow' }
@@ -291,6 +318,8 @@ export interface GameState {
   nextRainAt: number;
   rainUntil: number;
   nextPestAt: number;
+  /** Game time at which to attempt spawning another wild sunflower. */
+  nextWildSunflowerAt: number;
   selectedTab: ToolTab;
   selectedTool: Tool;
   nextId: number;

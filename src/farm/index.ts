@@ -8,6 +8,7 @@ import {
   COST_BOOTS,
   SAVE_SLOT_COUNT,
   SAVE_VERSION,
+  SEED_COST,
   SELL_PRICE,
   costToExpand,
   seasonSellMultiplier,
@@ -39,7 +40,6 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
     buttons: [
       { id: 'till', label: 'Till', emoji: '\u{1FA93}', tool: { kind: 'till' } },
       { id: 'water', label: 'Water', emoji: '\u{1F4A7}', tool: { kind: 'water' } },
-      { id: 'pick', label: 'Pick', emoji: '\u{1F9FA}', tool: { kind: 'pick' } },
     ],
   },
   {
@@ -47,15 +47,24 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
     label: 'Seeds',
     emoji: '\u{1F331}',
     buttons: [
-      { id: 'seed-carrot', label: 'Carrot', emoji: '\u{1F955}', tool: { kind: 'seed', crop: 'carrot' } },
-      { id: 'seed-tomato', label: 'Tomato', emoji: '\u{1F345}', tool: { kind: 'seed', crop: 'tomato' } },
-      { id: 'seed-corn', label: 'Corn', emoji: '\u{1F33D}', tool: { kind: 'seed', crop: 'corn' } },
-      { id: 'seed-pumpkin', label: 'Pumpkin', emoji: '\u{1F383}', tool: { kind: 'seed', crop: 'pumpkin' } },
-      { id: 'seed-strawberry', label: 'Strawberry', emoji: '\u{1F353}', tool: { kind: 'seed', crop: 'strawberry' } },
-      { id: 'seed-potato', label: 'Potato', emoji: '\u{1F954}', tool: { kind: 'seed', crop: 'potato' } },
-      { id: 'seed-watermelon', label: 'Watermelon', emoji: '\u{1F349}', tool: { kind: 'seed', crop: 'watermelon' } },
-      { id: 'seed-apple', label: 'Apple', emoji: '\u{1F333}', tool: { kind: 'seed', crop: 'apple' } },
-      { id: 'seed-turnip', label: 'Turnip', emoji: '\u{1FADA}', tool: { kind: 'seed', crop: 'turnip' } },
+      { id: 'seed-carrot', label: 'Carrot', emoji: '\u{1F955}', tool: { kind: 'seed', crop: 'carrot' },
+        priceLabel: (s) => `$${seedCost(s, 'carrot')}`, disabled: (s) => s.money < seedCost(s, 'carrot') },
+      { id: 'seed-tomato', label: 'Tomato', emoji: '\u{1F345}', tool: { kind: 'seed', crop: 'tomato' },
+        priceLabel: (s) => `$${seedCost(s, 'tomato')}`, disabled: (s) => s.money < seedCost(s, 'tomato') },
+      { id: 'seed-corn', label: 'Corn', emoji: '\u{1F33D}', tool: { kind: 'seed', crop: 'corn' },
+        priceLabel: (s) => `$${seedCost(s, 'corn')}`, disabled: (s) => s.money < seedCost(s, 'corn') },
+      { id: 'seed-pumpkin', label: 'Pumpkin', emoji: '\u{1F383}', tool: { kind: 'seed', crop: 'pumpkin' },
+        priceLabel: (s) => `$${seedCost(s, 'pumpkin')}`, disabled: (s) => s.money < seedCost(s, 'pumpkin') },
+      { id: 'seed-strawberry', label: 'Strawberry', emoji: '\u{1F353}', tool: { kind: 'seed', crop: 'strawberry' },
+        priceLabel: (s) => `$${seedCost(s, 'strawberry')}`, disabled: (s) => s.money < seedCost(s, 'strawberry') },
+      { id: 'seed-potato', label: 'Potato', emoji: '\u{1F954}', tool: { kind: 'seed', crop: 'potato' },
+        priceLabel: (s) => `$${seedCost(s, 'potato')}`, disabled: (s) => s.money < seedCost(s, 'potato') },
+      { id: 'seed-watermelon', label: 'Watermelon', emoji: '\u{1F349}', tool: { kind: 'seed', crop: 'watermelon' },
+        priceLabel: (s) => `$${seedCost(s, 'watermelon')}`, disabled: (s) => s.money < seedCost(s, 'watermelon') },
+      { id: 'seed-apple', label: 'Apple', emoji: '\u{1F333}', tool: { kind: 'seed', crop: 'apple' },
+        priceLabel: (s) => `$${seedCost(s, 'apple')}`, disabled: (s) => s.money < seedCost(s, 'apple') },
+      { id: 'seed-turnip', label: 'Turnip', emoji: '\u{1FADA}', tool: { kind: 'seed', crop: 'turnip' },
+        priceLabel: (s) => `$${seedCost(s, 'turnip')}`, disabled: (s) => s.money < seedCost(s, 'turnip') },
     ],
   },
   {
@@ -126,6 +135,10 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
 
 function seasonCost(state: GameState, baseCost: number): number {
   return Math.round(baseCost * seasonShopMultiplier(currentSeason(state.time)));
+}
+
+function seedCost(state: GameState, crop: CropKind): number {
+  return Math.round(SEED_COST[crop] * seasonShopMultiplier(currentSeason(state.time)));
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +273,7 @@ function updateHUD(): void {
   pushIf(inv.watermelon, '\u{1F349}');
   pushIf(inv.apple, '\u{1F34E}');
   pushIf(inv.turnip, '\u{1FADA}');
+  pushIf(inv.sunflower, '\u{1F33B}');
   pushIf(inv.honey, '\u{1F36F}');
   const total = parts.length;
   if (total === 0) {

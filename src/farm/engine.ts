@@ -12,6 +12,7 @@ import {
   FLYING_PESTS,
   SEASONS,
   SEASON_DURATION,
+  SEED_COST,
   SELL_PRICE,
   costToExpand,
   seasonSellMultiplier,
@@ -53,10 +54,18 @@ const RAIN_INTERVAL_MAX = 70;
 const RAIN_DURATION = 8;
 
 const BEEHIVE_HONEY_INTERVAL = 30;
+const BEEHIVE_HONEY_MAX = 5;
+const BEEHIVE_COLLECT_RADIUS = 0.6;
 const BEEHIVE_BOOST_RADIUS = 2;
 const BEEHIVE_BOOST_MULT = 1.25;
 const SUMMER_GROWTH_MULT = 1.25;
 const SUMMER_PEST_MULT = 1.5;
+
+/** Starting cash — low by design so wild sunflowers matter for the first seeds. */
+const STARTING_MONEY = 3;
+const WILD_SUNFLOWER_TARGET = 4;
+const WILD_SUNFLOWER_RESPAWN_MIN = 45;
+const WILD_SUNFLOWER_RESPAWN_MAX = 90;
 
 // ---------------------------------------------------------------------------
 // Seasons
@@ -79,6 +88,7 @@ function makeEmptyInventory(): Inventory {
   return {
     carrot: 0, tomato: 0, corn: 0, pumpkin: 0,
     strawberry: 0, potato: 0, watermelon: 0, apple: 0, turnip: 0,
+    sunflower: 0,
     honey: 0,
   };
 }
@@ -106,14 +116,14 @@ export function createGameState(size: GridSize = { rows: 9, cols: 13 }): GameSta
     moving: { up: false, down: false, left: false, right: false },
     speed: PLAYER_SPEED,
   };
-  return {
+  const state: GameState = {
     size,
     tiles,
     player,
     pests: [],
     defenses: [],
     inventory: makeEmptyInventory(),
-    money: 10,
+    money: STARTING_MONEY,
     arableRadius: 1,
     arableCenter: center,
     pendingCats: 0,
@@ -125,11 +135,58 @@ export function createGameState(size: GridSize = { rows: 9, cols: 13 }): GameSta
     nextRainAt: RAIN_INTERVAL_MIN + Math.random() * (RAIN_INTERVAL_MAX - RAIN_INTERVAL_MIN),
     rainUntil: -1,
     nextPestAt: PEST_SPAWN_MIN + Math.random() * (PEST_SPAWN_MAX - PEST_SPAWN_MIN),
+    nextWildSunflowerAt: WILD_SUNFLOWER_RESPAWN_MIN,
     selectedTab: 'farm',
     selectedTool: { kind: 'till' },
     nextId: 1,
     paused: false,
   };
+  seedInitialWildSunflowers(state);
+  return state;
+}
+
+function seedInitialWildSunflowers(state: GameState): void {
+  // Deterministic initial placements so the first-run experience is predictable.
+  const picks: Array<{ row: number; col: number }> = [
+    { row: 1, col: 1 },
+    { row: 1, col: state.size.cols - 3 },
+    { row: state.size.rows - 2, col: 2 },
+    { row: state.size.rows - 2, col: state.size.cols - 4 },
+  ];
+  for (const p of picks) spawnWildSunflowerAt(state, p.row, p.col);
+  // If fewer than target were placed (tiny grid, blocked tiles, etc.), top up with random picks.
+  while (countWildSunflowers(state) < WILD_SUNFLOWER_TARGET) {
+    if (!spawnRandomWildSunflower(state)) break;
+  }
+}
+
+function spawnWildSunflowerAt(state: GameState, row: number, col: number): boolean {
+  const t = tileAt(state, row, col);
+  if (!t) return false;
+  if (t.isMarket || t.hasFence || t.crop) return false;
+  if (t.kind !== 'grass') return false;
+  if (isArable(state, row, col)) return false;
+  t.crop = { kind: 'sunflower', growth: 1, plantedAt: state.time, wild: true };
+  return true;
+}
+
+function countWildSunflowers(state: GameState): number {
+  let n = 0;
+  for (const t of state.tiles) if (t.crop?.wild) n += 1;
+  return n;
+}
+
+function spawnRandomWildSunflower(state: GameState): boolean {
+  const candidates: Array<{ row: number; col: number }> = [];
+  for (const t of state.tiles) {
+    if (t.isMarket || t.hasFence || t.crop) continue;
+    if (t.kind !== 'grass') continue;
+    if (isArable(state, t.row, t.col)) continue;
+    candidates.push({ row: t.row, col: t.col });
+  }
+  if (candidates.length === 0) return false;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  return spawnWildSunflowerAt(state, pick.row, pick.col);
 }
 
 export function tileAt(state: GameState, row: number, col: number): TileState | undefined {
@@ -219,21 +276,27 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
     case 'seed': {
       if (!isArable(state, row, col)) return [];
       if (tile.crop || tile.hasFence || tile.isMarket) return [];
+      // Sunflowers are wild-only; can't be planted from the toolbar.
+      if (tool.crop === 'sunflower') return [];
+      const cost = Math.round(SEED_COST[tool.crop] * seasonShopMultiplier(currentSeason(state.time)));
+      if (state.money < cost) {
+        events.push({ type: 'purchase_failed' });
+        return events;
+      }
       if (tool.crop === 'apple') {
         // Apple tree: plants on plain grass, makes the tile permanently 'apple_tree'.
         if (tile.kind !== 'grass') return [];
+        state.money -= cost;
         tile.kind = 'apple_tree';
         tile.crop = { kind: 'apple', growth: 0, plantedAt: state.time, hasYielded: false };
         events.push({ type: 'tile_changed', row, col });
         return events;
       }
       if (tile.kind !== 'tilled' && tile.kind !== 'wet_tilled') return [];
+      state.money -= cost;
       tile.crop = { kind: tool.crop, growth: 0, plantedAt: state.time };
       events.push({ type: 'tile_changed', row, col });
       return events;
-    }
-    case 'pick': {
-      return harvestTile(state, row, col);
     }
     case 'place_cat':
     case 'place_scarecrow':
@@ -338,11 +401,15 @@ function harvestTile(state: GameState, row: number, col: number): GameEvent[] {
   if (!tile || !tile.crop) return [];
   if (tile.crop.growth < 1) return [];
   const kind = tile.crop.kind;
+  const wasWild = !!tile.crop.wild;
   const yieldAmount = CROP_YIELD[kind];
   state.inventory[kind] += yieldAmount;
   if (kind === 'apple' && tile.kind === 'apple_tree') {
     // Tree stays; reset crop so it regrows. Subsequent fruits grow faster.
     tile.crop = { kind: 'apple', growth: 0, plantedAt: state.time, hasYielded: true };
+  } else if (wasWild) {
+    // Wild plant: leave the tile kind alone (typically grass).
+    tile.crop = null;
   } else {
     tile.crop = null;
     tile.kind = 'tilled';
@@ -392,8 +459,9 @@ function tickCat(state: GameState, d: Defense, dt: number): void {
 function tickBeehive(state: GameState, d: Defense): void {
   if (d.kind !== 'beehive') return;
   if (d.nextHoneyAt == null) d.nextHoneyAt = state.time + BEEHIVE_HONEY_INTERVAL;
+  if (d.honey == null) d.honey = 0;
   if (state.time >= d.nextHoneyAt) {
-    state.inventory.honey += 1;
+    if (d.honey < BEEHIVE_HONEY_MAX) d.honey += 1;
     d.nextHoneyAt = state.time + BEEHIVE_HONEY_INTERVAL;
   }
 }
@@ -443,6 +511,8 @@ function findTargetCrop(state: GameState, x: number, y: number): { row: number; 
   let bestD2 = Infinity;
   for (const t of state.tiles) {
     if (!t.crop) continue;
+    // Pests ignore wild plants — they want your farmed crops.
+    if (t.crop.wild) continue;
     const cx = t.col + 0.5;
     const cy = t.row + 0.5;
     const d2 = (cx - x) * (cx - x) + (cy - y) * (cy - y);
@@ -612,6 +682,18 @@ function checkPlayerCollisions(state: GameState): GameEvent[] {
     const sale = sellAll(state);
     if (sale > 0) events.push({ type: 'sold', amount: sale });
   }
+  // Walk onto a beehive to collect accumulated honey.
+  const r2 = BEEHIVE_COLLECT_RADIUS * BEEHIVE_COLLECT_RADIUS;
+  for (const d of state.defenses) {
+    if (d.kind !== 'beehive') continue;
+    if (!d.honey) continue;
+    const dx = d.x - p.x;
+    const dy = d.y - p.y;
+    if (dx * dx + dy * dy <= r2) {
+      state.inventory.honey += d.honey;
+      d.honey = 0;
+    }
+  }
   return events;
 }
 
@@ -718,6 +800,25 @@ export function tick(state: GameState, dt: number): GameEvent[] {
   for (const d of state.defenses) {
     tickCat(state, d, dt);
     tickBeehive(state, d);
+  }
+
+  // Replenish wild sunflowers over time, capped at WILD_SUNFLOWER_TARGET on the map.
+  if (state.time >= state.nextWildSunflowerAt) {
+    if (countWildSunflowers(state) < WILD_SUNFLOWER_TARGET) {
+      const placed = spawnRandomWildSunflower(state);
+      if (placed) {
+        // Find the placed tile (most recently set wild crop) to emit a tile_changed event.
+        for (const t of state.tiles) {
+          if (t.crop?.kind === 'sunflower' && t.crop.wild && t.crop.plantedAt === state.time) {
+            events.push({ type: 'tile_changed', row: t.row, col: t.col });
+            break;
+          }
+        }
+      }
+    }
+    state.nextWildSunflowerAt =
+      state.time + WILD_SUNFLOWER_RESPAWN_MIN +
+      Math.random() * (WILD_SUNFLOWER_RESPAWN_MAX - WILD_SUNFLOWER_RESPAWN_MIN);
   }
 
   // Spawn pests on a timer — no spawns in winter, faster in summer.

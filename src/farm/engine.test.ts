@@ -17,7 +17,6 @@ const SEED_STRAWBERRY: Tool = { kind: 'seed', crop: 'strawberry' };
 const SEED_POTATO: Tool = { kind: 'seed', crop: 'potato' };
 const SEED_APPLE: Tool = { kind: 'seed', crop: 'apple' };
 const SEED_TURNIP: Tool = { kind: 'seed', crop: 'turnip' };
-const PICK: Tool = { kind: 'pick' };
 
 function place(state: GameState, row: number, col: number, tool: Tool) {
   return processAction(state, { type: 'place', row, col, tool });
@@ -31,6 +30,18 @@ function tickN(state: GameState, seconds: number, dt: number = 0.1): void {
 function parkPlayer(state: GameState, x: number = 0.5, y: number = 0.5): void {
   state.player.x = x;
   state.player.y = y;
+}
+
+/** Simulates walk-over harvest by teleporting the player to (row, col) and ticking once. */
+function walkOverHarvest(state: GameState, row: number, col: number): void {
+  state.player.x = col + 0.5;
+  state.player.y = row + 0.5;
+  processAction(state, { type: 'tick', dt: 0.01 });
+}
+
+/** Give the test enough money to plant any seed without interference. */
+function fund(state: GameState, amount: number = 100): void {
+  state.money = amount;
 }
 
 describe('createGameState', () => {
@@ -74,6 +85,7 @@ describe('seasons', () => {
 describe('crop season gating', () => {
   it('carrot grows in spring but not in winter', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     s.nextPestAt = 1e9;
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
@@ -89,6 +101,7 @@ describe('crop season gating', () => {
 
   it('turnip grows only in winter', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     s.nextPestAt = 1e9;
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
@@ -109,6 +122,7 @@ describe('crop season gating', () => {
     const s1 = createGameState({ rows: 9, cols: 9 });
     const s2 = createGameState({ rows: 9, cols: 9 });
     for (const s of [s1, s2]) {
+      fund(s);
       s.nextPestAt = 1e9;
       s.nextRainAt = 1e9;
       const c = s.arableCenter;
@@ -131,6 +145,7 @@ describe('crop season gating', () => {
 describe('new crops', () => {
   it('strawberry grows in 30s', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     s.nextPestAt = 1e9;
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
@@ -144,6 +159,7 @@ describe('new crops', () => {
 
   it('potato harvest yields 3', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     s.nextPestAt = 1e9;
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
@@ -152,12 +168,13 @@ describe('new crops', () => {
     place(s, c.row, c.col, WATER);
     place(s, c.row, c.col, SEED_POTATO);
     tickN(s, 100);
-    place(s, c.row, c.col, PICK);
+    walkOverHarvest(s, c.row, c.col);
     expect(s.inventory.potato).toBe(3);
   });
 
   it('apple tree is planted on grass, becomes permanent, regrows after harvest', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     s.nextPestAt = 1e9;
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
@@ -170,18 +187,21 @@ describe('new crops', () => {
     tickN(s, 125);
     expect(tileAt(s, c.row, c.col)!.crop!.growth).toBeGreaterThanOrEqual(1);
     // Harvest — tile stays apple_tree, crop resets
-    place(s, c.row, c.col, PICK);
+    walkOverHarvest(s, c.row, c.col);
     expect(s.inventory.apple).toBe(1);
     expect(tileAt(s, c.row, c.col)!.kind).toBe('apple_tree');
     expect(tileAt(s, c.row, c.col)!.crop!.hasYielded).toBe(true);
-    expect(tileAt(s, c.row, c.col)!.crop!.growth).toBe(0);
+    // Growth is reset; a tiny bit of regrowth happens inside the same tick that harvested.
+    expect(tileAt(s, c.row, c.col)!.crop!.growth).toBeLessThan(0.01);
     // Regrows faster than the first apple
+    parkPlayer(s); // move player off so the regrowing apple doesn't insta-harvest
     tickN(s, 50);
     expect(tileAt(s, c.row, c.col)!.crop!.growth).toBeGreaterThanOrEqual(1);
   });
 
   it('apple tree tile resists till and erase', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     const c = s.arableCenter;
     place(s, c.row, c.col, SEED_APPLE);
     // Tilling an apple tree does nothing (kind isn't 'grass')
@@ -298,19 +318,30 @@ describe('fence blocking', () => {
 });
 
 describe('beehive', () => {
-  it('produces honey every 30s', () => {
+  it('accumulates honey on the hive, not in inventory, until the player walks over', () => {
     const s = createGameState({ rows: 9, cols: 9 });
     s.nextPestAt = 1e9;
     const c = s.arableCenter;
     s.pendingBeehives = 1;
+    parkPlayer(s);
     place(s, c.row, c.col, { kind: 'place_beehive' });
     tickN(s, 32);
+    const hive = s.defenses.find((d) => d.kind === 'beehive');
+    expect(hive?.honey ?? 0).toBeGreaterThanOrEqual(1);
+    // No honey in inventory until the player walks onto the hive.
+    expect(s.inventory.honey).toBe(0);
+    // Walk onto the hive — honey transfers.
+    s.player.x = hive!.x;
+    s.player.y = hive!.y;
+    processAction(s, { type: 'tick', dt: 0.01 });
     expect(s.inventory.honey).toBeGreaterThanOrEqual(1);
+    expect(hive!.honey ?? 0).toBe(0);
   });
 
   it('boosts growth of nearby crops', () => {
     const mk = (): GameState => {
       const s = createGameState({ rows: 9, cols: 9 });
+      fund(s);
       s.nextPestAt = 1e9;
       s.nextRainAt = 1e9;
       parkPlayer(s);
@@ -397,8 +428,9 @@ describe('arable gating & core lifecycle (regression)', () => {
     expect(tileAt(s, c.row, c.col)!.kind).toBe('tilled');
   });
 
-  it('full cycle: till → water → seed → grow → pick', () => {
+  it('full cycle: till → water → buy seed → grow → walk-over harvest', () => {
     const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
     s.nextPestAt = 1e9;
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
@@ -407,12 +439,13 @@ describe('arable gating & core lifecycle (regression)', () => {
     place(s, c.row, c.col, SEED_CARROT);
     parkPlayer(s);
     tickN(s, 70);
-    place(s, c.row, c.col, PICK);
+    walkOverHarvest(s, c.row, c.col);
     expect(s.inventory.carrot).toBe(1);
   });
 
   it('walking over a ripe crop harvests it', () => {
     const s = createGameState({ rows: 9, cols: 13 });
+    fund(s);
     s.nextPestAt = 1e9;
     const c = s.arableCenter;
     place(s, c.row, c.col, TILL);
@@ -420,9 +453,7 @@ describe('arable gating & core lifecycle (regression)', () => {
     place(s, c.row, c.col, SEED_CARROT);
     parkPlayer(s);
     tickN(s, 65);
-    s.player.x = c.col + 0.5;
-    s.player.y = c.row + 0.5;
-    processAction(s, { type: 'tick', dt: 0.01 });
+    walkOverHarvest(s, c.row, c.col);
     expect(s.inventory.carrot).toBe(1);
   });
 
@@ -439,11 +470,74 @@ describe('arable gating & core lifecycle (regression)', () => {
     // Spring prices, no bonus
     expect(s.money).toBe(startMoney + 3 * CROP_PRICE.carrot + 2 * CROP_PRICE.tomato);
   });
+
+  it('planting a seed without enough money fails and leaves the tile untouched', () => {
+    const s = createGameState({ rows: 9, cols: 9 });
+    s.money = 0;
+    s.nextPestAt = 1e9;
+    s.nextRainAt = 1e9;
+    const c = s.arableCenter;
+    parkPlayer(s);
+    place(s, c.row, c.col, TILL);
+    place(s, c.row, c.col, WATER);
+    const events = place(s, c.row, c.col, SEED_CARROT);
+    expect(tileAt(s, c.row, c.col)!.crop).toBeNull();
+    expect(events.some((e) => e.type === 'purchase_failed')).toBe(true);
+  });
+});
+
+describe('wild sunflowers', () => {
+  it('spawns initial wild sunflowers outside the arable radius', () => {
+    const s = createGameState({ rows: 9, cols: 13 });
+    const wildFlowers = s.tiles.filter((t) => t.crop?.kind === 'sunflower' && t.crop.wild);
+    expect(wildFlowers.length).toBeGreaterThan(0);
+    for (const t of wildFlowers) {
+      expect(isArable(s, t.row, t.col)).toBe(false);
+      expect(t.kind).toBe('grass');
+      expect(t.crop!.growth).toBe(1); // ripe on spawn
+    }
+  });
+
+  it('walking over a wild sunflower harvests it into inventory and leaves grass', () => {
+    const s = createGameState({ rows: 9, cols: 13 });
+    s.nextPestAt = 1e9;
+    const t = s.tiles.find((x) => x.crop?.kind === 'sunflower' && x.crop.wild)!;
+    walkOverHarvest(s, t.row, t.col);
+    expect(s.inventory.sunflower).toBe(1);
+    expect(tileAt(s, t.row, t.col)!.kind).toBe('grass');
+    expect(tileAt(s, t.row, t.col)!.crop).toBeNull();
+  });
+
+  it('sunflower seeds are not purchasable from the toolbar', () => {
+    const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
+    const c = s.arableCenter;
+    place(s, c.row, c.col, TILL);
+    place(s, c.row, c.col, WATER);
+    place(s, c.row, c.col, { kind: 'seed', crop: 'sunflower' });
+    expect(tileAt(s, c.row, c.col)!.crop).toBeNull();
+  });
+
+  it('pests ignore wild sunflowers', () => {
+    const s = createGameState({ rows: 9, cols: 13 });
+    s.nextPestAt = 1e9;
+    const t = s.tiles.find((x) => x.crop?.kind === 'sunflower' && x.crop.wild)!;
+    // Spawn a rabbit right next to the sunflower.
+    s.pests.push({
+      id: 99, kind: 'rabbit',
+      x: t.col + 0.5, y: t.row + 0.5,
+      target: null, eating: false, eatStartedAt: 0,
+      fleeing: false, heading: 0, speed: 1,
+    });
+    tickN(s, 6);
+    expect(tileAt(s, t.row, t.col)!.crop?.kind).toBe('sunflower');
+  });
 });
 
 describe('pests (regression)', () => {
   it('a pest next to a crop eats it after eating duration', () => {
     const s = createGameState({ rows: 9, cols: 13 });
+    fund(s);
     const c = s.arableCenter;
     place(s, c.row, c.col, TILL);
     place(s, c.row, c.col, WATER);
@@ -490,6 +584,7 @@ describe('weather (regression)', () => {
     place(s, c.row, c.col, TILL);
     s.nextRainAt = 0.5;
     s.nextPestAt = 1e9;
+    s.nextWildSunflowerAt = 1e9;
     tickN(s, 1);
     expect(tileAt(s, c.row, c.col)!.kind).toBe('wet_tilled');
   });

@@ -30,6 +30,7 @@ const CROP_EMOJI: Record<CropKind, string> = {
   watermelon: '\u{1F349}',
   apple: '\u{1F34E}',
   turnip: '\u{1FADA}', // onion/turnip stand-in
+  sunflower: '\u{1F33B}',
 };
 
 const PEST_EMOJI: Record<PestKind, string> = {
@@ -361,7 +362,7 @@ export class DomRenderer implements Renderer {
           `;
         } else {
           // beehive
-          el.textContent = BEEHIVE_EMOJI;
+          el.innerHTML = `<span class="fg-bh-emoji">${BEEHIVE_EMOJI}</span><span class="fg-bh-honey" style="display:none; position:absolute; right:-0.3em; top:-0.3em; background:#ffcf5a; color:#3a2a00; font-size:0.55em; border-radius:1em; padding:0 0.35em; line-height:1.4; box-shadow:0 1px 2px rgba(0,0,0,0.4);"></span>`;
           el.style.cssText = `
             position:absolute; pointer-events:none;
             font-size:${px * 0.55}px; line-height:1;
@@ -377,6 +378,14 @@ export class DomRenderer implements Renderer {
       el.style.top = d.y * px + 'px';
       const sizePct = d.kind === 'scarecrow' ? 0.5 : 0.55;
       el.style.fontSize = px * sizePct + 'px';
+      if (d.kind === 'beehive') {
+        const badge = el.querySelector('.fg-bh-honey') as HTMLElement | null;
+        if (badge) {
+          const honey = d.honey ?? 0;
+          badge.style.display = honey > 0 ? 'inline-block' : 'none';
+          badge.textContent = honey > 0 ? String(honey) : '';
+        }
+      }
     }
   }
 
