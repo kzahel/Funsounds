@@ -6,11 +6,13 @@ import {
   Group,
   Mesh,
   PlaneGeometry,
+  SphereGeometry,
   Vector3,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Engine, Physics, RigidBody, Vehicle, createToonMaterial } from '../engine';
 import { TruckAudio } from './audio';
+import { preloadSkeleton, spawnRagdoll, RagdollTemplate, SpawnedRagdoll } from './ragdoll';
 
 const CUBE_COLORS = [
   0xe8564a, 0xffd24a, 0x9a66ff, 0x7cbf4a, 0x4ac4e8, 0xff8a3d, 0xfde14a, 0xff6ba0,
@@ -237,8 +239,37 @@ async function start(): Promise<void> {
 
   engine.onUpdate(() => controls.update());
 
-  // Tap-to-lob: short click (no drag) spawns a cube just below the camera and
-  // launches it forward like a slow grenade. Drags are reserved for orbiting.
+  // Tap-to-spawn: short click (no drag) spawns whatever the toolbar has
+  // selected just in front of the camera and lobs it forward. Drags are
+  // reserved for orbiting.
+  type SpawnKind = 'cube' | 'sphere' | 'skeleton';
+  let spawnKind: SpawnKind = 'cube';
+  const toolbarButtons = document.querySelectorAll<HTMLButtonElement>('#toolbar button');
+  toolbarButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      spawnKind = btn.dataset.spawn as SpawnKind;
+      toolbarButtons.forEach((b) => b.classList.toggle('active', b === btn));
+    });
+  });
+
+  // Skeleton asset is lazy-loaded the first time the user spawns one so we
+  // don't block initial frame. Cached for subsequent spawns.
+  let skeletonPromise: Promise<RagdollTemplate> | null = null;
+  function getSkeleton(): Promise<RagdollTemplate> {
+    if (!skeletonPromise) {
+      const base = (import.meta as any).env?.BASE_URL ?? '/';
+      skeletonPromise = preloadSkeleton(`${base}skeletons/iron_boy/mesh.glb`);
+    }
+    return skeletonPromise;
+  }
+
+  // Each spawned skinned ragdoll owns a per-frame drive() that maps physics
+  // bodies back onto its bones. They're all called once per render frame.
+  const activeRagdolls: SpawnedRagdoll[] = [];
+  engine.onUpdate(() => {
+    for (const r of activeRagdolls) r.drive();
+  });
+
   let downX = 0, downY = 0, downTime = 0;
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -252,19 +283,26 @@ async function start(): Promise<void> {
     const dy = e.clientY - downY;
     const dt = performance.now() - downTime;
     if (dx * dx + dy * dy > 25 || dt > 400) return; // dragged or held → orbit
-    lobCube();
+    lobSelected();
   });
 
   const lobDir = new Vector3();
   const lobSpawn = new Vector3();
-  const cubeMass = 1.5;
-  function lobCube(): void {
+  function computeLobSpawn(): void {
     engine.camera.getWorldDirection(lobDir);
-    // Spawn about a meter in front of the camera, a bit below eye level so
-    // it looks like it's coming from "the hand."
     lobSpawn.copy(engine.camera.position)
       .addScaledVector(lobDir, 1.2)
       .addScaledVector(engine.camera.up, -0.5);
+  }
+  function lobSelected(): void {
+    computeLobSpawn();
+    if (spawnKind === 'cube') lobCube();
+    else if (spawnKind === 'sphere') lobSphere();
+    else if (spawnKind === 'skeleton') lobSkeleton();
+  }
+
+  const cubeMass = 1.5;
+  function lobCube(): void {
     const half = 0.2;
     const color = CUBE_COLORS[Math.floor(Math.random() * CUBE_COLORS.length)];
     const mesh = new Mesh(
@@ -278,16 +316,57 @@ async function start(): Promise<void> {
       cubeMass,
     );
     body.setMesh(mesh);
-    // Slow lobbed toss: forward speed ~9 m/s + a bit of upward arc. Impulse is
-    // mass-scaled by PhysX, so multiply by mass to hit the target velocity.
+    applyLobImpulse(body, cubeMass);
+    trackCube(body);
+  }
+
+  function lobSphere(): void {
+    const r = 0.25;
+    const color = CUBE_COLORS[Math.floor(Math.random() * CUBE_COLORS.length)];
+    const mesh = new Mesh(
+      new SphereGeometry(r, 16, 12),
+      createToonMaterial(color, 3),
+    );
+    engine.scene.add(mesh);
+    const mass = 1.0;
+    const body = physics.createDynamicSphere(
+      r,
+      { pos: { x: lobSpawn.x, y: lobSpawn.y, z: lobSpawn.z } },
+      mass,
+    );
+    body.setMesh(mesh);
+    applyLobImpulse(body, mass);
+    trackCube(body);
+  }
+
+  async function lobSkeleton(): Promise<void> {
+    const skel = await getSkeleton();
+    const origin = new Vector3(lobSpawn.x, lobSpawn.y + 0.8, lobSpawn.z);
+    const result = spawnRagdoll(physics, engine.scene, skel, origin);
+    activeRagdolls.push(result);
+    // Push each body forward so the whole figure flies together; mass-scale
+    // the impulse so every piece reaches the same velocity.
+    const speed = 6;
+    const arc = 2;
+    for (const b of result.bodies) {
+      const mass = (b.actor as any).getMass ? (b.actor as any).getMass() : 1;
+      physics.addImpulse(b, {
+        x: lobDir.x * speed * mass,
+        y: (lobDir.y * speed + arc) * mass,
+        z: lobDir.z * speed * mass,
+      });
+      trackCube(b);
+    }
+  }
+
+  function applyLobImpulse(body: RigidBody, mass: number): void {
     const speed = 9;
     const arc = 3;
     physics.addImpulse(body, {
-      x: (lobDir.x * speed + 0) * cubeMass,
-      y: (lobDir.y * speed + arc) * cubeMass,
-      z: (lobDir.z * speed + 0) * cubeMass,
+      x: lobDir.x * speed * mass,
+      y: (lobDir.y * speed + arc) * mass,
+      z: lobDir.z * speed * mass,
     });
-    trackCube(body);
   }
 
   engine.start();

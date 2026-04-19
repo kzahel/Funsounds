@@ -20,6 +20,18 @@
       background: rgba(0,0,0,0.45); padding: 6px 12px; border-radius: 8px;
       text-decoration: none;
     }
+    #toolbar {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      display: flex; gap: 6px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: rgba(0,0,0,0.45); padding: 6px; border-radius: 10px;
+    }
+    #toolbar button {
+      min-width: 80px; padding: 8px 14px; border: 0; border-radius: 6px;
+      background: rgba(255,255,255,0.08); color: #fff; font-size: 13px;
+      cursor: pointer;
+    }
+    #toolbar button.active { background: #4ac4e8; color: #00222e; font-weight: 600; }
     #error-overlay {
       display: none; position: fixed; inset: 0; align-items: center; justify-content: center;
       background: rgba(20,0,0,0.9); color: #fff; font-family: monospace; padding: 20px; text-align: center;
@@ -28,8 +40,13 @@
 </head>
 <body>
   <canvas id="demo-canvas"></canvas>
-  <div id="hint">Arrow keys to drive · Drag to orbit · Scroll to zoom</div>
+  <div id="hint">Arrow keys drive · Drag orbits · Tap spawns the selected toolbar item</div>
   <a id="back" href="./">← Back</a>
+  <div id="toolbar">
+    <button data-spawn="cube" class="active">Cube</button>
+    <button data-spawn="sphere">Sphere</button>
+    <button data-spawn="skeleton">Skeleton</button>
+  </div>
   <div id="error-overlay"></div>
   <script type="module" src="/src/3d-demo/index.ts"></script>
 </body>
