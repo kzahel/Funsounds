@@ -1,7 +1,5 @@
 // Integration smoke test for the 3D demo truck. Boots the demo with
-// ?noCubes=1, dispatches real arrow-key events, and asserts the truck drives
-// forward and the brake slows it. Steering currently does NOT yaw the chassis
-// — that assertion is marked TODO and only logged for now.
+// ?noCubes=1, dispatches real arrow-key events, and asserts drive, steer, brake.
 //
 // Run: `npx vite --port 5173` in another terminal, then `node test-truck.mjs`.
 // Headed chromium + WebGPU flags because the demo requires WebGPU.
@@ -69,30 +67,30 @@ try {
   assert(Math.abs(afterFwd.spd) > 1.0, `forward speed magnitude > 1 (|spd|=${Math.abs(afterFwd.spd).toFixed(2)})`);
   assert(afterFwd.rpm > 500, `engine spinning (rpm=${afterFwd.rpm.toFixed(0)})`);
 
-  console.log('\n== steer right while driving 2s (expected: yaw, but currently broken) ==');
+  console.log('\n== steer right while driving 1s ==');
   const yawBefore = yawOf(afterFwd);
   await page.keyboard.down('ArrowRight');
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(1000);
   await page.screenshot({ path: '/tmp/truck-03-turning.png' });
+  await page.keyboard.up('ArrowRight');
   const afterTurn = await pose();
   const yawAfter = yawOf(afterTurn);
   const dYaw = Math.abs(((yawAfter - yawBefore + Math.PI) % (2 * Math.PI)) - Math.PI);
   console.log(`yaw ${yawBefore.toFixed(3)} -> ${yawAfter.toFixed(3)}  |dYaw|=${dYaw.toFixed(3)}`);
-  // TODO: re-enable this assertion once steering works. Right now the front
-  //       wheels turn (visible in the scene + in baseState) but the chassis
-  //       doesn't yaw — tire forces are not producing a chassis torque.
-  // assert(dYaw > 0.2, `yaw changed > 0.2 rad while steering`);
-  console.log(`  WARN steering not yawing chassis yet (see TODO)`);
+  assert(dYaw > 0.2, `yaw changed > 0.2 rad while steering`);
 
   console.log('\n== brake ==');
   await page.keyboard.up('ArrowUp');
-  await page.keyboard.up('ArrowRight');
+  const spdBeforeBrake = afterTurn.spd;
   await page.keyboard.down('ArrowDown');
-  await page.waitForTimeout(2500);
+  // Short brake window — long windows let the truck stop and then accelerate
+  // backward since ArrowDown becomes reverse once forward speed drops below
+  // 1.5. We just want to see the brake bite.
+  await page.waitForTimeout(800);
   await page.keyboard.up('ArrowDown');
   const afterBrake = await pose();
   console.log('after brake:', afterBrake);
-  assert(Math.abs(afterBrake.spd) < 2.0, `brake decelerated (|spd|<2, got ${Math.abs(afterBrake.spd).toFixed(2)})`);
+  assert(afterBrake.spd < spdBeforeBrake - 2, `brake decelerated (spd dropped by >2 from ${spdBeforeBrake.toFixed(2)}, now ${afterBrake.spd.toFixed(2)})`);
 
   const pageErrs = logs.filter((l) => l.startsWith('[pageerror]'));
   for (const l of pageErrs) console.log(l);
@@ -106,4 +104,4 @@ try {
 }
 
 if (fail) { console.log('\nFAIL'); process.exit(1); }
-console.log('\nPASS (modulo TODO on steering)');
+console.log('\nPASS');

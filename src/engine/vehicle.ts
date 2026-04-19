@@ -142,6 +142,12 @@ export class Vehicle {
     const actor = pxVehicle.physXState.physxActor.rigidBody;
     physics.scene.addActor(actor);
 
+    // Attach pickup-bed wall colliders on top of the chassis box. Vehicle 2
+    // only takes a single geometry in physXParams.create(), so we add the
+    // walls directly onto the actor after initialization. Their combined mass
+    // contribution is ignored — the chassis mass/MOI is set explicitly below.
+    this._attachBedColliders(actor);
+
     const initPose = this._makeTransform(pose);
     actor.setGlobalPose(initPose, true);
     this._P.destroy(initPose);
@@ -199,11 +205,12 @@ export class Vehicle {
     if (this._released) return;
     const v = this._pxVehicle;
 
-    // Write inputs into command state.
+    // Write inputs into command state. PhysX Vehicle 2's steer command is
+    // inverted relative to our "+1 = right" convention (matches kool's port).
     v.commandState.throttle = this._throttle;
     v.commandState.set_brakes(0, this._brake);
     v.commandState.nbBrakes = 1;
-    v.commandState.steer = this._steer;
+    v.commandState.steer = -this._steer;
 
     // Forward/reverse: toggle gearbox target between neutral-1 and automatic.
     const gearBox = v.engineDriveParams.gearBoxParams;
@@ -386,18 +393,24 @@ export class Vehicle {
     const travelDir = new P.PxVec3(0, -1, 0);
     const forceAppPoint = new P.PxVec3(0, 0, -0.2);
     const zero = new P.PxVec3(0, 0, 0);
+    const identQ = new P.PxQuat(P.PxIDENTITYEnum.PxIdentity);
     for (let i = 0; i < 4; i++) {
       const susp = v.baseParams.get_suspensionParams(i);
       const suspForce = v.baseParams.get_suspensionForceParams(i);
       const suspComp = v.baseParams.get_suspensionComplianceParams(i);
 
       const attachPos = new P.PxVec3(wheelOffsets[i].x, wheelOffsets[i].y, wheelOffsets[i].z);
-      // suspensionAttachment and wheelAttachment default to identity rotation,
-      // so we only overwrite the translation .p and travel direction/distance.
+      // PxVehicleSuspensionParams() default-constructs its transform fields
+      // to zero — including the quats — which leaves the tire's rolling axis
+      // undefined and makes lateral tire forces apply in a garbage direction
+      // (no chassis yaw torque, even with visible steer on the wheels).
+      // Explicitly set both .q's to identity, matching kool's Kotlin port.
       susp.suspensionAttachment.p = attachPos;
+      susp.suspensionAttachment.q = identQ;
       susp.suspensionTravelDir = travelDir;
       susp.suspensionTravelDist = p.maxCompression + p.maxDroop;
       susp.wheelAttachment.p = zero;
+      susp.wheelAttachment.q = identQ;
       P.destroy(attachPos);
 
       suspForce.damping = p.springDamperRate;
@@ -412,6 +425,7 @@ export class Vehicle {
     P.destroy(travelDir);
     P.destroy(forceAppPoint);
     P.destroy(zero);
+    P.destroy(identQ);
     P.destroy(sprungMasses);
     P.destroy(pxOffsets);
 
@@ -559,6 +573,49 @@ export class Vehicle {
       v.engineDriveParams.tankDifferentialParams.set_torqueRatios(i, 0.25);
       v.engineDriveParams.tankDifferentialParams.set_aveWheelSpeedRatios(i, 0.25);
     }
+  }
+
+  // Attach 3 thin boxes (two sides + tailgate) above the chassis to form an
+  // open cargo bed. Dimensions are derived from chassisDims so a wider or
+  // longer chassis gets proportionally sized walls. The mesh-side walls in
+  // the demo's buildTruckMesh must be kept in sync with these positions.
+  private _attachBedColliders(actor: any): void {
+    const P = this._P;
+    const d = this.props.chassisDims;
+    const wallThickness = 0.08;
+    const wallHeight = 0.5;
+    const halfH = wallHeight / 2;
+    const halfLen = d.z * 0.2;                  // bed runs 40% of chassis length
+    const centerZ = -d.z * 0.3;                 // centered on rear half
+    const sideX = d.x / 2 - wallThickness;
+    const wallY = d.y / 2 + halfH;              // sit on top of chassis box
+
+    const shapeFlags = new P.PxShapeFlags(
+      P.PxShapeFlagEnum.eSIMULATION_SHAPE | P.PxShapeFlagEnum.eSCENE_QUERY_SHAPE,
+    );
+    const filterData = new P.PxFilterData(1, 1, 0, 0);
+
+    const addWall = (halfX: number, halfY: number, halfZ: number, lx: number, ly: number, lz: number): void => {
+      const geom = new P.PxBoxGeometry(halfX, halfY, halfZ);
+      const shape = this._physics.physics.createShape(geom, this._physics.material, true, shapeFlags);
+      shape.setSimulationFilterData(filterData);
+      const t = new P.PxTransform(P.PxIDENTITYEnum.PxIdentity);
+      const v = new P.PxVec3(lx, ly, lz);
+      t.p = v;
+      shape.setLocalPose(t);
+      actor.attachShape(shape);
+      shape.release();
+      P.destroy(geom);
+      P.destroy(v);
+      P.destroy(t);
+    };
+
+    addWall(wallThickness, halfH, halfLen, sideX, wallY, centerZ);   // right
+    addWall(wallThickness, halfH, halfLen, -sideX, wallY, centerZ);  // left
+    addWall(d.x / 2, halfH, wallThickness, 0, wallY, centerZ - halfLen); // tail
+
+    P.destroy(shapeFlags);
+    P.destroy(filterData);
   }
 
   private _makeTransform(pose: Pose): any {

@@ -6,10 +6,14 @@ import {
   Group,
   Mesh,
   PlaneGeometry,
-  SphereGeometry,
+  Vector3,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Engine, Physics, Vehicle, createToonMaterial } from '../engine';
+
+const CUBE_COLORS = [
+  0xe8564a, 0xffd24a, 0x9a66ff, 0x7cbf4a, 0x4ac4e8, 0xff8a3d, 0xfde14a, 0xff6ba0,
+];
 
 async function start(): Promise<void> {
   const canvas = document.getElementById('demo-canvas') as HTMLCanvasElement;
@@ -43,35 +47,72 @@ async function start(): Promise<void> {
   physics.createStaticPlane({ pos: { x: 0, y: 0, z: 0 } });
 
   if (spawnCubes) {
-    const cubeA = new Mesh(new BoxGeometry(1.5, 1.5, 1.5), createToonMaterial(0xe8564a, 3));
-    cubeA.position.set(-2, 0.75, 0);
-    engine.scene.add(cubeA);
-
-    const cubeB = new Mesh(new BoxGeometry(1, 2, 1), createToonMaterial(0xffd24a, 3));
-    cubeB.position.set(1.5, 1, -1);
-    engine.scene.add(cubeB);
-
-    const sphere = new Mesh(new SphereGeometry(0.8, 24, 16), createToonMaterial(0x9a66ff, 3));
-    sphere.position.set(0, 0.8, 2);
-    engine.scene.add(sphere);
-
-    const barrel = new Mesh(new CylinderGeometry(0.5, 0.5, 1.2, 16), createToonMaterial(0xc07a3a, 3));
-    barrel.position.set(2.5, 0.6, 1.5);
-    engine.scene.add(barrel);
-
-    engine.onUpdate(() => {
-      sphere.position.y = 0.9 + Math.sin(performance.now() * 0.002) * 0.3;
-      cubeA.rotation.y += 0.005;
-      cubeB.rotation.y -= 0.003;
-    });
+    // Drivable cube pile centered at the origin. The truck spawns offset on
+    // +Z and faces -Z so it's pointed straight at the pile.
+    const half = 0.5;
+    const spacing = 1.4;
+    const cols = 6;
+    const rows = 4;
+    const layers = 3;
+    for (let y = 0; y < layers; y++) {
+      for (let x = 0; x < cols; x++) {
+        for (let z = 0; z < rows; z++) {
+          const px = (x - (cols - 1) / 2) * spacing;
+          const pz = (z - (rows - 1) / 2) * spacing;
+          const py = half + 0.02 + y * (half * 2 + 0.05);
+          const color = CUBE_COLORS[(x + y + z) % CUBE_COLORS.length];
+          const mesh = new Mesh(
+            new BoxGeometry(half * 2, half * 2, half * 2),
+            createToonMaterial(color, 3),
+          );
+          engine.scene.add(mesh);
+          const body = physics.createDynamicBox(
+            { x: half, y: half, z: half },
+            { pos: { x: px, y: py, z: pz } },
+            1,
+          );
+          body.setMesh(mesh);
+        }
+      }
+    }
   }
 
   // ── Truck ─────────────────────────────────────────────────────────────────
   const truckGroup = buildTruckMesh();
   engine.scene.add(truckGroup);
-  // Spawn slightly in front of the cube cluster, facing -Z.
-  const truck = Vehicle.create(physics, { pos: { x: 0, y: 1.2, z: 6 } });
+  // Spawn at +Z facing -Z so the truck points straight at the cube pile.
+  // quat (0, 1, 0, 0) is a 180° rotation about the Y axis.
+  const truck = Vehicle.create(physics, {
+    pos: { x: 0, y: 1.2, z: 6 },
+    quat: { x: 0, y: 1, z: 0, w: 0 },
+  });
   truck.chassis.setMesh(truckGroup);
+
+  if (spawnCubes) {
+    // Drop a few light cubes into the truck bed. Truck faces -Z in world,
+    // bed walls extend from y≈1.7 to y≈2.2 (world), so spawn above that.
+    // Keep z > 7 so they land away from the cab mesh.
+    const bedHalf = 0.2;
+    const bedCubes = [
+      { x: -0.4, y: 3.0, z: 7.3 },
+      { x: 0.4, y: 3.0, z: 7.6 },
+      { x: 0.0, y: 3.5, z: 7.9 },
+    ];
+    for (let i = 0; i < bedCubes.length; i++) {
+      const p = bedCubes[i];
+      const mesh = new Mesh(
+        new BoxGeometry(bedHalf * 2, bedHalf * 2, bedHalf * 2),
+        createToonMaterial(CUBE_COLORS[(i + 2) % CUBE_COLORS.length], 3),
+      );
+      engine.scene.add(mesh);
+      const body = physics.createDynamicBox(
+        { x: bedHalf, y: bedHalf, z: bedHalf },
+        { pos: p },
+        0.5,
+      );
+      body.setMesh(mesh);
+    }
+  }
 
   // Bind the 4 wheel meshes to vehicle wheel local poses each frame. Wheels
   // are children of truckGroup, so their local transform is exactly the
@@ -140,6 +181,59 @@ async function start(): Promise<void> {
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
 
   engine.onUpdate(() => controls.update());
+
+  // Tap-to-lob: short click (no drag) spawns a cube just below the camera and
+  // launches it forward like a slow grenade. Drags are reserved for orbiting.
+  let downX = 0, downY = 0, downTime = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    downX = e.clientX;
+    downY = e.clientY;
+    downTime = performance.now();
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (e.button !== 0) return;
+    const dx = e.clientX - downX;
+    const dy = e.clientY - downY;
+    const dt = performance.now() - downTime;
+    if (dx * dx + dy * dy > 25 || dt > 400) return; // dragged or held → orbit
+    lobCube();
+  });
+
+  const lobDir = new Vector3();
+  const lobSpawn = new Vector3();
+  const cubeMass = 1.5;
+  function lobCube(): void {
+    engine.camera.getWorldDirection(lobDir);
+    // Spawn about a meter in front of the camera, a bit below eye level so
+    // it looks like it's coming from "the hand."
+    lobSpawn.copy(engine.camera.position)
+      .addScaledVector(lobDir, 1.2)
+      .addScaledVector(engine.camera.up, -0.5);
+    const half = 0.2;
+    const color = CUBE_COLORS[Math.floor(Math.random() * CUBE_COLORS.length)];
+    const mesh = new Mesh(
+      new BoxGeometry(half * 2, half * 2, half * 2),
+      createToonMaterial(color, 3),
+    );
+    engine.scene.add(mesh);
+    const body = physics.createDynamicBox(
+      { x: half, y: half, z: half },
+      { pos: { x: lobSpawn.x, y: lobSpawn.y, z: lobSpawn.z } },
+      cubeMass,
+    );
+    body.setMesh(mesh);
+    // Slow lobbed toss: forward speed ~9 m/s + a bit of upward arc. Impulse is
+    // mass-scaled by PhysX, so multiply by mass to hit the target velocity.
+    const speed = 9;
+    const arc = 3;
+    physics.addImpulse(body, {
+      x: (lobDir.x * speed + 0) * cubeMass,
+      y: (lobDir.y * speed + arc) * cubeMass,
+      z: (lobDir.z * speed + 0) * cubeMass,
+    });
+  }
+
   engine.start();
 
   // Runtime hooks so we can A/B the look from devtools and drive from tests.
@@ -156,25 +250,29 @@ function buildTruckMesh(): Group {
   body.position.y = -0.15;
   g.add(body);
 
+  // Front wheels (the ones that steer) are at +Z, so cab + windshield go on
+  // the +Z side and the bed trails behind at -Z.
   const cab = new Mesh(new BoxGeometry(1.8, 0.7, 1.8), createToonMaterial(0xa03020, 3));
-  cab.position.set(0, 0.45, -0.6);
+  cab.position.set(0, 0.45, 0.6);
   g.add(cab);
 
-  // Windshield darker strip on the cab front.
+  // Windshield darker strip on the cab front (facing +Z, the driving direction).
   const windshield = new Mesh(new BoxGeometry(1.7, 0.35, 0.08), createToonMaterial(0x2a3040, 3));
-  windshield.position.set(0, 0.55, -1.45);
+  windshield.position.set(0, 0.55, 1.45);
   g.add(windshield);
 
-  // Bed: 3 short walls (left, right, back) forming an open truck bed.
+  // Bed walls — positions must match Vehicle._attachBedColliders so the
+  // visible mesh lines up with the physics collider. chassisDims=(1.9,1,4.6)
+  // → side walls at x=±0.87, y=0.75, z=-1.38, tail at z=-2.3, 0.5m tall.
   const bedColor = 0xa03020;
-  const wallL = new Mesh(new BoxGeometry(0.12, 0.35, 1.9), createToonMaterial(bedColor, 3));
-  wallL.position.set(-0.89, 0.25, 1.3);
+  const wallL = new Mesh(new BoxGeometry(0.16, 0.5, 1.84), createToonMaterial(bedColor, 3));
+  wallL.position.set(-0.87, 0.75, -1.38);
   g.add(wallL);
-  const wallR = new Mesh(new BoxGeometry(0.12, 0.35, 1.9), createToonMaterial(bedColor, 3));
-  wallR.position.set(0.89, 0.25, 1.3);
+  const wallR = new Mesh(new BoxGeometry(0.16, 0.5, 1.84), createToonMaterial(bedColor, 3));
+  wallR.position.set(0.87, 0.75, -1.38);
   g.add(wallR);
-  const wallB = new Mesh(new BoxGeometry(1.78, 0.35, 0.12), createToonMaterial(bedColor, 3));
-  wallB.position.set(0, 0.25, 2.2);
+  const wallB = new Mesh(new BoxGeometry(1.9, 0.5, 0.16), createToonMaterial(bedColor, 3));
+  wallB.position.set(0, 0.75, -2.3);
   g.add(wallB);
 
   // 4 wheels. CylinderGeometry's axis defaults to +Y. We bake a 90°-about-Z
