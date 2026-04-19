@@ -7,3 +7,12 @@ export {
   DEFAULT_EDGE_PARAMS,
   type EdgeDetectionParams,
 } from './post/edge-detection';
+export { Physics, RigidBody } from './physics';
+export type {
+  Vec3Like,
+  QuatLike,
+  Pose,
+  MeshLike,
+  RaycastHit,
+  PhysicsOptions,
+} from './physics';

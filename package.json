@@ -23,6 +23,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
+    "physx-js-webidl": "^2.7.3",
     "three": "^0.184.0"
   }
 }
