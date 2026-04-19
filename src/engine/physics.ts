@@ -25,6 +25,23 @@ export interface PhysicsOptions {
 // constructor for the full pair-matrix.
 export const FILTER_NORMAL = 1 << 0;
 export const FILTER_WHEEL = 1 << 1;
+// Ragdoll bodies never pair with each other — 55 capsules stacked end-to-end
+// produce permanent overlaps at every joint anchor, which fight tight joint
+// limits and explode the solver. Ragdoll bodies still collide with FILTER_NORMAL
+// (ground, cubes, truck chassis) — just not with other FILTER_RAGDOLL bodies.
+export const FILTER_RAGDOLL = 1 << 2;
+
+// q_b_inv * q_a — used when aligning two D6 joint frames so a body's
+// current rotation is the joint's zero-swing/zero-twist state.
+function quatBInvA(qb: QuatLike, qa: QuatLike): QuatLike {
+  const bx = -qb.x, by = -qb.y, bz = -qb.z, bw = qb.w;
+  return {
+    w: bw * qa.w - bx * qa.x - by * qa.y - bz * qa.z,
+    x: bw * qa.x + bx * qa.w + by * qa.z - bz * qa.y,
+    y: bw * qa.y - bx * qa.z + by * qa.w + bz * qa.x,
+    z: bw * qa.z + bx * qa.y - by * qa.x + bz * qa.w,
+  };
+}
 
 // physx-js-webidl ships both the .mjs factory and .wasm alongside it. Its
 // emscripten shim resolves the wasm via `new URL('...', import.meta.url)`,
@@ -140,6 +157,7 @@ export class Physics {
   private _shapeFlags: any;
   private _filterDataStatic: any;
   private _filterDataDynamic: any;
+  private _filterDataRagdoll: any;
 
   private _topLevel: any;
   private _vehicleTopLevel: any;
@@ -245,6 +263,11 @@ export class Physics {
     this._filterDataDynamic = new P.PxFilterData(
       FILTER_NORMAL | FILTER_WHEEL, FILTER_NORMAL | FILTER_WHEEL, 0, 0,
     );
+    // Ragdoll bodies: word0 = RAGDOLL (their own category bit), word1 = NORMAL
+    // (what they collide with). Two ragdoll bodies: RAGDOLL&NORMAL=0 both ways
+    // → no pair. Ragdoll vs normal dynamic: dyn.w0 (NORMAL|WHEEL) & rag.w1
+    // (NORMAL) = NORMAL → pair, so impacts with cubes and the ground still land.
+    this._filterDataRagdoll = new P.PxFilterData(FILTER_RAGDOLL, FILTER_NORMAL, 0, 0);
 
     this._scratchVec = new P.PxVec3(0, 0, 0);
     this._scratchOrigin = new P.PxVec3(0, 0, 0);
@@ -274,13 +297,13 @@ export class Physics {
     return rb;
   }
 
-  createDynamicSphere(radius: number, pose: Pose, mass = 1): RigidBody {
+  createDynamicSphere(radius: number, pose: Pose, mass = 1, ragdoll = false): RigidBody {
     const P = this._P;
     const geom = new P.PxSphereGeometry(radius);
     const t = this._buildTransform(pose);
     const actor = this.physics.createRigidDynamic(t);
     const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
-    shape.setSimulationFilterData(this._filterDataDynamic);
+    shape.setSimulationFilterData(ragdoll ? this._filterDataRagdoll : this._filterDataDynamic);
     actor.attachShape(shape);
     this._bodyExt.setMassAndUpdateInertia(actor, mass);
     this.scene.addActor(actor);
@@ -295,14 +318,15 @@ export class Physics {
 
   // PxCapsuleGeometry's long axis is +X in local space. Caller is responsible
   // for orienting the actor via pose.quat so the capsule spans the desired
-  // world-space segment.
-  createDynamicCapsule(radius: number, halfHeight: number, pose: Pose, mass = 1): RigidBody {
+  // world-space segment. Pass ragdoll=true to use the ragdoll collision filter
+  // so adjacent capsules in the same skeleton don't self-collide.
+  createDynamicCapsule(radius: number, halfHeight: number, pose: Pose, mass = 1, ragdoll = false): RigidBody {
     const P = this._P;
     const geom = new P.PxCapsuleGeometry(radius, halfHeight);
     const t = this._buildTransform(pose);
     const actor = this.physics.createRigidDynamic(t);
     const shape = this.physics.createShape(geom, this.material, true, this._shapeFlags);
-    shape.setSimulationFilterData(this._filterDataDynamic);
+    shape.setSimulationFilterData(ragdoll ? this._filterDataRagdoll : this._filterDataDynamic);
     actor.attachShape(shape);
     this._bodyExt.setMassAndUpdateInertia(actor, mass);
     this.scene.addActor(actor);
@@ -336,6 +360,66 @@ export class Physics {
       joint.setSphericalJointFlag(P.PxSphericalJointFlagEnum.eLIMIT_ENABLED, true);
       P.destroy(cone);
     }
+    P.destroy(frameA);
+    P.destroy(frameB);
+    return joint;
+  }
+
+  // D6 joint with a configurable swing cone and (optional) twist range. All
+  // linear axes are locked so the bodies behave like a ball-and-socket — the
+  // angular axes are what give D6 its per-DOF control that spherical lacks.
+  // Joint frames are picked so the bodies' *current* rotations are the "zero
+  // swing / zero twist" rest state — essential for tight ragdoll limits where
+  // a misaligned rest pose would spawn at the limit and jitter.
+  createD6Joint(
+    a: RigidBody, b: RigidBody, worldAnchor: Vec3Like,
+    swingYRad: number, swingZRad: number,
+    twistRad?: number,
+  ): any {
+    const P = this._P;
+    // getGlobalPose() returns a wrapper over stack-temp memory that gets
+    // reused by the next embind call. Copy the quaternions into plain JS
+    // numbers now, before anything else touches the stack (including the
+    // two _localFrameAt calls below, which invoke getGlobalPose again).
+    const ta = a.actor.getGlobalPose();
+    const qax = ta.q.x, qay = ta.q.y, qaz = ta.q.z, qaw = ta.q.w;
+    const tb = b.actor.getGlobalPose();
+    const qbx = tb.q.x, qby = tb.q.y, qbz = tb.q.z, qbw = tb.q.w;
+    const relQ = quatBInvA(
+      { x: qbx, y: qby, z: qbz, w: qbw },
+      { x: qax, y: qay, z: qaz, w: qaw },
+    );
+    // frame_a has identity local rotation; frame_b's local rotation is chosen
+    // so (b.quat × frame_b.quat) == (a.quat × identity) in world space.
+    const frameA = this._localFrameAt(a, worldAnchor);
+    const frameB = this._localFrameAt(b, worldAnchor);
+    this._scratchPoseQuat.set_x(relQ.x);
+    this._scratchPoseQuat.set_y(relQ.y);
+    this._scratchPoseQuat.set_z(relQ.z);
+    this._scratchPoseQuat.set_w(relQ.w);
+    frameB.set_q(this._scratchPoseQuat);
+
+    const joint = P.PxTopLevelFunctions.prototype.D6JointCreate(
+      this.physics, a.actor, frameA, b.actor, frameB,
+    );
+    const Axis = P.PxD6AxisEnum;
+    const Motion = P.PxD6MotionEnum;
+    joint.setMotion(Axis.eX, Motion.eLOCKED);
+    joint.setMotion(Axis.eY, Motion.eLOCKED);
+    joint.setMotion(Axis.eZ, Motion.eLOCKED);
+    joint.setMotion(Axis.eSWING1, Motion.eLIMITED);
+    joint.setMotion(Axis.eSWING2, Motion.eLIMITED);
+    joint.setMotion(Axis.eTWIST, twistRad != null ? Motion.eLIMITED : Motion.eLOCKED);
+
+    const cone = new P.PxJointLimitCone(swingYRad, swingZRad);
+    joint.setSwingLimit(cone);
+    P.destroy(cone);
+    if (twistRad != null) {
+      const tw = new P.PxJointAngularLimitPair(-twistRad, twistRad);
+      joint.setTwistLimit(tw);
+      P.destroy(tw);
+    }
+
     P.destroy(frameA);
     P.destroy(frameB);
     return joint;
@@ -601,6 +685,7 @@ export class Physics {
     this._foundation.release();
     P.destroy(this._filterDataStatic);
     P.destroy(this._filterDataDynamic);
+    P.destroy(this._filterDataRagdoll);
     P.destroy(this._shapeFlags);
     P.destroy(this.cookingParams);
     P.destroy(this._sceneDesc);

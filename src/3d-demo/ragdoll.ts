@@ -71,7 +71,7 @@ export async function preloadSkeleton(url: string): Promise<RagdollTemplate> {
     if (m.bindWorldPos.y > maxY) maxY = m.bindWorldPos.y;
   }
   const span = maxY - minY;
-  const suggestedScale = span > 1e-4 ? 1.8 / span : 1.0;
+  const suggestedScale = span > 1e-4 ? 1.2 / span : 1.0;
 
   return { sceneTemplate: gltf.scene, bonesMeta, rootIndices, suggestedScale };
 }
@@ -161,6 +161,7 @@ export function spawnRagdoll(
           quat: { x: meta.bindWorldQuat.x, y: meta.bindWorldQuat.y, z: meta.bindWorldQuat.z, w: meta.bindWorldQuat.w },
         },
         0.8,
+        true,
       );
       body.setMesh(poseProxy);
       bodies[i] = body;
@@ -186,6 +187,7 @@ export function spawnRagdoll(
           quat: { x: meta.bindWorldQuat.x, y: meta.bindWorldQuat.y, z: meta.bindWorldQuat.z, w: meta.bindWorldQuat.w },
         },
         0.2,
+        true,
       );
       body.setMesh(poseProxy);
       bodies[i] = body;
@@ -220,6 +222,7 @@ export function spawnRagdoll(
         quat: { x: _bodyQuat.x, y: _bodyQuat.y, z: _bodyQuat.z, w: _bodyQuat.w },
       },
       0.6,
+      true,
     );
     body.setMesh(poseProxy);
     bodies[i] = body;
@@ -232,9 +235,7 @@ export function spawnRagdoll(
     });
   }
 
-  // Spherical joints: each non-root bone's body is anchored to its parent's
-  // body at the parent bone's spawn-world position (the meeting point between
-  // the two capsule segments).
+  const SWING = (5 * Math.PI) / 180;
   for (let i = 0; i < tpl.bonesMeta.length; i++) {
     const meta = tpl.bonesMeta[i];
     if (meta.parent < 0) continue;
@@ -242,15 +243,14 @@ export function spawnRagdoll(
     const b = bodies[meta.parent];
     if (!a || !b) continue;
     const anchor = spawnPos[meta.parent];
-    physics.createSphericalJoint(
+    physics.createD6Joint(
       a, b,
       { x: anchor.x, y: anchor.y, z: anchor.z },
-      Math.PI * 0.5, Math.PI * 0.5,
+      SWING, SWING,
     );
   }
 
-  // Stitch additional disjoint roots to the first root with a loose spherical
-  // joint so the whole figure stays as one object.
+  // Stitch additional disjoint roots to the first root with the same rigid D6.
   if (tpl.rootIndices.length > 1) {
     const anchorIdx = tpl.rootIndices[0];
     const anchorBody = bodies[anchorIdx];
@@ -262,7 +262,7 @@ export function spawnRagdoll(
         const midX = (spawnPos[anchorIdx].x + spawnPos[extraIdx].x) * 0.5;
         const midY = (spawnPos[anchorIdx].y + spawnPos[extraIdx].y) * 0.5;
         const midZ = (spawnPos[anchorIdx].z + spawnPos[extraIdx].z) * 0.5;
-        physics.createSphericalJoint(anchorBody, extraBody, { x: midX, y: midY, z: midZ });
+        physics.createSphericalJoint(anchorBody, extraBody, { x: midX, y: midY, z: midZ }, SWING, SWING);
       }
     }
   }

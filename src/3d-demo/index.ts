@@ -258,7 +258,7 @@ async function start(): Promise<void> {
   function getSkeleton(): Promise<RagdollTemplate> {
     if (!skeletonPromise) {
       const base = (import.meta as any).env?.BASE_URL ?? '/';
-      skeletonPromise = preloadSkeleton(`${base}skeletons/iron_boy/mesh.glb`);
+      skeletonPromise = preloadSkeleton(`${base}skeletons/owl/mesh.glb`);
     }
     return skeletonPromise;
   }
@@ -341,22 +341,10 @@ async function start(): Promise<void> {
 
   async function lobSkeleton(): Promise<void> {
     const skel = await getSkeleton();
-    const origin = new Vector3(lobSpawn.x, lobSpawn.y + 0.8, lobSpawn.z);
+    const origin = new Vector3(lobSpawn.x, lobSpawn.y + 1.8, lobSpawn.z);
     const result = spawnRagdoll(physics, engine.scene, skel, origin);
     activeRagdolls.push(result);
-    // Push each body forward so the whole figure flies together; mass-scale
-    // the impulse so every piece reaches the same velocity.
-    const speed = 6;
-    const arc = 2;
-    for (const b of result.bodies) {
-      const mass = (b.actor as any).getMass ? (b.actor as any).getMass() : 1;
-      physics.addImpulse(b, {
-        x: lobDir.x * speed * mass,
-        y: (lobDir.y * speed + arc) * mass,
-        z: lobDir.z * speed * mass,
-      });
-      trackCube(b);
-    }
+    for (const b of result.bodies) trackCube(b);
   }
 
   function applyLobImpulse(body: RigidBody, mass: number): void {
