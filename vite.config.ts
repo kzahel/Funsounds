@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         'qbert-harness': resolve(__dirname, 'qbert-harness.html'),
+        '3d-demo': resolve(__dirname, '3d-demo.html'),
       },
     },
   },

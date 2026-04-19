@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Pixel Art Engine Demo</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+    #demo-canvas { display: block; width: 100vw; height: 100vh; }
+    #hint {
+      position: fixed; left: 12px; top: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #fff; font-size: 13px; opacity: 0.75;
+      background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 8px;
+      pointer-events: none;
+    }
+    #back {
+      position: fixed; right: 12px; top: 12px;
+      font-family: inherit; font-size: 13px; color: #fff;
+      background: rgba(0,0,0,0.45); padding: 6px 12px; border-radius: 8px;
+      text-decoration: none;
+    }
+    #error-overlay {
+      display: none; position: fixed; inset: 0; align-items: center; justify-content: center;
+      background: rgba(20,0,0,0.9); color: #fff; font-family: monospace; padding: 20px; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="demo-canvas"></canvas>
+  <div id="hint">Drag to orbit · Scroll to zoom</div>
+  <a id="back" href="./">← Back</a>
+  <div id="error-overlay"></div>
+  <script type="module" src="/src/3d-demo/index.ts"></script>
+</body>
+</html>
