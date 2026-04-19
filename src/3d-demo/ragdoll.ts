@@ -123,6 +123,11 @@ export function spawnRagdoll(
   });
   if (!skinned) throw new Error('spawnRagdoll: cloned scene has no SkinnedMesh');
   const sm = skinned as SkinnedMesh;
+  // The mesh's world-space verts are driven entirely by bone matrices we set
+  // manually; the SkinnedMesh itself never moves, so Three.js's default
+  // bounding-sphere frustum check sees an empty volume at the spawn origin
+  // and culls the mesh once its bones walk away from it. Disable culling.
+  sm.frustumCulled = false;
   const bones = sm.skeleton.bones;
 
   // Spawn-world positions for every bone (bind pose × scale + origin).

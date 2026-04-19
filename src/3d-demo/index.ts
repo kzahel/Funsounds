@@ -363,6 +363,7 @@ async function start(): Promise<void> {
   (window as any).engine = engine;
   (window as any).physics = physics;
   (window as any).truck = truck;
+  (window as any).activeRagdolls = activeRagdolls;
 }
 
 // Build a boxy pickup: lower chassis + cab + 3-sided bed walls + 4 wheels.

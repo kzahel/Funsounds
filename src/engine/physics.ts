@@ -306,6 +306,7 @@ export class Physics {
     shape.setSimulationFilterData(ragdoll ? this._filterDataRagdoll : this._filterDataDynamic);
     actor.attachShape(shape);
     this._bodyExt.setMassAndUpdateInertia(actor, mass);
+    if (ragdoll) actor.setSolverIterationCounts(16, 4);
     this.scene.addActor(actor);
     P.destroy(geom);
     P.destroy(t);
@@ -329,6 +330,7 @@ export class Physics {
     shape.setSimulationFilterData(ragdoll ? this._filterDataRagdoll : this._filterDataDynamic);
     actor.attachShape(shape);
     this._bodyExt.setMassAndUpdateInertia(actor, mass);
+    if (ragdoll) actor.setSolverIterationCounts(16, 4);
     this.scene.addActor(actor);
     P.destroy(geom);
     P.destroy(t);
