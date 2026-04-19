@@ -206,10 +206,14 @@ function slotMeta(slot: number): SlotMeta | null {
 }
 
 function writeSlot(slot: number, st: GameState): void {
+  const snap = cloneState(st);
+  // Never bake the menu's paused flag or stale held-key state into a save.
+  snap.paused = false;
+  snap.player.moving = { up: false, down: false, left: false, right: false };
   const payload: SavePayload = {
     version: SAVE_VERSION,
     savedAt: new Date().toISOString(),
-    state: cloneState(st),
+    state: snap,
   };
   localStorage.setItem(slotKey(slot), JSON.stringify(payload));
 }
@@ -420,6 +424,11 @@ function handleKeyUp(e: KeyboardEvent): void {
   processAction(state, { type: 'set_player_moving', dir, moving: false });
 }
 
+function clearPlayerMovement(): void {
+  if (!gameActive || !state) return;
+  state.player.moving = { up: false, down: false, left: false, right: false };
+}
+
 function bindTouchPad(): void {
   const pad = document.getElementById('fg-touchpad');
   if (!pad) return;
@@ -481,6 +490,12 @@ function rebuildMenuRows(): void {
       : `Slot ${i} · Empty`;
     saveBtn.textContent = `Save to ${saveLabel}`;
     saveBtn.addEventListener('click', () => {
+      if (meta) {
+        const ok = window.confirm(
+          `Overwrite Slot ${i}?\n\nCurrent: Year ${meta.year} ${meta.season} · $${meta.money} · ${formatWhen(meta.savedAt)}`,
+        );
+        if (!ok) return;
+      }
       writeSlot(i, state);
       rebuildMenuRows();
     });
@@ -536,6 +551,13 @@ export async function initFarm(): Promise<void> {
   containerEl.addEventListener('pointerdown', handlePointerDown);
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('keyup', handleKeyUp);
+  // Clear stuck movement when the tab loses focus — keyup events don't fire
+  // if the key is released while another window has focus, which would leave
+  // the player walking (or "unable to change direction") on return.
+  window.addEventListener('blur', clearPlayerMovement);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearPlayerMovement();
+  });
   bindTouchPad();
 
   menuBtnEl.addEventListener('click', () => {
