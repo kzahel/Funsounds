@@ -91,6 +91,7 @@ try {
       hasGPU: 'gpu' in navigator,
       engineBackend: w.engine?.renderer?.backend?.isWebGPUBackend ? 'webgpu' : 'other',
       sceneChildren: w.engine?.scene?.children?.length ?? -1,
+      batchPath: w.physics?.batchPathActive ?? null,
     };
   });
 

@@ -78,6 +78,19 @@ export class RigidBody {
     this.bqx = t.q.x; this.bqy = t.q.y; this.bqz = t.q.z; this.bqw = t.q.w;
   }
 
+  // Same shift-the-ring logic as _capturePose, but pose data came from the
+  // batch slab so we already have raw floats and skip the getGlobalPose()
+  // embind call per body.
+  _capturePoseFromSlab(
+    px: number, py: number, pz: number,
+    qx: number, qy: number, qz: number, qw: number,
+  ): void {
+    this.ax = this.bx; this.ay = this.by; this.az = this.bz;
+    this.aqx = this.bqx; this.aqy = this.bqy; this.aqz = this.bqz; this.aqw = this.bqw;
+    this.bx = px; this.by = py; this.bz = pz;
+    this.bqx = qx; this.bqy = qy; this.bqz = qz; this.bqw = qw;
+  }
+
   // When a body goes to rest, the active-actors list stops reporting it, so
   // poseA/poseB get frozen with the last-captured tick. Snap the mesh to the
   // final pose once so it stops mid-interpolation between two stale slots.
@@ -124,6 +137,16 @@ export class Physics {
   private _support: any;
   private _bodyExt: any;
 
+  // Batch readback uses the fork's `SupportFunctions.PxScene_writeActiveTransforms`,
+  // which dumps every active actor's {ptrU32, px, py, pz, qx, qy, qz, qw}
+  // into a HEAPF32 slab in a single wasm call. ~10x faster than the stock
+  // per-body loop at 2k+ bodies. Feature-detected at construction so the
+  // same code runs on the unpatched npm build (stock path).
+  private _hasBatch: boolean;
+  private _slabPtr = 0;
+  private _slabCapSlots = 0;
+  private static readonly _BATCH_STRIDE = 8;
+
   // Reusable scratch objects — single-threaded so we don't need per-body pools.
   private _scratchVec: any;
   private _scratchOrigin: any;
@@ -150,6 +173,11 @@ export class Physics {
     this._topLevel = P.PxTopLevelFunctions.prototype;
     this._support = P.SupportFunctions.prototype;
     this._bodyExt = P.PxRigidBodyExt.prototype;
+    // Set `globalThis.__disableBatch = true` in devtools before loading to
+    // force the stock readback path for A/B perf comparisons on a build
+    // that does have the batch fn.
+    this._hasBatch = typeof this._support.PxScene_writeActiveTransforms === 'function'
+      && !((globalThis as any).__disableBatch);
 
     // PHYSICS_VERSION is exposed both on the module (as a convenience) and
     // on PxTopLevelFunctions.prototype (where all the other "static" methods
@@ -313,6 +341,14 @@ export class Physics {
     this.scene.fetchResults(true);
 
     for (const rb of this._bodies.values()) rb.isActive = false;
+    if (this._hasBatch) {
+      this._stepCaptureBatch();
+    } else {
+      this._stepCaptureStock();
+    }
+  }
+
+  private _stepCaptureStock(): void {
     const active = this._support.PxScene_getActiveActors(this.scene);
     const n = active.size();
     for (let i = 0; i < n; i++) {
@@ -324,6 +360,41 @@ export class Physics {
       }
     }
   }
+
+  private _stepCaptureBatch(): void {
+    this._ensureSlab(this._bodies.size);
+    const count = this._support.PxScene_writeActiveTransforms(
+      this.scene, this._slabPtr, this._slabCapSlots,
+    );
+    // HEAPF32 / HEAPU32 views are rebuilt by emscripten whenever wasm memory
+    // grows. Re-read them every step to be safe — a big addActor burst that
+    // triggers heap growth would invalidate stale captures otherwise.
+    const f32 = this._P.HEAPF32;
+    const u32 = this._P.HEAPU32;
+    const base0 = this._slabPtr >>> 2;
+    for (let i = 0; i < count; i++) {
+      const base = base0 + i * Physics._BATCH_STRIDE;
+      const rb = this._bodies.get(u32[base + 0]);
+      if (!rb) continue;
+      rb.isActive = true;
+      rb._capturePoseFromSlab(
+        f32[base + 1], f32[base + 2], f32[base + 3],
+        f32[base + 4], f32[base + 5], f32[base + 6], f32[base + 7],
+      );
+    }
+  }
+
+  private _ensureSlab(requiredSlots: number): void {
+    if (requiredSlots <= this._slabCapSlots) return;
+    if (this._slabPtr) this._P._free(this._slabPtr);
+    // Grow geometrically (×2) with a floor so churn on add/remove doesn't
+    // re-allocate every frame.
+    const slots = Math.max(requiredSlots, this._slabCapSlots * 2, 64);
+    this._slabPtr = this._P._malloc(slots * Physics._BATCH_STRIDE * 4);
+    this._slabCapSlots = slots;
+  }
+
+  get batchPathActive(): boolean { return this._hasBatch; }
 
   // alpha ∈ [0,1]: how far we are between the last two physics ticks.
   interpolate(alpha: number): void {
@@ -353,6 +424,11 @@ export class Physics {
       rb.actor.release();
     }
     this._bodies.clear();
+    if (this._slabPtr) {
+      P._free(this._slabPtr);
+      this._slabPtr = 0;
+      this._slabCapSlots = 0;
+    }
     P.destroy(this._raycastResult);
     P.destroy(this._scratchVec);
     P.destroy(this._scratchOrigin);
