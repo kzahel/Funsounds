@@ -114,6 +114,20 @@ export function playCheer(): void {
 
 export const ESCAPE_HOLD_TIME = 1500;
 
+const MODIFIER_KEYS = new Set(['Alt', 'AltGraph', 'Control', 'Meta', 'OS', 'Shift']);
+
+export function isModifierOnlyKey(event: KeyboardEvent): boolean {
+  return MODIFIER_KEYS.has(event.key);
+}
+
+export function hasSystemModifier(event: KeyboardEvent): boolean {
+  return event.metaKey || event.ctrlKey || event.altKey;
+}
+
+export function shouldIgnoreGameKey(event: KeyboardEvent): boolean {
+  return isModifierOnlyKey(event) || hasSystemModifier(event);
+}
+
 /**
  * Creates an escape-hold handler that calls `onExit` when Escape is held for ESCAPE_HOLD_TIME ms.
  * Returns a cleanup function to remove listeners and interval.
@@ -123,11 +137,12 @@ export function setupEscapeHold(isActive: () => boolean, onExit: () => void): ()
 
   function handleKeyDown(event: KeyboardEvent) {
     if (!isActive()) return;
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !hasSystemModifier(event)) {
       if (!escapeHeldStart) escapeHeldStart = Date.now();
       event.preventDefault();
       return;
     }
+    if (shouldIgnoreGameKey(event)) return;
     event.preventDefault();
   }
 

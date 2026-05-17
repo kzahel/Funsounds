@@ -2,7 +2,16 @@ import { Direction } from './types';
 import type { GameState, GameEvent, Renderer, EnemyType } from './types';
 import { createGameState, processAction, resolveHops, respawnPlayer, getLevelDef } from './engine';
 import { DomRenderer } from './renderer';
-import { isMobile, enterFullscreen, setupEscapeHold, setupFullscreenExit, preventContextMenu, spawnConfetti, playCheer } from '../utils';
+import {
+  isMobile,
+  enterFullscreen,
+  setupEscapeHold,
+  setupFullscreenExit,
+  preventContextMenu,
+  spawnConfetti,
+  playCheer,
+  shouldIgnoreGameKey,
+} from '../utils';
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -191,6 +200,7 @@ const KEY_MAP: Record<string, Direction> = {
 
 function handleKeyDown(e: KeyboardEvent): void {
   if (!gameActive || e.key === 'Escape') return;
+  if (shouldIgnoreGameKey(e)) return;
   const dir = KEY_MAP[e.key];
   if (dir !== undefined) {
     e.preventDefault();

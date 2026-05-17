@@ -17,7 +17,14 @@ import {
 } from './types';
 import { createGameState, processAction, currentSeason, seasonTimeRemaining, cloneState, sellValue } from './engine';
 import { DomRenderer, SEASON_EMOJI } from './renderer';
-import { isMobile, enterFullscreen, setupEscapeHold, setupFullscreenExit, preventContextMenu } from '../utils';
+import {
+  isMobile,
+  enterFullscreen,
+  setupEscapeHold,
+  setupFullscreenExit,
+  preventContextMenu,
+  shouldIgnoreGameKey,
+} from '../utils';
 
 // ---------------------------------------------------------------------------
 // Toolbar definition
@@ -411,6 +418,7 @@ function dirFromKey(k: string): Facing | null {
 function handleKeyDown(e: KeyboardEvent): void {
   if (!gameActive) return;
   if (state.paused) return;
+  if (shouldIgnoreGameKey(e)) return;
   const dir = dirFromKey(e.key);
   if (!dir) return;
   e.preventDefault();

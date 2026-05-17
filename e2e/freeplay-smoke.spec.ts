@@ -39,3 +39,31 @@ test('Free Play opens a populated grid for every mode', async ({ page }) => {
 
   expect(errors).toEqual([]);
 });
+
+test('Free Play ignores Mac browser shortcut keys', async ({ page }) => {
+  await page.goto('/Funsounds/');
+  await page.waitForLoadState('networkidle');
+
+  const startAllowed = await page.evaluate(() => {
+    const metaAllowed = document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Meta', metaKey: true, bubbles: true, cancelable: true }),
+    );
+    const refreshAllowed = document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'r', metaKey: true, bubbles: true, cancelable: true }),
+    );
+    return { metaAllowed, refreshAllowed };
+  });
+
+  expect(startAllowed).toEqual({ metaAllowed: true, refreshAllowed: true });
+  await expect(page.locator('#start-screen')).toBeVisible();
+  await expect(page.locator('#touch-grid')).toBeHidden();
+
+  await page.locator('#start-btn').click();
+  await expect(page.locator('#touch-grid')).toBeVisible();
+
+  const activeAllowed = await page.evaluate(() => document.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'r', metaKey: true, bubbles: true, cancelable: true }),
+  ));
+  expect(activeAllowed).toBe(true);
+  await expect(page.locator('#touch-grid')).toBeVisible();
+});

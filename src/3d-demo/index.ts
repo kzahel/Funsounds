@@ -11,6 +11,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Engine, Physics, RigidBody, Vehicle, createToonMaterial } from '../engine';
+import { shouldIgnoreGameKey } from '../utils';
 import { TruckAudio } from './audio';
 import { preloadSkeleton, spawnRagdoll, RagdollTemplate, SpawnedRagdoll } from './ragdoll';
 
@@ -160,6 +161,7 @@ async function start(): Promise<void> {
   // Keyboard input: track which arrows are held.
   const keys = new Set<string>();
   window.addEventListener('keydown', (e) => {
+    if (shouldIgnoreGameKey(e)) return;
     keys.add(e.key);
     // Prevent page scroll on arrow keys once the canvas is focused.
     if (e.key.startsWith('Arrow')) e.preventDefault();

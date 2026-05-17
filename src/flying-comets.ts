@@ -6,6 +6,7 @@ import {
   setupFullscreenExit,
   preventContextMenu,
   speakText,
+  shouldIgnoreGameKey,
 } from './utils';
 
 type FallingThingKind = 'comet' | 'cat';
@@ -555,6 +556,7 @@ function setShieldHeld(active: boolean): void {
 
 function onKeyDown(event: KeyboardEvent): void {
   if (!gameActive) return;
+  if (shouldIgnoreGameKey(event)) return;
 
   if (event.key === ' ') {
     event.preventDefault();

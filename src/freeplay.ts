@@ -9,7 +9,7 @@ import {
   setupEscapeHold,
   setupFullscreenExit,
   preventContextMenu,
-  ESCAPE_HOLD_TIME,
+  shouldIgnoreGameKey,
 } from './utils';
 
 const BUTTON_COUNTS: Record<number, number> = { 1: 4, 2: 6, 3: 12 };
@@ -240,6 +240,7 @@ export async function initFreePlay(): Promise<void> {
   document.addEventListener(
     'keydown',
     (e) => {
+      if (shouldIgnoreGameKey(e)) return;
       if (!isPlaying && e.key !== 'Escape' && document.getElementById('start-screen')!.style.display !== 'none') {
         startPlaying();
       }
@@ -252,6 +253,7 @@ export async function initFreePlay(): Promise<void> {
     'keydown',
     (e) => {
       if (!isPlaying || e.key === 'Escape') return;
+      if (shouldIgnoreGameKey(e)) return;
       e.preventDefault();
       e.stopPropagation();
       if (buttonCount <= 0) return;
@@ -269,14 +271,4 @@ export async function initFreePlay(): Promise<void> {
     () => stopPlaying(),
   );
   preventContextMenu(() => isPlaying);
-
-  document.addEventListener(
-    'keydown',
-    (e) => {
-      if (isPlaying && (e.ctrlKey || e.altKey || e.metaKey)) {
-        e.preventDefault();
-      }
-    },
-    true,
-  );
 }
