@@ -284,8 +284,8 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
         return events;
       }
       if (tool.crop === 'apple') {
-        // Apple tree: plants on plain grass, makes the tile permanently 'apple_tree'.
-        if (tile.kind !== 'grass') return [];
+        // Apple tree: accept grass or prepared soil, then make the tile permanent.
+        if (tile.kind !== 'grass' && tile.kind !== 'tilled' && tile.kind !== 'wet_tilled') return [];
         state.money -= cost;
         tile.kind = 'apple_tree';
         tile.crop = { kind: 'apple', growth: 0, plantedAt: state.time, hasYielded: false };

@@ -332,12 +332,16 @@ function renderTabButtons(activeTab: ToolTab): void {
     el.className = 'fg-tool';
     el.dataset.toolId = btn.id;
     const priceLabel = btn.priceLabel ? btn.priceLabel(state) : '';
+    const disabled = btn.disabled ? btn.disabled(state) : false;
     el.innerHTML = `
       <span class="fg-tool-emoji">${btn.emoji}</span>
       <span class="fg-tool-label">${btn.label}</span>
       ${priceLabel ? `<span class="fg-tool-price">${priceLabel}</span>` : ''}
     `;
+    el.disabled = disabled;
+    el.setAttribute('aria-disabled', String(disabled));
     el.addEventListener('click', () => {
+      if (btn.disabled?.(state)) return;
       const k = btn.tool.kind;
       if (k === 'buy_cat' || k === 'buy_scarecrow' || k === 'buy_beehive'
           || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_expand') {
@@ -375,6 +379,8 @@ function refreshToolBadges(): void {
     if (!btn) continue;
     const disabled = btn.disabled ? btn.disabled(state) : false;
     el.classList.toggle('fg-tool-disabled', disabled);
+    if (el instanceof HTMLButtonElement) el.disabled = disabled;
+    el.setAttribute('aria-disabled', String(disabled));
     const priceEl = el.querySelector('.fg-tool-price');
     if (priceEl && btn.priceLabel) priceEl.textContent = btn.priceLabel(state);
   }

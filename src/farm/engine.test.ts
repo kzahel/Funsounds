@@ -179,7 +179,7 @@ describe('new crops', () => {
     s.nextRainAt = 1e9;
     const c = s.arableCenter;
     parkPlayer(s);
-    // Apple planted directly on grass
+    // Apple can still be planted directly on grass.
     place(s, c.row, c.col, SEED_APPLE);
     expect(tileAt(s, c.row, c.col)!.kind).toBe('apple_tree');
     expect(tileAt(s, c.row, c.col)!.crop!.kind).toBe('apple');
@@ -207,6 +207,17 @@ describe('new crops', () => {
     // Tilling an apple tree does nothing (kind isn't 'grass')
     place(s, c.row, c.col, TILL);
     expect(tileAt(s, c.row, c.col)!.kind).toBe('apple_tree');
+  });
+
+  it('apple tree can be planted on prepared soil', () => {
+    const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
+    const c = s.arableCenter;
+    place(s, c.row, c.col, TILL);
+    place(s, c.row, c.col, WATER);
+    place(s, c.row, c.col, SEED_APPLE);
+    expect(tileAt(s, c.row, c.col)!.kind).toBe('apple_tree');
+    expect(tileAt(s, c.row, c.col)!.crop?.kind).toBe('apple');
   });
 });
 
