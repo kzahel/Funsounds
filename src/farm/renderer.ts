@@ -54,6 +54,8 @@ const BEEHIVE_EMOJI = '\u{1F36F}';
 const FENCE_EMOJI = '\u{1FAB5}'; // wood emoji as fence stand-in
 const APPLE_TREE_EMOJI = '\u{1F333}';
 const FAIRY_TREE_EMOJI = '\u{1F332}';
+const NIGHT_FAIRY_EMOJI = '\u{1F9DA}';
+const NIGHT_FAIRY_COUNT = 4;
 const APPLE_TREE_BASE_Y = 0.88;
 const APPLE_POSITIONS: Record<number, Array<[xPct: number, yPct: number]>> = {
   1: [[50, 52]],
@@ -95,6 +97,7 @@ export class DomRenderer implements Renderer {
   private pestEls: Map<number, HTMLElement> = new Map();
   private defenseEls: Map<number, HTMLElement> = new Map();
   private starEls: HTMLElement[] = [];
+  private nightFairyEls: HTMLElement[] = [];
   private playerEl!: HTMLElement;
 
   private size = { rows: 0, cols: 0 };
@@ -224,6 +227,26 @@ export class DomRenderer implements Renderer {
       pointer-events:none;
     `;
     this.timeLayer.appendChild(this.moonEl);
+
+    for (let i = 0; i < NIGHT_FAIRY_COUNT; i++) {
+      const fairy = document.createElement('div');
+      fairy.className = 'fg-night-fairy';
+      fairy.textContent = NIGHT_FAIRY_EMOJI;
+      fairy.style.cssText = `
+        position:absolute;
+        left:0; top:0;
+        transform:translate(-50%, -50%) scale(0.2);
+        font-size:${this.tilePx * 0.42}px;
+        line-height:1;
+        opacity:0;
+        filter:drop-shadow(0 0 0.35em rgba(207,255,202,0.95));
+        text-shadow:0 0 10px rgba(221,255,187,0.9), 0 2px 3px rgba(0,0,0,0.35);
+        pointer-events:none;
+        transition:opacity 0.45s linear;
+      `;
+      this.timeLayer.appendChild(fairy);
+      this.nightFairyEls.push(fairy);
+    }
   }
 
   destroy(): void {
@@ -238,6 +261,7 @@ export class DomRenderer implements Renderer {
     this.pestEls.clear();
     this.defenseEls.clear();
     this.starEls = [];
+    this.nightFairyEls = [];
   }
 
   private handleResize = (): void => {
@@ -722,6 +746,36 @@ export class DomRenderer implements Renderer {
 
     for (const star of this.starEls) {
       star.style.opacity = Math.min(0.9, night * 0.9).toFixed(3);
+    }
+
+    this.renderNightFairies(state, night);
+  }
+
+  private renderNightFairies(state: GameState, night: number): void {
+    const tree = state.tiles.find((tile) => tile.kind === 'fairy_tree');
+    if (!tree) {
+      for (const fairy of this.nightFairyEls) fairy.style.opacity = '0';
+      return;
+    }
+
+    const originX = (tree.col + 0.5) * this.tilePx;
+    const originY = (tree.row + 0.58) * this.tilePx;
+    for (let i = 0; i < this.nightFairyEls.length; i++) {
+      const fairy = this.nightFairyEls[i];
+      const stagger = i * 0.12;
+      const active = Math.max(0, Math.min(1, (night - stagger) / 0.28));
+      const phase = state.time * (0.55 + i * 0.07) + i * 1.8;
+      const radius = this.tilePx * (0.18 + active * (0.62 + i * 0.14));
+      const driftX = Math.cos(phase) * radius + Math.sin(phase * 0.7) * this.tilePx * 0.14;
+      const driftY = -this.tilePx * (0.1 + active * (0.72 + i * 0.1)) + Math.sin(phase * 1.25) * this.tilePx * 0.22;
+      const scale = 0.25 + active * (0.55 + i * 0.035);
+      const opacity = Math.min(0.95, active * night * 1.25);
+
+      fairy.style.left = `${originX + driftX}px`;
+      fairy.style.top = `${originY + driftY}px`;
+      fairy.style.fontSize = this.tilePx * 0.42 + 'px';
+      fairy.style.opacity = opacity.toFixed(3);
+      fairy.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
     }
   }
 }
