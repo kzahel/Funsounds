@@ -6,7 +6,8 @@ import {
 } from './engine';
 import {
   CROP_PRICE, COST_CAT, COST_SCARECROW, COST_BEEHIVE, COST_FENCE, COST_BOOTS,
-  SEASON_DURATION, toolsEqual,
+  APPLE_TREE_MAX_AGE_SEASONS, SEASON_DURATION,
+  appleTreeSizeTiles, appleYieldForTreeSize, toolsEqual,
 } from './types';
 import type { Tool, GameState } from './types';
 
@@ -218,6 +219,38 @@ describe('new crops', () => {
     place(s, c.row, c.col, SEED_APPLE);
     expect(tileAt(s, c.row, c.col)!.kind).toBe('apple_tree');
     expect(tileAt(s, c.row, c.col)!.crop?.kind).toBe('apple');
+  });
+
+  it('apple trees grow one fifth of a tile each season up to 2x2 and yield more apples', () => {
+    const s = createGameState({ rows: 9, cols: 9 });
+    fund(s);
+    s.nextPestAt = 1e9;
+    s.nextRainAt = 1e9;
+    s.nextWildSunflowerAt = 1e9;
+    const c = s.arableCenter;
+    parkPlayer(s);
+    place(s, c.row, c.col, SEED_APPLE);
+    const crop = tileAt(s, c.row, c.col)!.crop!;
+
+    expect(crop.treeAgeSeasons).toBe(0);
+    expect(appleTreeSizeTiles(crop)).toBeCloseTo(1);
+    expect(appleYieldForTreeSize(crop)).toBe(1);
+
+    processAction(s, { type: 'tick', dt: SEASON_DURATION });
+    expect(tileAt(s, c.row, c.col)!.crop!.treeAgeSeasons).toBe(1);
+    expect(appleTreeSizeTiles(tileAt(s, c.row, c.col)!.crop!)).toBeCloseTo(1.2);
+    expect(appleYieldForTreeSize(tileAt(s, c.row, c.col)!.crop!)).toBe(2);
+
+    processAction(s, { type: 'tick', dt: SEASON_DURATION * 10 });
+    const matureCrop = tileAt(s, c.row, c.col)!.crop!;
+    expect(matureCrop.treeAgeSeasons).toBe(APPLE_TREE_MAX_AGE_SEASONS);
+    expect(appleTreeSizeTiles(matureCrop)).toBeCloseTo(2);
+    expect(appleYieldForTreeSize(matureCrop)).toBe(4);
+
+    matureCrop.growth = 1;
+    walkOverHarvest(s, c.row, c.col);
+    expect(s.inventory.apple).toBe(4);
+    expect(tileAt(s, c.row, c.col)!.crop!.treeAgeSeasons).toBe(APPLE_TREE_MAX_AGE_SEASONS);
   });
 });
 

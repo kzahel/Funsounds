@@ -1,8 +1,10 @@
 import { isRaining, isArable, currentSeason } from './engine';
+import { appleTreeSizeTiles, appleYieldForTreeSize } from './types';
 import type {
   GameState,
   Renderer,
   Pest,
+  Crop,
   CropKind,
   PestKind,
   Player,
@@ -46,6 +48,13 @@ const CAT_EMOJI = '\u{1F408}';
 const BEEHIVE_EMOJI = '\u{1F36F}';
 const FENCE_EMOJI = '\u{1FAB5}'; // wood emoji as fence stand-in
 const APPLE_TREE_EMOJI = '\u{1F333}';
+const APPLE_TREE_BASE_Y = 0.88;
+const APPLE_POSITIONS: Record<number, Array<[xPct: number, yPct: number]>> = {
+  1: [[50, 52]],
+  2: [[38, 46], [62, 58]],
+  3: [[50, 34], [34, 60], [66, 62]],
+  4: [[38, 34], [62, 39], [32, 64], [68, 65]],
+};
 
 const SEASON_EMOJI: Record<Season, string> = {
   spring: '\u{1F338}',
@@ -256,22 +265,25 @@ export class DomRenderer implements Renderer {
       // Apple tree trunk under the fruit
       let treeEl = this.treeEls[i];
       if (tile.kind === 'apple_tree') {
+        const treeSize = appleTreeSizeTiles(tile.crop);
         if (!treeEl) {
           treeEl = document.createElement('span');
           treeEl.className = 'fg-tree';
           treeEl.textContent = APPLE_TREE_EMOJI;
           treeEl.style.cssText = `
-            position:absolute; left:50%; top:50%;
-            transform:translate(-50%, -50%);
-            font-size:${px * 0.9}px; line-height:1;
+            position:absolute; left:50%; top:${APPLE_TREE_BASE_Y * 100}%;
+            transform:translate(-50%, -100%);
+            transform-origin:50% 100%;
+            font-size:${px * treeSize}px; line-height:1;
             pointer-events:none;
             text-shadow: 0 2px 3px rgba(0,0,0,0.4);
-            z-index: 0;
+            z-index: 1;
           `;
           el.insertBefore(treeEl, el.firstChild);
           this.treeEls[i] = treeEl;
         }
-        treeEl.style.fontSize = px * 0.9 + 'px';
+        treeEl.style.top = `${APPLE_TREE_BASE_Y * 100}%`;
+        treeEl.style.fontSize = px * treeSize + 'px';
       } else if (treeEl) {
         treeEl.remove();
         this.treeEls[i] = null;
@@ -280,6 +292,41 @@ export class DomRenderer implements Renderer {
   }
 
   // ---- Crops ----
+
+  private renderAppleCluster(cropEl: HTMLElement, crop: Crop, px: number): void {
+    const treeSize = appleTreeSizeTiles(crop);
+    const appleCount = appleYieldForTreeSize(crop);
+    const positions = APPLE_POSITIONS[Math.min(appleCount, 4)] ?? APPLE_POSITIONS[4];
+    if (cropEl.dataset.appleCount !== String(appleCount)) {
+      cropEl.innerHTML = '';
+      for (let i = 0; i < appleCount; i++) {
+        const apple = document.createElement('span');
+        apple.textContent = CROP_EMOJI.apple;
+        apple.style.cssText = `
+          position:absolute;
+          left:${positions[i][0]}%;
+          top:${positions[i][1]}%;
+          transform:translate(-50%, -50%);
+        `;
+        cropEl.appendChild(apple);
+      }
+      cropEl.dataset.appleCount = String(appleCount);
+    }
+    const canopyCenterY = APPLE_TREE_BASE_Y - treeSize * 0.48;
+    const grow = crop.growth;
+    const ripe = grow >= 1;
+    const scale = 0.25 + grow * 0.75;
+    cropEl.classList.add('fg-apple-cluster');
+    cropEl.classList.toggle('fg-ripe', ripe);
+    cropEl.style.left = '50%';
+    cropEl.style.top = canopyCenterY * px + 'px';
+    cropEl.style.width = px * treeSize * 0.82 + 'px';
+    cropEl.style.height = px * treeSize * 0.72 + 'px';
+    cropEl.style.fontSize = px * Math.min(0.32, 0.23 + treeSize * 0.035) + 'px';
+    cropEl.style.zIndex = '2';
+    cropEl.style.opacity = String(0.5 + grow * 0.5);
+    cropEl.style.transform = ripe ? '' : `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+  }
 
   private renderCrops(state: GameState): void {
     const px = this.tilePx;
@@ -310,9 +357,20 @@ export class DomRenderer implements Renderer {
         tileEl.appendChild(cropEl);
         this.cropEls[i] = cropEl;
       }
+      if (tile.kind === 'apple_tree' && tile.crop.kind === 'apple') {
+        this.renderAppleCluster(cropEl, tile.crop, px);
+        continue;
+      }
+      cropEl.classList.remove('fg-apple-cluster');
+      cropEl.dataset.appleCount = '';
+      cropEl.style.left = '50%';
+      cropEl.style.top = '60%';
+      cropEl.style.width = '';
+      cropEl.style.height = '';
+      cropEl.style.opacity = '';
+      cropEl.style.zIndex = '1';
       cropEl.textContent = CROP_EMOJI[tile.crop.kind];
-      // Apple on tree renders smaller (nestled in the tree foliage)
-      const sizeMult = tile.kind === 'apple_tree' ? 0.45 : 0.75;
+      const sizeMult = 0.75;
       cropEl.style.fontSize = px * sizeMult + 'px';
       const grow = tile.crop.growth;
       const scale = 0.25 + grow * 0.9;

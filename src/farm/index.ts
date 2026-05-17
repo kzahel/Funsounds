@@ -420,7 +420,12 @@ function placeAtPointer(clientX: number, clientY: number): void {
   const k = tool.kind;
   if (k === 'buy_cat' || k === 'buy_scarecrow' || k === 'buy_beehive'
       || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_expand') return;
+  const prevTab = state.selectedTab;
+  const prevTool = state.selectedTool;
   processAction(state, { type: 'place', row: tile.row, col: tile.col, tool });
+  if (state.selectedTab !== prevTab || !toolsEqual(state.selectedTool, prevTool)) {
+    renderTabButtons(state.selectedTab);
+  }
 }
 
 function dirFromKey(k: string): Facing | null {

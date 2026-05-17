@@ -227,3 +227,56 @@ test('Farm apple tree — disabled when unaffordable, then plants on prepared so
 
   expect(errors).toEqual([]);
 });
+
+test('Farm cat placement — consumes pending cat and returns toolbar to farm tools', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+
+  await page.goto('/Funsounds/');
+  await page.waitForLoadState('networkidle');
+
+  const fundedState = createGameState();
+  fundedState.money = 150;
+  fundedState.nextPestAt = 1e9;
+  fundedState.nextRainAt = 1e9;
+  fundedState.nextWildSunflowerAt = 1e9;
+  await page.evaluate((payload) => {
+    localStorage.setItem('funsounds-farm-slot-1', JSON.stringify(payload));
+  }, {
+    version: SAVE_VERSION,
+    savedAt: new Date().toISOString(),
+    state: fundedState,
+  });
+
+  await page.locator('#farm-btn').click();
+  await expect(page.locator('#farm-screen')).toBeVisible();
+  await page.locator('#fg-menu-btn').click();
+  await page.locator('#fg-menu-load-rows button').nth(0).click();
+  await page.waitForTimeout(120);
+
+  await page.locator('.fg-tab').nth(3).click(); // Shop
+  await page.locator('#fg-buttons [data-tool-id="buy-cat"]').click();
+  await expect(page.locator('#fg-buttons [data-tool-id="place-cat"]')).toHaveClass(/fg-tool-active/);
+
+  const firstTile = page.locator('#fg-grid .fg-tile[data-row="4"][data-col="5"]');
+  const firstBox = await firstTile.boundingBox();
+  expect(firstBox).not.toBeNull();
+  await page.mouse.click(firstBox!.x + firstBox!.width / 2, firstBox!.y + firstBox!.height / 2);
+  await expect(page.locator('#fg-defense-layer .fg-cat')).toHaveCount(1);
+
+  await expect(page.locator('#fg-buttons [data-tool-id="till"]')).toBeVisible();
+  await expect(page.locator('#fg-buttons [data-tool-id="till"]')).toHaveClass(/fg-tool-active/);
+
+  await page.locator('.fg-tab').nth(3).click(); // Shop
+  await page.locator('#fg-buttons [data-tool-id="buy-cat"]').click();
+  const secondTile = page.locator('#fg-grid .fg-tile[data-row="4"][data-col="7"]');
+  const secondBox = await secondTile.boundingBox();
+  expect(secondBox).not.toBeNull();
+  await page.mouse.click(secondBox!.x + secondBox!.width / 2, secondBox!.y + secondBox!.height / 2);
+  await expect(page.locator('#fg-defense-layer .fg-cat')).toHaveCount(2);
+
+  expect(errors).toEqual([]);
+});

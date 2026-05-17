@@ -4,6 +4,7 @@ import {
   CROP_YIELD,
   CROP_SEASONS,
   APPLE_REGROW_SECONDS,
+  APPLE_TREE_MAX_AGE_SEASONS,
   COST_CAT,
   COST_SCARECROW,
   COST_BEEHIVE,
@@ -14,6 +15,7 @@ import {
   SEASON_DURATION,
   SEED_COST,
   SELL_PRICE,
+  appleYieldForTreeSize,
   costToExpand,
   seasonSellMultiplier,
   seasonShopMultiplier,
@@ -73,8 +75,12 @@ const WILD_SUNFLOWER_RESPAWN_MAX = 90;
 // Seasons
 // ---------------------------------------------------------------------------
 
+function seasonIndex(time: number): number {
+  return Math.max(0, Math.floor(time / SEASON_DURATION));
+}
+
 export function currentSeason(time: number): Season {
-  const idx = Math.floor(time / SEASON_DURATION) % SEASONS.length;
+  const idx = seasonIndex(time) % SEASONS.length;
   return SEASONS[idx];
 }
 
@@ -191,6 +197,9 @@ function normalizeCrop(raw: unknown, fallbackTime: number): Crop | null {
     plantedAt: finiteNumber(raw.plantedAt, fallbackTime),
   };
   if (typeof raw.hasYielded === 'boolean') crop.hasYielded = raw.hasYielded;
+  if (kind === 'apple') {
+    crop.treeAgeSeasons = clampInteger(raw.treeAgeSeasons, 0, 0, APPLE_TREE_MAX_AGE_SEASONS);
+  }
   if (typeof raw.wild === 'boolean') crop.wild = raw.wild;
   return crop;
 }
@@ -512,7 +521,13 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
         if (tile.kind !== 'grass' && tile.kind !== 'tilled' && tile.kind !== 'wet_tilled') return [];
         state.money -= cost;
         tile.kind = 'apple_tree';
-        tile.crop = { kind: 'apple', growth: 0, plantedAt: state.time, hasYielded: false };
+        tile.crop = {
+          kind: 'apple',
+          growth: 0,
+          plantedAt: state.time,
+          hasYielded: false,
+          treeAgeSeasons: 0,
+        };
         events.push({ type: 'tile_changed', row, col });
         return events;
       }
@@ -626,11 +641,20 @@ function harvestTile(state: GameState, row: number, col: number): GameEvent[] {
   if (tile.crop.growth < 1) return [];
   const kind = tile.crop.kind;
   const wasWild = !!tile.crop.wild;
-  const yieldAmount = CROP_YIELD[kind];
+  const treeAgeSeasons = tile.crop.treeAgeSeasons ?? 0;
+  const yieldAmount = kind === 'apple' && tile.kind === 'apple_tree'
+    ? appleYieldForTreeSize(tile.crop)
+    : CROP_YIELD[kind];
   state.inventory[kind] += yieldAmount;
   if (kind === 'apple' && tile.kind === 'apple_tree') {
     // Tree stays; reset crop so it regrows. Subsequent fruits grow faster.
-    tile.crop = { kind: 'apple', growth: 0, plantedAt: state.time, hasYielded: true };
+    tile.crop = {
+      kind: 'apple',
+      growth: 0,
+      plantedAt: state.time,
+      hasYielded: true,
+      treeAgeSeasons,
+    };
   } else if (wasWild) {
     // Wild plant: leave the tile kind alone (typically grass).
     tile.crop = null;
@@ -793,7 +817,13 @@ function tickPest(state: GameState, pest: Pest, dt: number): GameEvent[] {
     } else if (state.time - pest.eatStartedAt >= PEST_EAT_SECONDS) {
       if (tile.crop.kind === 'apple' && tile.kind === 'apple_tree') {
         // Pest snacks the apple; tree survives, fruit resets.
-        tile.crop = { kind: 'apple', growth: 0, plantedAt: state.time, hasYielded: true };
+        tile.crop = {
+          kind: 'apple',
+          growth: 0,
+          plantedAt: state.time,
+          hasYielded: true,
+          treeAgeSeasons: tile.crop.treeAgeSeasons ?? 0,
+        };
       } else {
         tile.crop = null;
       }
@@ -982,6 +1012,20 @@ function cropGrowMult(state: GameState, t: TileState): number {
   return mult;
 }
 
+function growAppleTreesForSeasonTransitions(state: GameState, count: number): GameEvent[] {
+  if (count <= 0) return [];
+  const events: GameEvent[] = [];
+  for (const t of state.tiles) {
+    if (t.kind !== 'apple_tree' || t.crop?.kind !== 'apple') continue;
+    const age = t.crop.treeAgeSeasons ?? 0;
+    const nextAge = clamp(age + count, 0, APPLE_TREE_MAX_AGE_SEASONS);
+    if (nextAge === age) continue;
+    t.crop.treeAgeSeasons = nextAge;
+    events.push({ type: 'tile_changed', row: t.row, col: t.col });
+  }
+  return events;
+}
+
 function updateCrops(state: GameState, dt: number): GameEvent[] {
   const events: GameEvent[] = [];
   for (const t of state.tiles) {
@@ -1011,11 +1055,16 @@ function updateCrops(state: GameState, dt: number): GameEvent[] {
 
 export function tick(state: GameState, dt: number): GameEvent[] {
   if (state.paused) return [];
-  const prevSeason = currentSeason(state.time);
+  const prevSeasonIndex = seasonIndex(state.time);
   state.time += dt;
+  const nextSeasonIndex = seasonIndex(state.time);
   const season = currentSeason(state.time);
   const events: GameEvent[] = [];
-  if (season !== prevSeason) events.push({ type: 'season_changed', season });
+  const seasonTransitions = Math.max(0, nextSeasonIndex - prevSeasonIndex);
+  if (seasonTransitions > 0) {
+    events.push({ type: 'season_changed', season });
+    events.push(...growAppleTreesForSeasonTransitions(state, seasonTransitions));
+  }
 
   events.push(...updatePlayer(state, dt));
   events.push(...updateWeather(state));

@@ -62,6 +62,14 @@ export const CROP_GROW_SECONDS: Record<CropKind, number> = {
 /** After the first apple, the tree regrows fruit faster. */
 export const APPLE_REGROW_SECONDS = 45;
 
+/** Apple tree canopy size in tile units. Trees gain 1/5 tile per season up to 2x2. */
+export const APPLE_TREE_BASE_SIZE_TILES = 1;
+export const APPLE_TREE_GROWTH_PER_SEASON_TILES = 0.2;
+export const APPLE_TREE_MAX_SIZE_TILES = 2;
+export const APPLE_TREE_MAX_AGE_SEASONS = Math.round(
+  (APPLE_TREE_MAX_SIZE_TILES - APPLE_TREE_BASE_SIZE_TILES) / APPLE_TREE_GROWTH_PER_SEASON_TILES,
+);
+
 /** Base sell price per unit harvested. */
 export const CROP_PRICE: Record<CropKind, number> = {
   carrot: 3,
@@ -133,8 +141,23 @@ export interface Crop {
   plantedAt: number;
   /** Apple trees flip this to true after the first harvest so regrow uses the faster cycle. */
   hasYielded?: boolean;
+  /** Apple-tree maturity measured in completed season changes since planting. */
+  treeAgeSeasons?: number;
   /** Wild plant (e.g. map-spawned sunflower). Ignored by pests; tile stays grass after harvest. */
   wild?: boolean;
+}
+
+export function appleTreeSizeTiles(crop: Pick<Crop, 'treeAgeSeasons'> | null | undefined): number {
+  const age = Math.max(0, Math.min(crop?.treeAgeSeasons ?? 0, APPLE_TREE_MAX_AGE_SEASONS));
+  return Math.min(
+    APPLE_TREE_MAX_SIZE_TILES,
+    APPLE_TREE_BASE_SIZE_TILES + age * APPLE_TREE_GROWTH_PER_SEASON_TILES,
+  );
+}
+
+export function appleYieldForTreeSize(crop: Pick<Crop, 'treeAgeSeasons'> | null | undefined): number {
+  const size = appleTreeSizeTiles(crop);
+  return Math.max(1, Math.ceil(size * size));
 }
 
 export interface TileState {
