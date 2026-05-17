@@ -29,11 +29,13 @@ import type {
   PestKind,
   Defense,
   DefenseKind,
+  Crop,
   CropKind,
   Inventory,
   Facing,
   GridSize,
   Season,
+  ToolTab,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -145,6 +147,227 @@ export function createGameState(size: GridSize = { rows: 9, cols: 13 }): GameSta
   return state;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+const TILE_KINDS = ['grass', 'tilled', 'wet_tilled', 'apple_tree'] as const;
+const CROP_KINDS = Object.keys(CROP_PRICE) as CropKind[];
+const FACING_VALUES = ['up', 'down', 'left', 'right'] as const;
+const TOOL_TABS = ['farm', 'seeds', 'defense', 'shop'] as const;
+const PEST_KINDS = ['rabbit', 'bird'] as const;
+const DEFENSE_KINDS = ['cat', 'scarecrow', 'beehive'] as const;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function finiteInteger(value: unknown, fallback: number): number {
+  return Math.trunc(finiteNumber(value, fallback));
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
+  return clamp(finiteInteger(value, fallback), min, max);
+}
+
+function oneOf<T extends readonly string[]>(value: unknown, allowed: T, fallback: T[number]): T[number] {
+  return typeof value === 'string' && allowed.includes(value) ? value : fallback;
+}
+
+function normalizeCrop(raw: unknown, fallbackTime: number): Crop | null {
+  if (!isRecord(raw)) return null;
+  const rawKind = raw.kind;
+  if (typeof rawKind !== 'string' || !CROP_KINDS.includes(rawKind as CropKind)) return null;
+  const kind = rawKind as CropKind;
+  const crop: Crop = {
+    kind,
+    growth: clamp(finiteNumber(raw.growth, 0), 0, 1),
+    plantedAt: finiteNumber(raw.plantedAt, fallbackTime),
+  };
+  if (typeof raw.hasYielded === 'boolean') crop.hasYielded = raw.hasYielded;
+  if (typeof raw.wild === 'boolean') crop.wild = raw.wild;
+  return crop;
+}
+
+function normalizeTile(raw: unknown, base: TileState, fallbackTime: number): TileState {
+  if (!isRecord(raw)) return base;
+  return {
+    row: base.row,
+    col: base.col,
+    kind: oneOf(raw.kind, TILE_KINDS, base.kind),
+    crop: normalizeCrop(raw.crop, fallbackTime),
+    isMarket: base.isMarket,
+    hasFence: raw.hasFence === true,
+  };
+}
+
+function normalizeInventory(raw: unknown): Inventory {
+  const inventory = makeEmptyInventory();
+  if (!isRecord(raw)) return inventory;
+  for (const key of Object.keys(inventory) as (keyof Inventory)[]) {
+    inventory[key] = Math.max(0, finiteInteger(raw[key], inventory[key]));
+  }
+  return inventory;
+}
+
+function normalizePlayer(raw: unknown, base: Player, size: GridSize): Player {
+  if (!isRecord(raw)) return { ...base, moving: { up: false, down: false, left: false, right: false } };
+  return {
+    x: clamp(finiteNumber(raw.x, base.x), 0.25, size.cols - 0.25),
+    y: clamp(finiteNumber(raw.y, base.y), 0.25, size.rows - 0.25),
+    facing: oneOf(raw.facing, FACING_VALUES, base.facing),
+    moving: { up: false, down: false, left: false, right: false },
+    speed: finiteNumber(raw.speed, base.speed),
+  };
+}
+
+function normalizeTool(raw: unknown, fallback: Tool): Tool {
+  if (!isRecord(raw)) return fallback;
+  switch (raw.kind) {
+    case 'till':
+    case 'water':
+    case 'place_cat':
+    case 'place_scarecrow':
+    case 'place_beehive':
+    case 'place_fence':
+    case 'buy_cat':
+    case 'buy_scarecrow':
+    case 'buy_beehive':
+    case 'buy_fence':
+    case 'buy_boots':
+    case 'buy_expand':
+      return { kind: raw.kind };
+    case 'seed':
+      if (typeof raw.crop === 'string' && CROP_KINDS.includes(raw.crop as CropKind)) {
+        return { kind: 'seed', crop: raw.crop as CropKind };
+      }
+      return fallback;
+    default:
+      return fallback;
+  }
+}
+
+function tabForTool(tool: Tool, fallback: ToolTab): ToolTab {
+  if (tool.kind === 'till' || tool.kind === 'water') return 'farm';
+  if (tool.kind === 'seed') return 'seeds';
+  if (tool.kind === 'place_cat' || tool.kind === 'place_scarecrow'
+      || tool.kind === 'place_beehive' || tool.kind === 'place_fence') return 'defense';
+  if (tool.kind.startsWith('buy_')) return 'shop';
+  return fallback === 'farm' || fallback === 'seeds' || fallback === 'defense' || fallback === 'shop'
+    ? fallback
+    : 'farm';
+}
+
+function normalizePest(raw: unknown, size: GridSize): Pest | null {
+  if (!isRecord(raw)) return null;
+  const kind = oneOf(raw.kind, PEST_KINDS, 'rabbit');
+  return {
+    id: Math.max(1, finiteInteger(raw.id, 1)),
+    kind,
+    x: clamp(finiteNumber(raw.x, 0.5), -0.5, size.cols + 0.5),
+    y: clamp(finiteNumber(raw.y, 0.5), -0.5, size.rows + 0.5),
+    target: isRecord(raw.target)
+      ? {
+          row: clampInteger(raw.target.row, 0, 0, size.rows - 1),
+          col: clampInteger(raw.target.col, 0, 0, size.cols - 1),
+        }
+      : null,
+    eating: raw.eating === true,
+    eatStartedAt: finiteNumber(raw.eatStartedAt, 0),
+    fleeing: raw.fleeing === true,
+    heading: finiteNumber(raw.heading, 0),
+    speed: Math.max(0.1, finiteNumber(raw.speed, kind === 'bird' ? 1.6 : 1.1)),
+  };
+}
+
+function normalizeDefense(raw: unknown, size: GridSize, fallbackTime: number): Defense | null {
+  if (!isRecord(raw)) return null;
+  const kind = oneOf(raw.kind, DEFENSE_KINDS, 'cat');
+  const defense: Defense = {
+    id: Math.max(1, finiteInteger(raw.id, 1)),
+    kind,
+    x: clamp(finiteNumber(raw.x, 0.5), 0.25, size.cols - 0.25),
+    y: clamp(finiteNumber(raw.y, 0.5), 0.25, size.rows - 0.25),
+    heading: finiteNumber(raw.heading, 0),
+    nextDecisionAt: finiteNumber(raw.nextDecisionAt, fallbackTime),
+    moving: raw.moving === true,
+  };
+  if (kind === 'beehive') {
+    defense.nextHoneyAt = finiteNumber(raw.nextHoneyAt, fallbackTime + BEEHIVE_HONEY_INTERVAL);
+    defense.honey = Math.max(0, finiteInteger(raw.honey, 0));
+  }
+  return defense;
+}
+
+export function normalizeGameState(raw: unknown): GameState {
+  const source = isRecord(raw) ? raw : {};
+  const rawSize = isRecord(source.size) ? source.size : {};
+  const size: GridSize = {
+    rows: clampInteger(rawSize.rows, 9, 3, 30),
+    cols: clampInteger(rawSize.cols, 13, 3, 40),
+  };
+  const normalized = createGameState(size);
+
+  normalized.time = Math.max(0, finiteNumber(source.time, normalized.time));
+  normalized.money = Math.max(0, finiteInteger(source.money, normalized.money));
+
+  const rawCenter = isRecord(source.arableCenter) ? source.arableCenter : {};
+  normalized.arableCenter = {
+    row: clampInteger(rawCenter.row, normalized.arableCenter.row, 0, size.rows - 1),
+    col: clampInteger(rawCenter.col, normalized.arableCenter.col, 0, size.cols - 1),
+  };
+  const maxRadius = Math.min(
+    normalized.arableCenter.row,
+    normalized.arableCenter.col,
+    size.rows - 1 - normalized.arableCenter.row,
+    size.cols - 1 - normalized.arableCenter.col,
+  );
+  normalized.arableRadius = clampInteger(source.arableRadius, normalized.arableRadius, 0, maxRadius);
+
+  const rawTiles = Array.isArray(source.tiles) ? source.tiles : [];
+  normalized.tiles = normalized.tiles.map((tile, i) => normalizeTile(rawTiles[i], tile, normalized.time));
+
+  normalized.player = normalizePlayer(source.player, normalized.player, size);
+  normalized.pests = Array.isArray(source.pests)
+    ? source.pests.map((p) => normalizePest(p, size)).filter((p): p is Pest => !!p)
+    : [];
+  normalized.defenses = Array.isArray(source.defenses)
+    ? source.defenses.map((d) => normalizeDefense(d, size, normalized.time)).filter((d): d is Defense => !!d)
+    : [];
+  normalized.inventory = normalizeInventory(source.inventory);
+
+  normalized.pendingCats = Math.max(0, finiteInteger(source.pendingCats, normalized.pendingCats));
+  normalized.pendingScarecrows = Math.max(0, finiteInteger(source.pendingScarecrows, normalized.pendingScarecrows));
+  normalized.pendingBeehives = Math.max(0, finiteInteger(source.pendingBeehives, normalized.pendingBeehives));
+  normalized.pendingFences = Math.max(0, finiteInteger(source.pendingFences, normalized.pendingFences));
+  normalized.hasBoots = source.hasBoots === true;
+
+  normalized.nextRainAt = finiteNumber(source.nextRainAt, normalized.nextRainAt);
+  normalized.rainUntil = finiteNumber(source.rainUntil, normalized.rainUntil);
+  normalized.nextPestAt = finiteNumber(source.nextPestAt, normalized.nextPestAt);
+  normalized.nextWildSunflowerAt = finiteNumber(source.nextWildSunflowerAt, normalized.nextWildSunflowerAt);
+
+  const selectedTab = oneOf(source.selectedTab, TOOL_TABS, normalized.selectedTab);
+  normalized.selectedTool = normalizeTool(source.selectedTool, normalized.selectedTool);
+  normalized.selectedTab = tabForTool(normalized.selectedTool, selectedTab);
+  normalized.paused = false;
+
+  const maxEntityId = Math.max(
+    0,
+    ...normalized.pests.map((p) => p.id),
+    ...normalized.defenses.map((d) => d.id),
+  );
+  normalized.nextId = Math.max(finiteInteger(source.nextId, normalized.nextId), maxEntityId + 1);
+
+  return normalized;
+}
+
 function seedInitialWildSunflowers(state: GameState): void {
   // Deterministic initial placements so the first-run experience is predictable.
   const picks: Array<{ row: number; col: number }> = [
@@ -239,8 +462,9 @@ export function processAction(state: GameState, action: Action): GameEvent[] {
       return [];
     }
     case 'load_state': {
-      // Replace state fields with loaded state (keep reference identity).
-      Object.assign(state, action.state);
+      // Replace state fields with loaded state (keep reference identity), while
+      // filling fields added by newer farm versions.
+      Object.assign(state, normalizeGameState(action.state));
       return [];
     }
   }

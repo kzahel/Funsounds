@@ -401,6 +401,46 @@ describe('save / load round-trip', () => {
     expect(runtime.time).toBe(500);
   });
 
+  it('load_state normalizes older partial saves into a playable state', () => {
+    const legacy = createGameState({ rows: 9, cols: 13 }) as any;
+    legacy.money = 77;
+    legacy.inventory = { carrot: 2, tomato: 1, corn: 0, pumpkin: 0 };
+    legacy.tiles[0] = { row: 0, col: 0, kind: 'tilled', crop: null, isMarket: false };
+    legacy.player = {
+      x: 2.5,
+      y: 3.5,
+      facing: 'left',
+      moving: { up: true, down: false, left: false, right: false },
+      speed: 3.2,
+    };
+    legacy.selectedTool = { kind: 'pick' };
+    legacy.paused = true;
+    delete legacy.pendingBeehives;
+    delete legacy.pendingFences;
+    delete legacy.hasBoots;
+    delete legacy.nextWildSunflowerAt;
+
+    const runtime = createGameState();
+    processAction(runtime, { type: 'load_state', state: legacy });
+
+    expect(runtime.money).toBe(77);
+    expect(runtime.inventory.carrot).toBe(2);
+    expect(runtime.inventory.sunflower).toBe(0);
+    expect(runtime.inventory.honey).toBe(0);
+    expect(runtime.tiles[0].kind).toBe('tilled');
+    expect(runtime.tiles[0].hasFence).toBe(false);
+    expect(runtime.player.x).toBe(2.5);
+    expect(runtime.player.y).toBe(3.5);
+    expect(runtime.player.facing).toBe('left');
+    expect(runtime.player.moving.up).toBe(false);
+    expect(runtime.selectedTool).toEqual({ kind: 'till' });
+    expect(runtime.paused).toBe(false);
+
+    processAction(runtime, { type: 'set_player_moving', dir: 'right', moving: true });
+    processAction(runtime, { type: 'tick', dt: 0.1 });
+    expect(runtime.player.x).toBeGreaterThan(2.5);
+  });
+
   it('cloneState yields a deep independent copy', () => {
     const s = createGameState();
     const c = cloneState(s);

@@ -95,6 +95,80 @@ test('Farm smoke — opens, tills a tile, plants a seed, and renders without err
   expect(errors).toEqual([]);
 });
 
+test('Farm save/load — preserves money, player, crops, and movement', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+
+  await page.goto('/Funsounds/');
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => {
+    for (let i = 1; i <= 3; i++) localStorage.removeItem(`funsounds-farm-slot-${i}`);
+  });
+
+  await page.locator('#farm-btn').click();
+  await expect(page.locator('#farm-screen')).toBeVisible();
+
+  const targetTile = page.locator('#fg-grid .fg-tile[data-row="4"][data-col="6"]');
+  const box = await targetTile.boundingBox();
+  expect(box).not.toBeNull();
+  const cx = box!.x + box!.width / 2;
+  const cy = box!.y + box!.height / 2;
+
+  await page.mouse.click(cx, cy);
+  await page.locator('#fg-buttons [data-tool-id="water"]').click();
+  await page.mouse.click(cx, cy);
+  await page.locator('.fg-tab').nth(1).click(); // Seeds
+  await page.locator('#fg-buttons [data-tool-id="seed-carrot"]').click();
+  await page.mouse.click(cx, cy);
+  await expect(page.locator('#fg-hud-money')).toContainText('$1');
+  await expect(targetTile.locator('.fg-crop')).toHaveCount(1);
+
+  const player = page.locator('.fg-player');
+  const playerBeforeMove = await player.boundingBox();
+  expect(playerBeforeMove).not.toBeNull();
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(250);
+  await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(80);
+  const playerAfterMove = await player.boundingBox();
+  expect(playerAfterMove).not.toBeNull();
+  expect(playerAfterMove!.x).toBeGreaterThan(playerBeforeMove!.x + 5);
+
+  await page.locator('#fg-menu-btn').click();
+  await page.locator('#fg-menu-save-rows button').nth(0).click();
+  const savedState = await page.evaluate(() => JSON.parse(localStorage.getItem('funsounds-farm-slot-1')!).state);
+  expect(savedState.money).toBe(1);
+  expect(savedState.paused).toBe(false);
+  expect(savedState.tiles.some((tile: any) => tile.crop?.kind === 'carrot')).toBe(true);
+  expect(savedState.player.x).toBeGreaterThan(6.5);
+
+  await page.locator('#fg-menu-reset').click();
+  await page.waitForTimeout(120);
+  await expect(page.locator('#fg-hud-money')).toContainText('$3');
+
+  await page.locator('#fg-menu-btn').click();
+  await page.locator('#fg-menu-load-rows button').nth(0).click();
+  await page.waitForTimeout(120);
+  await expect(page.locator('#fg-hud-money')).toContainText('$1');
+  await expect(page.locator('.fg-player')).toBeVisible();
+  await expect(targetTile.locator('.fg-crop')).toHaveCount(1);
+
+  const playerBeforeLoadedMove = await player.boundingBox();
+  expect(playerBeforeLoadedMove).not.toBeNull();
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(250);
+  await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(80);
+  const playerAfterLoadedMove = await player.boundingBox();
+  expect(playerAfterLoadedMove).not.toBeNull();
+  expect(playerAfterLoadedMove!.x).toBeGreaterThan(playerBeforeLoadedMove!.x + 5);
+
+  expect(errors).toEqual([]);
+});
+
 test('Farm apple tree — disabled when unaffordable, then plants on prepared soil', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));

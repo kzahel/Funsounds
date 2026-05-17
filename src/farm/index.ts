@@ -15,7 +15,15 @@ import {
   seasonShopMultiplier,
   toolsEqual,
 } from './types';
-import { createGameState, processAction, currentSeason, seasonTimeRemaining, cloneState, sellValue } from './engine';
+import {
+  createGameState,
+  processAction,
+  currentSeason,
+  seasonTimeRemaining,
+  cloneState,
+  sellValue,
+  normalizeGameState,
+} from './engine';
 import { DomRenderer, SEASON_EMOJI } from './renderer';
 import {
   isMobile,
@@ -194,7 +202,11 @@ function readSlot(slot: number): SavePayload | null {
     if (!raw) return null;
     const payload = JSON.parse(raw) as SavePayload;
     if (!payload || payload.version !== SAVE_VERSION || !payload.state) return null;
-    return payload;
+    return {
+      version: SAVE_VERSION,
+      savedAt: typeof payload.savedAt === 'string' ? payload.savedAt : new Date(0).toISOString(),
+      state: normalizeGameState(payload.state),
+    };
   } catch {
     return null;
   }
@@ -213,7 +225,7 @@ function slotMeta(slot: number): SlotMeta | null {
 }
 
 function writeSlot(slot: number, st: GameState): void {
-  const snap = cloneState(st);
+  const snap = normalizeGameState(cloneState(st));
   // Never bake the menu's paused flag or stale held-key state into a save.
   snap.paused = false;
   snap.player.moving = { up: false, down: false, left: false, right: false };
