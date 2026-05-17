@@ -34,6 +34,8 @@ test('Farm smoke — opens, tills a tile, plants a seed, and renders without err
 
   // Player emoji is rendered
   await expect(page.locator('.fg-player')).toBeVisible();
+  await expect(page.locator('#fg-night-overlay')).toBeAttached();
+  await expect(page.locator('#fg-celestial-sun')).toBeVisible();
 
   // Till tool is selected by default — find a tile in the arable zone
   // (default: row 4, col 6) and tap it.

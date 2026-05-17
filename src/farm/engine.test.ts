@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   createGameState, processAction, tileAt, isArable,
   currentSeason, seasonTimeRemaining, playerSpeed, playerScareRadius,
-  sellValue, cloneState,
+  sellValue, cloneState, dayOfSeason, currentDayPhase, nightAmount, isNightTime,
 } from './engine';
 import {
   CROP_PRICE, COST_CAT, COST_SCARECROW, COST_BEEHIVE, COST_FENCE, COST_BOOTS,
-  COST_PRESENT, FAIRY_TREE_KITTEN_SECONDS, APPLE_TREE_MAX_AGE_SEASONS, SEASON_DURATION,
+  COST_PRESENT, FAIRY_TREE_KITTEN_SECONDS, APPLE_TREE_MAX_AGE_SEASONS, DAY_DURATION,
+  DAYS_PER_SEASON, SEASON_DURATION,
   appleTreeSizeTiles, appleYieldForTreeSize, toolsEqual,
 } from './types';
 import type { Tool, GameState } from './types';
@@ -76,6 +77,24 @@ describe('seasons', () => {
 
   it('reports remaining season time', () => {
     expect(seasonTimeRemaining(10)).toBeCloseTo(SEASON_DURATION - 10);
+  });
+
+  it('splits each season into multiple day/night cycles', () => {
+    expect(SEASON_DURATION).toBe(DAY_DURATION * DAYS_PER_SEASON);
+    expect(dayOfSeason(0)).toBe(1);
+    expect(dayOfSeason(DAY_DURATION - 0.01)).toBe(1);
+    expect(dayOfSeason(DAY_DURATION)).toBe(2);
+    expect(dayOfSeason(2 * DAY_DURATION)).toBe(3);
+    expect(dayOfSeason(SEASON_DURATION)).toBe(1);
+  });
+
+  it('eases between day and night phases', () => {
+    expect(currentDayPhase(0)).toBe('day');
+    expect(nightAmount(0)).toBe(0);
+    expect(currentDayPhase(DAY_DURATION * 0.45)).toBe('dusk');
+    expect(nightAmount(DAY_DURATION * 0.45)).toBeGreaterThan(0);
+    expect(currentDayPhase(DAY_DURATION * 0.7)).toBe('night');
+    expect(isNightTime(DAY_DURATION * 0.7)).toBe(true);
   });
 
   it('emits season_changed when the clock rolls over', () => {
@@ -409,6 +428,25 @@ describe('fence blocking', () => {
     });
     tickN(s, 0.3);
     expect(s.pests[0].fleeing).toBe(false);
+  });
+});
+
+describe('day/night pest mix', () => {
+  it('spawns daytime pests during the day and nocturnal pests at night', () => {
+    const day = createGameState({ rows: 9, cols: 13 });
+    day.nextPestAt = 0;
+    day.nextRainAt = 1e9;
+    day.nextWildSunflowerAt = 1e9;
+    processAction(day, { type: 'tick', dt: 0.01 });
+    expect(['rabbit', 'bird']).toContain(day.pests[0]?.kind);
+
+    const night = createGameState({ rows: 9, cols: 13 });
+    night.time = DAY_DURATION * 0.7;
+    night.nextPestAt = night.time;
+    night.nextRainAt = 1e9;
+    night.nextWildSunflowerAt = 1e9;
+    processAction(night, { type: 'tick', dt: 0.01 });
+    expect(['raccoon', 'owl']).toContain(night.pests[0]?.kind);
   });
 });
 

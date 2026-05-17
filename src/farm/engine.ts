@@ -13,6 +13,7 @@ import {
   COST_PRESENT,
   FAIRY_TREE_KITTEN_SECONDS,
   FLYING_PESTS,
+  DAY_DURATION,
   SEASONS,
   SEASON_DURATION,
   SEED_COST,
@@ -39,6 +40,7 @@ import type {
   Facing,
   GridSize,
   Season,
+  DayPhase,
   ToolTab,
 } from './types';
 
@@ -74,6 +76,12 @@ const WILD_SUNFLOWER_TARGET = 4;
 const WILD_SUNFLOWER_RESPAWN_MIN = 45;
 const WILD_SUNFLOWER_RESPAWN_MAX = 90;
 
+const DAY_CYCLE_OFFSET = DAY_DURATION * 0.3;
+const DAWN_START = 0.12;
+const DAY_START = 0.24;
+const DUSK_START = 0.72;
+const NIGHT_START = 0.86;
+
 // ---------------------------------------------------------------------------
 // Seasons
 // ---------------------------------------------------------------------------
@@ -89,6 +97,46 @@ export function currentSeason(time: number): Season {
 
 export function seasonTimeRemaining(time: number): number {
   return SEASON_DURATION - (time % SEASON_DURATION);
+}
+
+function positiveModulo(value: number, mod: number): number {
+  return ((value % mod) + mod) % mod;
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+export function dayOfSeason(time: number): number {
+  const seasonElapsed = positiveModulo(time, SEASON_DURATION);
+  return Math.floor(seasonElapsed / DAY_DURATION) + 1;
+}
+
+export function dayProgress(time: number): number {
+  return positiveModulo(time + DAY_CYCLE_OFFSET, DAY_DURATION) / DAY_DURATION;
+}
+
+export function currentDayPhase(time: number): DayPhase {
+  const p = dayProgress(time);
+  if (p < DAWN_START) return 'night';
+  if (p < DAY_START) return 'dawn';
+  if (p < DUSK_START) return 'day';
+  if (p < NIGHT_START) return 'dusk';
+  return 'night';
+}
+
+export function nightAmount(time: number): number {
+  const p = dayProgress(time);
+  if (p < DAWN_START) return 1;
+  if (p < DAY_START) return 1 - smoothstep(DAWN_START, DAY_START, p);
+  if (p < DUSK_START) return 0;
+  if (p < NIGHT_START) return smoothstep(DUSK_START, NIGHT_START, p);
+  return 1;
+}
+
+export function isNightTime(time: number): boolean {
+  return nightAmount(time) >= 0.55;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +213,7 @@ const TILE_KINDS = ['grass', 'tilled', 'wet_tilled', 'apple_tree', 'fairy_tree']
 const CROP_KINDS = Object.keys(CROP_PRICE) as CropKind[];
 const FACING_VALUES = ['up', 'down', 'left', 'right'] as const;
 const TOOL_TABS = ['farm', 'seeds', 'defense', 'shop'] as const;
-const PEST_KINDS = ['rabbit', 'bird'] as const;
+const PEST_KINDS = ['rabbit', 'bird', 'raccoon', 'owl'] as const;
 const DEFENSE_KINDS = ['cat', 'kitten', 'scarecrow', 'beehive'] as const;
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -298,7 +346,7 @@ function normalizePest(raw: unknown, size: GridSize): Pest | null {
     eatStartedAt: finiteNumber(raw.eatStartedAt, 0),
     fleeing: raw.fleeing === true,
     heading: finiteNumber(raw.heading, 0),
-    speed: Math.max(0.1, finiteNumber(raw.speed, kind === 'bird' ? 1.6 : 1.1)),
+    speed: Math.max(0.1, finiteNumber(raw.speed, pestSpeed(kind))),
   };
 }
 
@@ -791,9 +839,26 @@ function beehiveNear(state: GameState, row: number, col: number): boolean {
 // Pests
 // ---------------------------------------------------------------------------
 
+function pestSpeed(kind: PestKind): number {
+  switch (kind) {
+    case 'bird':
+    case 'owl':
+      return 1.6;
+    case 'raccoon':
+      return 1.25;
+    case 'rabbit':
+      return 1.1;
+  }
+}
+
+function randomPestKind(time: number): PestKind {
+  if (isNightTime(time)) return Math.random() < 0.5 ? 'raccoon' : 'owl';
+  return Math.random() < 0.5 ? 'rabbit' : 'bird';
+}
+
 function spawnPest(state: GameState): Pest {
   const edge = Math.floor(Math.random() * 4);
-  const kind: PestKind = Math.random() < 0.5 ? 'rabbit' : 'bird';
+  const kind = randomPestKind(state.time);
   let x = 0;
   let y = 0;
   if (edge === 0) { x = Math.random() * state.size.cols; y = 0.1; }
@@ -809,7 +874,7 @@ function spawnPest(state: GameState): Pest {
     eatStartedAt: 0,
     fleeing: false,
     heading: 0,
-    speed: kind === 'bird' ? 1.6 : 1.1,
+    speed: pestSpeed(kind),
   };
 }
 
@@ -895,7 +960,7 @@ function tickPest(state: GameState, pest: Pest, dt: number): GameEvent[] {
     if (!pest.fleeing) return events;
   }
 
-  // Acquire target (birds ignore fences; rabbits see only fence-reachable crops treat simply)
+  // Acquire target (flying pests ignore fences; ground pests treat fences as blockers).
   if (!pest.target && !pest.fleeing) {
     pest.target = findTargetCrop(state, pest.x, pest.y);
     if (pest.target) {
@@ -930,7 +995,7 @@ function tickPest(state: GameState, pest: Pest, dt: number): GameEvent[] {
   const nx = pest.x + Math.cos(pest.heading) * pest.speed * dt;
   const ny = pest.y + Math.sin(pest.heading) * pest.speed * dt;
 
-  // Rabbits are blocked by fences; birds fly over.
+  // Ground pests are blocked by fences; flying pests pass over them.
   if (!flying && !pest.fleeing) {
     const nextTile = tileAt(state, Math.floor(ny), Math.floor(nx));
     if (nextTile?.hasFence) {

@@ -1,4 +1,4 @@
-import type { GameState, Renderer, Tool, ToolTab, Facing, CropKind, Season, SavePayload } from './types';
+import type { GameState, Renderer, Tool, ToolTab, Facing, CropKind, Season, SavePayload, DayPhase } from './types';
 import {
   CROP_PRICE,
   COST_CAT,
@@ -7,6 +7,8 @@ import {
   COST_FENCE,
   COST_BOOTS,
   COST_PRESENT,
+  DAYS_PER_SEASON,
+  SEASON_DURATION,
   SAVE_SLOT_COUNT,
   SAVE_VERSION,
   SEED_COST,
@@ -20,6 +22,8 @@ import {
   createGameState,
   processAction,
   currentSeason,
+  currentDayPhase,
+  dayOfSeason,
   seasonTimeRemaining,
   cloneState,
   sellValue,
@@ -158,6 +162,13 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
   },
 ];
 
+const DAY_PHASE_EMOJI: Record<DayPhase, string> = {
+  dawn: '\u{1F305}',
+  day: '\u2600\uFE0F',
+  dusk: '\u{1F307}',
+  night: '\u{1F319}',
+};
+
 function seasonCost(state: GameState, baseCost: number): number {
   return Math.round(baseCost * seasonShopMultiplier(currentSeason(state.time)));
 }
@@ -230,7 +241,7 @@ function slotMeta(slot: number): SlotMeta | null {
     savedAt: p.savedAt,
     money: p.state.money,
     season: currentSeason(t),
-    year: Math.floor(t / (180 * 4)) + 1, // SEASON_DURATION * 4
+    year: Math.floor(t / (SEASON_DURATION * 4)) + 1,
   };
 }
 
@@ -320,8 +331,13 @@ function updateHUD(): void {
   const raining = state.time < state.rainUntil;
   hudRainEl.style.display = raining ? 'inline-block' : 'none';
   const season = currentSeason(state.time);
+  const phase = currentDayPhase(state.time);
+  const day = dayOfSeason(state.time);
   const remain = Math.ceil(seasonTimeRemaining(state.time));
-  hudSeasonEl.textContent = `${SEASON_EMOJI[season]} ${season[0].toUpperCase() + season.slice(1)} · ${remain}s`;
+  const seasonLabel = season[0].toUpperCase() + season.slice(1);
+  const phaseLabel = phase[0].toUpperCase() + phase.slice(1);
+  hudSeasonEl.textContent =
+    `${SEASON_EMOJI[season]} ${seasonLabel} D${day}/${DAYS_PER_SEASON} · ${DAY_PHASE_EMOJI[phase]} ${phaseLabel} · ${remain}s`;
   refreshToolBadges();
 }
 

@@ -2051,6 +2051,11 @@
             100% { transform: translate(25px, 120vh) rotate(360deg); opacity: 0; }
         }
 
+        @keyframes fg-twinkle {
+            from { transform: scale(0.85); filter: brightness(0.9); }
+            to   { transform: scale(1.15); filter: brightness(1.35); }
+        }
+
         .fg-player-boots {
             filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.85));
         }
@@ -2539,7 +2544,7 @@
     <div id="farm-screen">
         <div id="fg-grid-container"></div>
         <div id="fg-hud">
-            <span class="fg-pill" id="fg-hud-season">🌸 Spring · 180s</span>
+            <span class="fg-pill" id="fg-hud-season">🌸 Spring D1/3 · ☀️ Day · 180s</span>
             <span class="fg-pill" id="fg-hud-money">💰 $0</span>
             <span class="fg-pill" id="fg-hud-inventory">Basket empty</span>
             <span class="fg-pill" id="fg-hud-rain" style="display:none;">🌧️ Raining</span>

@@ -21,10 +21,15 @@ export const DIR_DELTA: Record<Dir, [dRow: number, dCol: number]> = {
 // ---------------------------------------------------------------------------
 
 export type Season = 'spring' | 'summer' | 'fall' | 'winter';
+export type DayPhase = 'dawn' | 'day' | 'dusk' | 'night';
 
 export const SEASONS: readonly Season[] = ['spring', 'summer', 'fall', 'winter'];
+/** Seconds of game time per day. */
+export const DAY_DURATION = 60;
+/** Number of day/night cycles in each season. */
+export const DAYS_PER_SEASON = 3;
 /** Seconds of game time per season. A full year is SEASON_DURATION * 4. */
-export const SEASON_DURATION = 180;
+export const SEASON_DURATION = DAY_DURATION * DAYS_PER_SEASON;
 
 // ---------------------------------------------------------------------------
 // Tiles & crops
@@ -197,10 +202,10 @@ export interface Player {
 // Pests & defenses
 // ---------------------------------------------------------------------------
 
-export type PestKind = 'rabbit' | 'bird';
+export type PestKind = 'rabbit' | 'bird' | 'raccoon' | 'owl';
 
-/** Birds fly (ignore fences) and can approach from any edge. */
-export const FLYING_PESTS: ReadonlySet<PestKind> = new Set<PestKind>(['bird']);
+/** Flying pests ignore fences and can approach from any edge. */
+export const FLYING_PESTS: ReadonlySet<PestKind> = new Set<PestKind>(['bird', 'owl']);
 
 export interface Pest {
   id: number;

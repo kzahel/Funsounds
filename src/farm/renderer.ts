@@ -1,4 +1,4 @@
-import { isRaining, isArable, currentSeason } from './engine';
+import { isRaining, isArable, currentSeason, dayProgress, nightAmount } from './engine';
 import { appleTreeSizeTiles, appleYieldForTreeSize } from './types';
 import type {
   GameState,
@@ -39,6 +39,8 @@ const CROP_EMOJI: Record<CropKind, string> = {
 const PEST_EMOJI: Record<PestKind, string> = {
   rabbit: '\u{1F407}',
   bird: '\u{1F426}',
+  raccoon: '\u{1F99D}',
+  owl: '\u{1F989}',
 };
 
 const PLAYER_EMOJI = '\u{1F9D1}\u200D\u{1F33E}';
@@ -79,6 +81,10 @@ export class DomRenderer implements Renderer {
   private playerLayer!: HTMLElement;
   private rainLayer!: HTMLElement;
   private snowLayer!: HTMLElement;
+  private timeLayer!: HTMLElement;
+  private nightOverlay!: HTMLElement;
+  private sunEl!: HTMLElement;
+  private moonEl!: HTMLElement;
 
   private tileEls: HTMLElement[] = [];
   private cropEls: (HTMLElement | null)[] = [];
@@ -88,6 +94,7 @@ export class DomRenderer implements Renderer {
   private fairyGiftEls: (HTMLElement | null)[] = [];
   private pestEls: Map<number, HTMLElement> = new Map();
   private defenseEls: Map<number, HTMLElement> = new Map();
+  private starEls: HTMLElement[] = [];
   private playerEl!: HTMLElement;
 
   private size = { rows: 0, cols: 0 };
@@ -115,8 +122,10 @@ export class DomRenderer implements Renderer {
     this.playerLayer = this.makeLayer('fg-player-layer', 5);
     this.rainLayer = this.makeLayer('fg-rain-layer', 6);
     this.snowLayer = this.makeLayer('fg-snow-layer', 6);
+    this.timeLayer = this.makeLayer('fg-time-layer', 7);
     this.rainLayer.style.display = 'none';
     this.snowLayer.style.display = 'none';
+    this.buildTimeLayer();
 
     this.playerEl = document.createElement('div');
     this.playerEl.className = 'fg-player';
@@ -147,6 +156,76 @@ export class DomRenderer implements Renderer {
     return el;
   }
 
+  private buildTimeLayer(): void {
+    this.timeLayer.innerHTML = '';
+    this.starEls = [];
+
+    this.nightOverlay = document.createElement('div');
+    this.nightOverlay.id = 'fg-night-overlay';
+    this.nightOverlay.style.cssText = `
+      position:absolute; inset:0;
+      background:
+        radial-gradient(circle at 72% 18%, rgba(156,190,255,0.22), transparent 22%),
+        linear-gradient(180deg, rgba(7,18,48,0.78), rgba(5,10,30,0.66));
+      opacity:0;
+      transition:opacity 0.6s linear;
+      pointer-events:none;
+    `;
+    this.timeLayer.appendChild(this.nightOverlay);
+
+    for (let i = 0; i < 18; i++) {
+      const star = document.createElement('span');
+      star.className = 'fg-time-star';
+      star.textContent = i % 3 === 0 ? '\u2726' : '\u22C5';
+      star.style.cssText = `
+        position:absolute;
+        left:${4 + Math.random() * 90}%;
+        top:${5 + Math.random() * 42}%;
+        color:rgba(255,255,245,0.92);
+        font-size:${9 + Math.random() * 12}px;
+        line-height:1;
+        opacity:0;
+        text-shadow:0 0 8px rgba(255,255,255,0.7);
+        animation:fg-twinkle ${2 + Math.random() * 2.5}s ease-in-out infinite alternate;
+        animation-delay:${-Math.random() * 3}s;
+      `;
+      this.timeLayer.appendChild(star);
+      this.starEls.push(star);
+    }
+
+    this.sunEl = document.createElement('div');
+    this.sunEl.id = 'fg-celestial-sun';
+    this.sunEl.textContent = '\u2600\uFE0F';
+    this.sunEl.style.cssText = `
+      position:absolute;
+      left:0; top:0;
+      transform:translate(-50%, -50%);
+      font-size:${this.tilePx * 0.68}px;
+      line-height:1;
+      opacity:1;
+      filter:drop-shadow(0 0 16px rgba(255,213,79,0.9));
+      transition:opacity 0.4s linear;
+      pointer-events:none;
+    `;
+    this.timeLayer.appendChild(this.sunEl);
+
+    this.moonEl = document.createElement('div');
+    this.moonEl.id = 'fg-celestial-moon';
+    this.moonEl.textContent = '\u{1F319}';
+    this.moonEl.style.cssText = `
+      position:absolute;
+      left:0; top:0;
+      transform:translate(-50%, -50%);
+      font-size:${this.tilePx * 0.62}px;
+      line-height:1;
+      opacity:0;
+      filter:drop-shadow(0 0 14px rgba(185,214,255,0.9));
+      transition:opacity 0.4s linear;
+      pointer-events:none;
+    `;
+    this.timeLayer.appendChild(this.moonEl);
+  }
+
   destroy(): void {
     window.removeEventListener('resize', this.handleResize);
     this.container.innerHTML = '';
@@ -158,6 +237,7 @@ export class DomRenderer implements Renderer {
     this.fairyGiftEls = [];
     this.pestEls.clear();
     this.defenseEls.clear();
+    this.starEls = [];
   }
 
   private handleResize = (): void => {
@@ -236,6 +316,7 @@ export class DomRenderer implements Renderer {
     this.renderPests(state);
     this.renderPlayer(state.player, state.hasBoots, state.carryingPresent);
     this.renderWeather(state);
+    this.renderDayNight(state);
   }
 
   // ---- Tiles ----
@@ -614,6 +695,33 @@ export class DomRenderer implements Renderer {
         `;
         this.snowLayer.appendChild(flake);
       }
+    }
+  }
+
+  private renderDayNight(state: GameState): void {
+    const night = nightAmount(state.time);
+    const progress = dayProgress(state.time);
+    const width = this.size.cols * this.tilePx;
+    const height = this.size.rows * this.tilePx;
+    const arcX = 0.08 + progress * 0.84;
+    const arcY = 0.34 - Math.sin(progress * Math.PI) * 0.18;
+    const moonProgress = (progress + 0.5) % 1;
+    const moonX = 0.08 + moonProgress * 0.84;
+    const moonY = 0.34 - Math.sin(moonProgress * Math.PI) * 0.18;
+    const sunOpacity = Math.max(0, 1 - night * 1.25);
+
+    this.nightOverlay.style.opacity = (night * 0.72).toFixed(3);
+    this.sunEl.style.left = `${arcX * width}px`;
+    this.sunEl.style.top = `${Math.max(0.14, arcY) * height}px`;
+    this.sunEl.style.fontSize = this.tilePx * 0.68 + 'px';
+    this.sunEl.style.opacity = sunOpacity.toFixed(3);
+    this.moonEl.style.left = `${moonX * width}px`;
+    this.moonEl.style.top = `${Math.max(0.14, moonY) * height}px`;
+    this.moonEl.style.fontSize = this.tilePx * 0.62 + 'px';
+    this.moonEl.style.opacity = Math.min(1, night * 1.15).toFixed(3);
+
+    for (const star of this.starEls) {
+      star.style.opacity = Math.min(0.9, night * 0.9).toFixed(3);
     }
   }
 }
