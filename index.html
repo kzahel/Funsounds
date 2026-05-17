@@ -233,10 +233,10 @@
         /* Mode selector */
         #mode-selector {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
             gap: 10px;
             margin: 1.5rem auto;
-            max-width: 340px;
+            max-width: 460px;
         }
 
         .mode-btn {
@@ -2340,6 +2340,10 @@
                 <button class="mode-btn" data-mode="numbers">
                     <span class="mode-icon">🔢</span>
                     <span class="mode-label">Numbers</span>
+                </button>
+                <button class="mode-btn" data-mode="sounds">
+                    <span class="mode-icon">🔊</span>
+                    <span class="mode-label">Sounds</span>
                 </button>
             </div>
             <div id="difficulty-control">

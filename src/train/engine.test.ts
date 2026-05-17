@@ -21,6 +21,7 @@ describe('createGameState', () => {
     const s = createGameState();
     expect(s.trains).toHaveLength(0);
     expect(s.animals).toHaveLength(0);
+    expect(s.bloodPuddles).toHaveLength(0);
   });
 });
 
@@ -113,6 +114,7 @@ describe('trains', () => {
     });
     expect(s.trains).toHaveLength(1);
     expect(s.trains[0].cars).toHaveLength(2);
+    expect(s.trains[0].dirty).toBe(false);
     expect(events.some((e) => e.type === 'train_added')).toBe(true);
   });
 
@@ -139,6 +141,78 @@ describe('trains', () => {
       processAction(s, { type: 'tick', dt: 0.1, time: i * 100 });
     }
     expect(s.trains[0].cars[0].col).toBeGreaterThan(startCol);
+  });
+
+  it('kills a chicken on the track and leaves a blood puddle when run over', () => {
+    const s = createGameState({ rows: 4, cols: 5 });
+    for (let c = 0; c < 5; c++) place(s, 1, c);
+    processAction(s, {
+      type: 'place', row: 1, col: 0,
+      tool: { kind: 'train', train: 'steam', length: 1 }, time: 0,
+    });
+    processAction(s, {
+      type: 'place', row: 1, col: 1,
+      tool: { kind: 'animal', animal: 'chicken' }, time: 0,
+    });
+
+    const events = processAction(s, { type: 'tick', dt: 0.4, time: 100 });
+
+    expect(s.animals).toHaveLength(0);
+    expect(s.bloodPuddles).toHaveLength(1);
+    expect(s.bloodPuddles[0].x).toBeCloseTo(1.5);
+    expect(s.bloodPuddles[0].y).toBeCloseTo(1.5);
+    expect(events.some((e) => e.type === 'animal_removed')).toBe(true);
+    expect(events.some((e) => e.type === 'blood_added')).toBe(true);
+  });
+
+  it('does not kill non-chicken animals on the track', () => {
+    const s = createGameState({ rows: 4, cols: 5 });
+    for (let c = 0; c < 5; c++) place(s, 1, c);
+    processAction(s, {
+      type: 'place', row: 1, col: 0,
+      tool: { kind: 'train', train: 'steam', length: 1 }, time: 0,
+    });
+    processAction(s, {
+      type: 'place', row: 1, col: 1,
+      tool: { kind: 'animal', animal: 'cow' }, time: 0,
+    });
+
+    processAction(s, { type: 'tick', dt: 0.4, time: 100 });
+
+    expect(s.animals).toHaveLength(1);
+    expect(s.animals[0].kind).toBe('cow');
+    expect(s.bloodPuddles).toHaveLength(0);
+  });
+
+  it('marks a train dirty when it runs over landed poop', () => {
+    const s = createGameState({ rows: 4, cols: 5 });
+    for (let c = 0; c < 5; c++) place(s, 1, c);
+    processAction(s, {
+      type: 'place', row: 1, col: 0,
+      tool: { kind: 'train', train: 'steam', length: 1 }, time: 0,
+    });
+    s.poops.push({ id: 99, x: 1.5, y: 1.5, fallStart: 0, startTime: 0, duration: 0, landed: true });
+
+    const events = processAction(s, { type: 'tick', dt: 0.4, time: 100 });
+
+    expect(s.trains[0].dirty).toBe(true);
+    expect(s.poops).toHaveLength(1);
+    expect(events.some((e) => e.type === 'train_dirtied' && e.trainId === s.trains[0].id && e.poopId === 99)).toBe(true);
+  });
+
+  it('does not dirty a train from falling poop', () => {
+    const s = createGameState({ rows: 4, cols: 5 });
+    for (let c = 0; c < 5; c++) place(s, 1, c);
+    processAction(s, {
+      type: 'place', row: 1, col: 0,
+      tool: { kind: 'train', train: 'steam', length: 1 }, time: 0,
+    });
+    s.poops.push({ id: 99, x: 1.5, y: 1.5, fallStart: 0.4, startTime: 0, duration: 700, landed: false });
+
+    const events = processAction(s, { type: 'tick', dt: 0.4, time: 100 });
+
+    expect(s.trains[0].dirty).toBe(false);
+    expect(events.some((e) => e.type === 'train_dirtied')).toBe(false);
   });
 });
 
@@ -182,9 +256,11 @@ describe('clear_all', () => {
     place(s, 1, 1);
     processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'train', train: 'steam', length: 1 }, time: 0 });
     processAction(s, { type: 'place', row: 0, col: 0, tool: { kind: 'animal', animal: 'cow' }, time: 0 });
+    s.bloodPuddles.push({ id: 99, x: 1.5, y: 1.5 });
     processAction(s, { type: 'clear_all' });
     expect(s.trains).toHaveLength(0);
     expect(s.animals).toHaveLength(0);
+    expect(s.bloodPuddles).toHaveLength(0);
     expect(s.tiles.every((t) => t.track === null)).toBe(true);
   });
 });
@@ -386,5 +462,19 @@ describe('pigeon poop', () => {
     s.poops.push({ id: 1, x: 1.5, y: 1.5, fallStart: 0, startTime: 0, duration: 0, landed: true });
     processAction(s, { type: 'clear_all' });
     expect(s.poops).toHaveLength(0);
+  });
+});
+
+describe('blood puddles', () => {
+  it('erase removes blood on the targeted tile before erasing the track', () => {
+    const s = createGameState({ rows: 4, cols: 4 });
+    processAction(s, { type: 'place', row: 1, col: 1, tool: { kind: 'track' }, time: 0 });
+    s.bloodPuddles.push({ id: 1, x: 1.5, y: 1.5 });
+
+    const events = processAction(s, { type: 'erase', row: 1, col: 1 });
+
+    expect(s.bloodPuddles).toHaveLength(0);
+    expect(tileAt(s, 1, 1)!.track).not.toBeNull();
+    expect(events.some((e) => e.type === 'blood_removed' && e.id === 1)).toBe(true);
   });
 });

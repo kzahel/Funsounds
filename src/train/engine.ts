@@ -31,6 +31,7 @@ export function createGameState(size: GridSize = { rows: 12, cols: 18 }): GameSt
     trains: [],
     animals: [],
     poops: [],
+    bloodPuddles: [],
     selectedTab: 'tracks',
     selectedTool: { kind: 'track' },
     nextId: 1,
@@ -75,6 +76,7 @@ export function processAction(state: GameState, action: Action): GameEvent[] {
       state.trains = [];
       state.animals = [];
       state.poops = [];
+      state.bloodPuddles = [];
       return [{ type: 'cleared' }];
     }
     case 'move_animal': {
@@ -211,6 +213,17 @@ function eraseAt(state: GameState, row: number, col: number): GameEvent[] {
   });
   if (state.poops.length < poopsBefore) return events;
 
+  // Clean up blood puddles before erasing tracks underneath.
+  const bloodBefore = state.bloodPuddles.length;
+  state.bloodPuddles = state.bloodPuddles.filter((b) => {
+    if (Math.floor(b.x) === col && Math.floor(b.y) === row) {
+      events.push({ type: 'blood_removed', id: b.id });
+      return false;
+    }
+    return true;
+  });
+  if (state.bloodPuddles.length < bloodBefore) return events;
+
   // Remove trains whose head sits on this tile first
   const beforeTrains = state.trains.length;
   state.trains = state.trains.filter((tr) => {
@@ -309,6 +322,9 @@ const TRAIN_SPEEDS: Record<TrainKind, number> = {
   monorail: 6.0,
 };
 
+const TRAIN_CHICKEN_HIT_RADIUS = 0.32;
+const TRAIN_POOP_HIT_RADIUS = 0.32;
+
 function createTrain(state: GameState, tile: TileState, kind: TrainKind, length: number): Train | null {
   if (!tile.track) return null;
   // Pick an exit to head out of
@@ -327,7 +343,7 @@ function createTrain(state: GameState, tile: TileState, kind: TrainKind, length:
       progress: -i * 1.0, // negative progress => behind the head
     });
   }
-  return { id, kind, cars, speed: TRAIN_SPEEDS[kind], stopped: false };
+  return { id, kind, cars, speed: TRAIN_SPEEDS[kind], stopped: false, dirty: false };
 }
 
 function pickAnyExit(p: TrackPiece): Dir | null {
@@ -392,6 +408,66 @@ function advanceCar(state: GameState, car: TrainCar, dist: number): boolean {
     remaining = 0;
   }
   return true;
+}
+
+function trainCarPos(car: TrainCar): { x: number; y: number } {
+  const [dr, dc] = DIR_DELTA[car.dir];
+  const t = Math.max(0, Math.min(1, car.progress));
+  return { x: car.col + 0.5 + dc * t, y: car.row + 0.5 + dr * t };
+}
+
+function pointSegmentDistance(px: number, py: number, a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const len2 = vx * vx + vy * vy;
+  if (len2 === 0) return Math.hypot(px - a.x, py - a.y);
+
+  const t = Math.max(0, Math.min(1, ((px - a.x) * vx + (py - a.y) * vy) / len2));
+  const cx = a.x + vx * t;
+  const cy = a.y + vy * t;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function runOverChickens(
+  state: GameState,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  killedIds: Set<number>,
+  events: GameEvent[],
+): void {
+  for (const animal of state.animals) {
+    if (animal.kind !== 'chicken' || killedIds.has(animal.id)) continue;
+
+    const tile = tileAt(state, Math.floor(animal.y), Math.floor(animal.x));
+    if (!tile?.track) continue;
+
+    if (pointSegmentDistance(animal.x, animal.y, from, to) > TRAIN_CHICKEN_HIT_RADIUS) continue;
+
+    killedIds.add(animal.id);
+    const id = state.nextId++;
+    state.bloodPuddles.push({ id, x: animal.x, y: animal.y });
+    events.push({ type: 'animal_removed', animalId: animal.id });
+    events.push({ type: 'blood_added', id });
+  }
+}
+
+function dirtyTrainFromPoop(
+  state: GameState,
+  train: Train,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  events: GameEvent[],
+): void {
+  if (train.dirty) return;
+
+  for (const poop of state.poops) {
+    if (!poop.landed) continue;
+    if (pointSegmentDistance(poop.x, poop.y, from, to) > TRAIN_POOP_HIT_RADIUS) continue;
+
+    train.dirty = true;
+    events.push({ type: 'train_dirtied', trainId: train.id, poopId: poop.id });
+    return;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -495,6 +571,7 @@ export function tick(state: GameState, dt: number, now: number): GameEvent[] {
   if (state.paused) return events;
 
   // Trains
+  const killedChickenIds = new Set<number>();
   for (const train of state.trains) {
     if (train.stopped) continue;
     const move = train.speed * dt;
@@ -505,11 +582,18 @@ export function tick(state: GameState, dt: number, now: number): GameEvent[] {
         if (car.progress > 1) car.progress = 1; // clamp during catch-up
         continue;
       }
+      const from = trainCarPos(car);
       const ok = advanceCar(state, car, move);
+      const to = trainCarPos(car);
+      runOverChickens(state, from, to, killedChickenIds, events);
+      dirtyTrainFromPoop(state, train, from, to, events);
       if (!ok) {
         // The head reversed — trail will catch up via next ticks
       }
     }
+  }
+  if (killedChickenIds.size > 0) {
+    state.animals = state.animals.filter((a) => !killedChickenIds.has(a.id));
   }
 
   // Animals

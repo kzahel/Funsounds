@@ -119,3 +119,139 @@ test('Train Builder smoke — opens, places track, and renders without errors', 
 
   expect(errors).toEqual([]);
 });
+
+test('Train Builder collision — train runs over a chicken and renders blood', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+
+  await page.goto('/Funsounds/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#train-btn').click();
+
+  const screen = page.locator('#train-screen');
+  await expect(screen).toBeVisible();
+
+  await page.evaluate(() => {
+    const w = window as unknown as { __trainState?: { paused: boolean } };
+    if (w.__trainState) w.__trainState.paused = true;
+  });
+
+  const tiles = page.locator('#tg-grid .tg-tile');
+  const cols = await page.evaluate(() => {
+    const w = window as unknown as { __trainState?: { size: { cols: number } } };
+    return w.__trainState?.size.cols ?? 18;
+  });
+  const clickTile = async (row: number, col: number) => {
+    const box = await tiles.nth(row * cols + col).boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  };
+
+  for (let col = 0; col < 5; col++) {
+    await clickTile(1, col);
+  }
+
+  await page.locator('.tg-tab').nth(2).click();
+  await page.locator('#tg-buttons .tg-tool').first().click();
+  await clickTile(1, 0);
+
+  await page.locator('.tg-tab').nth(3).click();
+  await page.locator('#tg-buttons .tg-tool').nth(4).click();
+  await clickTile(1, 1);
+  await expect(page.locator('.tg-animal')).toHaveCount(1);
+
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __trainState?: {
+        paused: boolean;
+        animals: Array<{ kind: string; moving: boolean; speed: number; nextDecisionAt: number }>;
+      };
+    };
+    const s = w.__trainState;
+    if (!s) return;
+    for (const animal of s.animals) {
+      if (animal.kind === 'chicken') {
+        animal.moving = false;
+        animal.speed = 0;
+        animal.nextDecisionAt = Number.POSITIVE_INFINITY;
+      }
+    }
+    s.paused = false;
+  });
+
+  await page.waitForFunction(() => {
+    const w = window as unknown as { __trainState?: { bloodPuddles: unknown[] } };
+    return (w.__trainState?.bloodPuddles.length ?? 0) > 0;
+  }, { timeout: 3000 });
+
+  await expect(page.locator('.tg-animal')).toHaveCount(0);
+  await expect(page.locator('.tg-blood-puddle')).toHaveCount(1);
+  await expect(page.locator('.tg-blood-puddle')).toBeVisible();
+
+  expect(errors).toEqual([]);
+});
+
+test('Train Builder collision — train gets dirty after running over poop', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+
+  await page.goto('/Funsounds/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('#train-btn').click();
+  await expect(page.locator('#train-screen')).toBeVisible();
+
+  await page.evaluate(() => {
+    const w = window as unknown as { __trainState?: { paused: boolean } };
+    if (w.__trainState) w.__trainState.paused = true;
+  });
+
+  const tiles = page.locator('#tg-grid .tg-tile');
+  const cols = await page.evaluate(() => {
+    const w = window as unknown as { __trainState?: { size: { cols: number } } };
+    return w.__trainState?.size.cols ?? 18;
+  });
+  const clickTile = async (row: number, col: number) => {
+    const box = await tiles.nth(row * cols + col).boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  };
+
+  for (let col = 0; col < 5; col++) {
+    await clickTile(1, col);
+  }
+
+  await page.locator('.tg-tab').nth(2).click();
+  await page.locator('#tg-buttons .tg-tool').first().click();
+  await clickTile(1, 0);
+  await expect(page.locator('.tg-train-car')).toHaveCount(3);
+
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __trainState?: {
+        nextId: number;
+        paused: boolean;
+        poops: Array<{ id: number; x: number; y: number; fallStart: number; startTime: number; duration: number; landed: boolean }>;
+      };
+    };
+    const s = w.__trainState;
+    if (!s) return;
+    s.poops.push({ id: s.nextId++, x: 1.5, y: 1.5, fallStart: 0, startTime: 0, duration: 0, landed: true });
+    s.paused = false;
+  });
+
+  await page.waitForFunction(() => {
+    const w = window as unknown as { __trainState?: { trains: Array<{ dirty: boolean }> } };
+    return w.__trainState?.trains.some((train) => train.dirty) ?? false;
+  }, { timeout: 3000 });
+
+  await expect(page.locator('.tg-train-car.tg-train-dirty')).toHaveCount(3);
+  await expect(page.locator('.tg-train-dirt').first()).toHaveCSS('opacity', '1');
+
+  expect(errors).toEqual([]);
+});

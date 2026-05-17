@@ -65,6 +65,11 @@ function getRandomItem(): DisplayItem {
     const s = pickRandom(sounds);
     return { display: s.emoji, name: s.name, renderType: 'emoji', sound: s };
   }
+  if (mode === 'sounds') {
+    const s = pickRandom(sounds);
+    const display = getDifficulty() >= 3 ? s.name.toUpperCase() : s.emoji;
+    return { display, name: s.name, renderType: getDifficulty() >= 3 ? 'text' : 'emoji', sound: s };
+  }
   if (mode === 'alphabet') {
     const letter = pickRandom(ALPHABET);
     return { display: letter, name: letter, renderType: 'text' };
@@ -150,57 +155,6 @@ function buildTouchGrid(): void {
   }
 }
 
-function playSoundDesktop(item: DisplayItem): void {
-  if (!item) return;
-
-  speakText(item.name);
-
-  const el = document.createElement('div');
-  el.className = 'emoji-display';
-
-  if (item.renderType === 'color') {
-    el.style.width = '120px';
-    el.style.height = '120px';
-    el.style.borderRadius = '50%';
-    el.style.background = item.css!;
-    el.style.border = '4px solid rgba(255,255,255,0.3)';
-    el.style.fontSize = '0';
-  } else if (item.renderType === 'text') {
-    el.textContent = item.display;
-    el.style.color = 'white';
-    el.style.fontWeight = '700';
-  } else {
-    el.textContent = item.display;
-  }
-
-  const padding = 100;
-  const x = padding + Math.random() * (window.innerWidth - padding * 2 - 150);
-  const y = padding + Math.random() * (window.innerHeight - padding * 2 - 150);
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
-
-  document.getElementById('play-area')!.appendChild(el);
-
-  let duration = 3000;
-  if (item.sound) {
-    const audio = new Audio(`${item.sound.filename}.mp3`);
-    audio.volume = 0.7;
-    audio.play().catch(() => {});
-    duration = (item.sound.duration || 3) * 1000;
-    audio.addEventListener('ended', () => fadeOutEmoji(el));
-  }
-
-  setTimeout(() => fadeOutEmoji(el), duration + 500);
-}
-
-function fadeOutEmoji(emoji: HTMLElement): void {
-  if (emoji.classList.contains('fading')) return;
-  emoji.classList.add('fading');
-  setTimeout(() => {
-    if (emoji.parentNode) emoji.parentNode.removeChild(emoji);
-  }, 500);
-}
-
 async function handleTouchButton(index: number): Promise<void> {
   const btn = document.querySelector(`.touch-btn[data-index="${index}"]`) as HTMLElement | null;
   const item = buttonItems[index];
@@ -262,13 +216,9 @@ async function startPlaying(): Promise<void> {
   if (isMobile) await enterFullscreen();
 
   document.getElementById('start-screen')!.style.display = 'none';
-
-  if (isMobile) {
-    buildTouchGrid();
-    document.getElementById('touch-grid')!.style.display = 'grid';
-  } else {
-    document.getElementById('play-area')!.style.display = 'block';
-  }
+  document.getElementById('play-area')!.style.display = 'none';
+  buildTouchGrid();
+  document.getElementById('touch-grid')!.style.display = 'grid';
 
   isPlaying = true;
   document.body.focus();
@@ -297,14 +247,15 @@ export async function initFreePlay(): Promise<void> {
     { once: false },
   );
 
-  // Desktop keypress triggers random sound
+  // Keyboard play mirrors tapping a visible grid button.
   document.addEventListener(
     'keydown',
     (e) => {
       if (!isPlaying || e.key === 'Escape') return;
       e.preventDefault();
       e.stopPropagation();
-      playSoundDesktop(getRandomItem());
+      if (buttonCount <= 0) return;
+      void handleTouchButton(Math.floor(Math.random() * buttonCount));
     },
     true,
   );

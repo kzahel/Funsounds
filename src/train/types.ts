@@ -86,6 +86,8 @@ export interface Train {
   speed: number;
   /** True if the train is stopped (no track to follow). */
   stopped: boolean;
+  /** True once any car has run over landed poop. */
+  dirty: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,18 @@ export interface Poop {
 }
 
 // ---------------------------------------------------------------------------
+// Blood puddles (left behind when a train runs over a chicken)
+// ---------------------------------------------------------------------------
+
+export interface BloodPuddle {
+  id: number;
+  /** Tile-space column of the impact point. */
+  x: number;
+  /** Tile-space row of the impact point. */
+  y: number;
+}
+
+// ---------------------------------------------------------------------------
 // Toolbar / placement
 // ---------------------------------------------------------------------------
 
@@ -168,9 +182,10 @@ export interface GameState {
   trains: Train[];
   animals: Animal[];
   poops: Poop[];
+  bloodPuddles: BloodPuddle[];
   selectedTab: ToolTab;
   selectedTool: Tool;
-  /** Monotonic id counter for new trains/animals/poops. */
+  /** Monotonic id counter for new trains/animals/poops/blood puddles. */
   nextId: number;
   /** True while the user is paused/editing without simulation. */
   paused: boolean;
@@ -194,11 +209,14 @@ export type GameEvent =
   | { type: 'tile_changed'; row: number; col: number }
   | { type: 'train_added'; trainId: number }
   | { type: 'train_removed'; trainId: number }
+  | { type: 'train_dirtied'; trainId: number; poopId: number }
   | { type: 'animal_added'; animalId: number }
   | { type: 'animal_removed'; animalId: number }
   | { type: 'poop_dropped'; id: number }
   | { type: 'poop_landed'; id: number }
   | { type: 'poop_removed'; id: number }
+  | { type: 'blood_added'; id: number }
+  | { type: 'blood_removed'; id: number }
   | { type: 'cleared' };
 
 // ---------------------------------------------------------------------------

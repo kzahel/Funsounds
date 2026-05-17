@@ -30,6 +30,7 @@ interface QuizAnswer {
   speech: string;
   filename?: string;
   duration?: number;
+  promptType?: 'speech' | 'sound';
 }
 
 interface QuizChoice {
@@ -134,6 +135,21 @@ const NUMBERS_NORMAL = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const NUMBERS_HARD: number[] = [];
 for (let i = 1; i <= 20; i++) NUMBERS_HARD.push(i);
 
+let promptAudio: HTMLAudioElement | null = null;
+
+function getObjectNameSet(isExpert: boolean): Set<string> {
+  if (isExpert) return OBJECTS_NORMAL;
+  if (difficulty === 1) return OBJECTS_EASY;
+  if (difficulty === 2) return OBJECTS_NORMAL;
+  return OBJECTS_HARD;
+}
+
+function getObjectPool(isExpert: boolean): SoundEntry[] {
+  const nameSet = getObjectNameSet(isExpert);
+  const pool = sounds.filter((s) => nameSet.has(s.name));
+  return pool.length > 0 ? pool : sounds;
+}
+
 function speak(text: string): Promise<void> {
   return new Promise((resolve) => {
     let resolved = false;
@@ -166,6 +182,46 @@ function speak(text: string): Promise<void> {
   });
 }
 
+function playSoundPrompt(answer: QuizAnswer): Promise<void> {
+  return new Promise((resolve) => {
+    if (!answer.filename) {
+      resolve();
+      return;
+    }
+
+    if (promptAudio) {
+      promptAudio.pause();
+      promptAudio = null;
+    }
+
+    speechSynthesis.cancel();
+    const btn = document.getElementById('quiz-speaker')!;
+    btn.classList.add('speaking');
+
+    const audio = new Audio(`${answer.filename}.mp3`);
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      if (promptAudio === audio) promptAudio = null;
+      btn.classList.remove('speaking');
+      resolve();
+    };
+
+    promptAudio = audio;
+    audio.volume = 0.8;
+    audio.addEventListener('ended', done, { once: true });
+    audio.addEventListener('error', done, { once: true });
+    setTimeout(done, (answer.duration || 3) * 1000 + 500);
+    audio.play().catch(done);
+  });
+}
+
+function playPrompt(answer: QuizAnswer): Promise<void> {
+  if (answer.promptType === 'sound') return playSoundPrompt(answer);
+  return speak(answer.speech);
+}
+
 function buildExpertSpeech(answer: { key: string }, choices: QuizChoice[]): string {
   const otherNames = choices.filter((c) => c.key !== answer.key).map((c) => c.key);
   const listed = otherNames.join(', ');
@@ -180,14 +236,7 @@ function pickChoicesForMode(): { answer: QuizAnswer; choices: QuizChoice[] } {
   const numChoices = DIFFICULTY[difficulty].choiceCount;
 
   if (quizMode === 'objects') {
-    const nameSet = isExpert
-      ? OBJECTS_NORMAL
-      : difficulty === 1
-        ? OBJECTS_EASY
-        : difficulty === 2
-          ? OBJECTS_NORMAL
-          : OBJECTS_HARD;
-    const pool = sounds.filter((s) => nameSet.has(s.name));
+    const pool = getObjectPool(isExpert);
     const answer = pickRandom(pool);
     const others = shuffle(pool.filter((s) => s.name !== answer.name)).slice(0, numChoices - 1);
     const choices = shuffle([answer, ...others]);
@@ -199,6 +248,29 @@ function pickChoicesForMode(): { answer: QuizAnswer; choices: QuizChoice[] } {
         : answer.name;
     return {
       answer: { key: answer.name, speech, filename: answer.filename, duration: answer.duration },
+      choices: mapped,
+    };
+  }
+
+  if (quizMode === 'sounds') {
+    const pool = getObjectPool(isExpert);
+    const answer = pickRandom(pool);
+    const others = shuffle(pool.filter((s) => s.name !== answer.name)).slice(0, numChoices - 1);
+    const choices = shuffle([answer, ...others]);
+    const useWords = difficulty >= 3 || isExpert;
+    const mapped: QuizChoice[] = choices.map((c) => ({
+      key: c.name,
+      display: useWords ? c.name.toUpperCase() : c.emoji,
+      renderType: useWords ? 'text' : 'emoji',
+    }));
+    return {
+      answer: {
+        key: answer.name,
+        speech: answer.name,
+        filename: answer.filename,
+        duration: answer.duration,
+        promptType: 'sound',
+      },
       choices: mapped,
     };
   }
@@ -393,7 +465,7 @@ async function startRound(): Promise<void> {
   });
 
   await new Promise((r) => setTimeout(r, 400));
-  await speak(answer.speech);
+  await playPrompt(answer);
   firstRound = false;
 }
 
@@ -402,6 +474,11 @@ function handleQuizTap(btn: HTMLElement): void {
 
   if (btn.dataset.key === currentAnswer.key) {
     roundLocked = true;
+    speechSynthesis.cancel();
+    if (promptAudio) {
+      promptAudio.pause();
+      promptAudio = null;
+    }
     btn.classList.add('correct');
     awardStar();
 
@@ -466,6 +543,10 @@ async function startQuiz(): Promise<void> {
 
 function stopQuiz(): void {
   speechSynthesis.cancel();
+  if (promptAudio) {
+    promptAudio.pause();
+    promptAudio = null;
+  }
   document.getElementById('start-screen')!.style.display = 'block';
   document.getElementById('quiz-screen')!.style.display = 'none';
   document.getElementById('confetti-container')!.innerHTML = '';
@@ -528,7 +609,7 @@ export async function initQuiz(): Promise<void> {
 
   const speakerHandler = () => {
     if (currentAnswer && !roundLocked) {
-      speak(currentAnswer.speech);
+      playPrompt(currentAnswer);
     }
   };
   document

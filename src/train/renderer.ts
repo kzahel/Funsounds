@@ -46,6 +46,7 @@ export class DomRenderer implements Renderer {
   private trainLayer!: HTMLElement;
   private animalLayer!: HTMLElement;
   private poopLayer!: HTMLElement;
+  private bloodLayer!: HTMLElement;
 
   /** SVG-based per-tile elements so we can draw track curves cleanly. */
   private tileEls: HTMLElement[] = [];
@@ -53,6 +54,7 @@ export class DomRenderer implements Renderer {
   private trainEls: Map<number, HTMLElement[]> = new Map();
   private animalEls: Map<number, HTMLElement> = new Map();
   private poopEls: Map<number, HTMLElement> = new Map();
+  private bloodEls: Map<number, HTMLElement> = new Map();
 
   private size = { rows: 0, cols: 0 };
   private tilePx = 60;
@@ -74,6 +76,10 @@ export class DomRenderer implements Renderer {
 
     this.computeTileSize();
     this.buildTiles(state);
+
+    this.bloodLayer = document.createElement('div');
+    this.bloodLayer.style.cssText = 'position:absolute; inset:0; pointer-events:none;';
+    this.gridEl.appendChild(this.bloodLayer);
 
     this.poopLayer = document.createElement('div');
     this.poopLayer.style.cssText = 'position:absolute; inset:0; pointer-events:none;';
@@ -98,6 +104,7 @@ export class DomRenderer implements Renderer {
     this.trainEls.clear();
     this.animalEls.clear();
     this.poopEls.clear();
+    this.bloodEls.clear();
   }
 
   private handleResize = (): void => {
@@ -176,6 +183,7 @@ export class DomRenderer implements Renderer {
 
   render(state: GameState, now: number): void {
     this.renderTiles(state);
+    this.renderBloodPuddles(state);
     this.renderPoops(state, now);
     this.renderTrains(state);
     this.renderAnimals(state);
@@ -270,7 +278,24 @@ export class DomRenderer implements Renderer {
             text-shadow: 0 2px 4px rgba(0,0,0,0.4);
             z-index: 5;
           `;
-          e.textContent = i === 0 ? TRAIN_EMOJI[train.kind] : TRAIN_CAR_EMOJI[train.kind];
+          const emoji = document.createElement('span');
+          emoji.className = 'tg-train-emoji';
+          emoji.textContent = i === 0 ? TRAIN_EMOJI[train.kind] : TRAIN_CAR_EMOJI[train.kind];
+          const dirt = document.createElement('span');
+          dirt.className = 'tg-train-dirt';
+          dirt.style.cssText = `
+            position:absolute;
+            right:-0.04em; bottom:0.02em;
+            width:0.34em; height:0.24em;
+            border-radius:50%;
+            background:radial-gradient(circle at 42% 42%, #8a4b18 0%, #5f3411 62%, #3b1f09 100%);
+            box-shadow:-0.18em -0.08em 0 -0.08em #6f3d13, 0.14em -0.11em 0 -0.1em #4b2a0d, 0 1px 2px rgba(0,0,0,0.35);
+            opacity:0;
+            transform:rotate(-14deg);
+            transition:opacity 120ms ease;
+          `;
+          e.appendChild(emoji);
+          e.appendChild(dirt);
           this.trainLayer.appendChild(e);
           els.push(e);
         }
@@ -288,6 +313,13 @@ export class DomRenderer implements Renderer {
         const rot = dirToDeg(car.dir);
         el.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
         el.style.fontSize = px * 0.7 + 'px';
+        el.style.filter = train.dirty ? 'sepia(0.45) saturate(0.75) brightness(0.9)' : '';
+        el.style.textShadow = train.dirty
+          ? '0 2px 4px rgba(75,45,5,0.6), 0 0 0.12em rgba(95,52,17,0.55)'
+          : '0 2px 4px rgba(0,0,0,0.4)';
+        el.classList.toggle('tg-train-dirty', train.dirty);
+        const dirt = el.querySelector<HTMLElement>('.tg-train-dirt');
+        if (dirt) dirt.style.opacity = train.dirty ? '1' : '0';
       }
     }
   }
@@ -373,6 +405,44 @@ export class DomRenderer implements Renderer {
       el.style.fontSize = px * 0.35 + 'px';
       el.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(2)})`;
       el.classList.toggle('tg-landed', p.landed);
+    }
+  }
+
+  // ---- Blood puddles ----
+
+  private renderBloodPuddles(state: GameState): void {
+    const px = this.tilePx;
+
+    const activeIds = new Set(state.bloodPuddles.map((b) => b.id));
+    for (const [id, el] of this.bloodEls) {
+      if (!activeIds.has(id)) {
+        el.remove();
+        this.bloodEls.delete(id);
+      }
+    }
+
+    for (const b of state.bloodPuddles) {
+      let el = this.bloodEls.get(b.id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'tg-blood-puddle';
+        el.style.cssText = `
+          position:absolute; pointer-events:none;
+          z-index: 2;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          background: radial-gradient(circle at 45% 45%, #d71920 0%, #a00000 58%, #5f0000 100%);
+          box-shadow: 0 1px 2px rgba(60,0,0,0.45);
+        `;
+        this.bloodLayer.appendChild(el);
+        this.bloodEls.set(b.id, el);
+      }
+      const wobble = (b.id % 5) * 0.03;
+      el.style.left = b.x * px + 'px';
+      el.style.top = b.y * px + 'px';
+      el.style.width = px * (0.34 + wobble) + 'px';
+      el.style.height = px * (0.22 + wobble * 0.5) + 'px';
+      el.style.transform = `translate(-50%, -50%) rotate(${(b.id % 7) * 19}deg)`;
     }
   }
 }
