@@ -6,6 +6,7 @@ import {
   COST_BEEHIVE,
   COST_FENCE,
   COST_BOOTS,
+  COST_PRESENT,
   SAVE_SLOT_COUNT,
   SAVE_VERSION,
   SEED_COST,
@@ -138,6 +139,15 @@ const TOOLBAR: { tab: ToolTab; label: string; emoji: string; buttons: ToolButton
         id: 'buy-boots', label: 'Boots', emoji: '\u{1F462}', tool: { kind: 'buy_boots' },
         priceLabel: (s) => s.hasBoots ? 'Owned' : `$${seasonCost(s, COST_BOOTS)}`,
         disabled: (s) => s.hasBoots || s.money < seasonCost(s, COST_BOOTS),
+      },
+      {
+        id: 'buy-present', label: 'Present', emoji: '\u{1F381}', tool: { kind: 'buy_present' },
+        priceLabel: (s) => {
+          if (s.carryingPresent) return 'Carrying';
+          if (s.fairyTreeGiftHatchAt != null) return 'At tree';
+          return `$${seasonCost(s, COST_PRESENT)}`;
+        },
+        disabled: (s) => s.carryingPresent || s.fairyTreeGiftHatchAt != null || s.money < seasonCost(s, COST_PRESENT),
       },
       {
         id: 'buy-expand', label: 'Expand', emoji: '\u{1F331}', tool: { kind: 'buy_expand' },
@@ -298,6 +308,7 @@ function updateHUD(): void {
   pushIf(inv.turnip, '\u{1FADA}');
   pushIf(inv.sunflower, '\u{1F33B}');
   pushIf(inv.honey, '\u{1F36F}');
+  pushIf(state.carryingPresent ? 1 : 0, '\u{1F381}');
   const total = parts.length;
   if (total === 0) {
     hudInventoryEl.textContent = 'Basket empty';
@@ -356,7 +367,8 @@ function renderTabButtons(activeTab: ToolTab): void {
       if (btn.disabled?.(state)) return;
       const k = btn.tool.kind;
       if (k === 'buy_cat' || k === 'buy_scarecrow' || k === 'buy_beehive'
-          || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_expand') {
+          || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_present'
+          || k === 'buy_expand') {
         processAction(state, { type: 'place', row: 0, col: 0, tool: btn.tool });
         renderTabButtons(state.selectedTab);
         return;
@@ -419,7 +431,8 @@ function placeAtPointer(clientX: number, clientY: number): void {
   const tool = state.selectedTool;
   const k = tool.kind;
   if (k === 'buy_cat' || k === 'buy_scarecrow' || k === 'buy_beehive'
-      || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_expand') return;
+      || k === 'buy_fence' || k === 'buy_boots' || k === 'buy_present'
+      || k === 'buy_expand') return;
   const prevTab = state.selectedTab;
   const prevTool = state.selectedTool;
   processAction(state, { type: 'place', row: tile.row, col: tile.col, tool });

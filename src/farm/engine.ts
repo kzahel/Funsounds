@@ -10,6 +10,8 @@ import {
   COST_BEEHIVE,
   COST_FENCE,
   COST_BOOTS,
+  COST_PRESENT,
+  FAIRY_TREE_KITTEN_SECONDS,
   FLYING_PESTS,
   SEASONS,
   SEASON_DURATION,
@@ -49,6 +51,7 @@ const BOOTS_SPEED_MULT = 1.5;
 const PLAYER_SCARE_RADIUS = 1.6;
 const BOOTS_SCARE_MULT = 1.5;
 const CAT_SCARE_RADIUS = 1.8;
+const KITTEN_SCARE_RADIUS = 1.2;
 const SCARECROW_SCARE_RADIUS = 2.6;
 const PEST_EAT_SECONDS = 3.0;
 const PEST_SPAWN_MIN = 6;
@@ -138,6 +141,8 @@ export function createGameState(size: GridSize = { rows: 9, cols: 13 }): GameSta
     pendingScarecrows: 0,
     pendingBeehives: 0,
     pendingFences: 0,
+    carryingPresent: false,
+    fairyTreeGiftHatchAt: null,
     hasBoots: false,
     time: 0,
     nextRainAt: RAIN_INTERVAL_MIN + Math.random() * (RAIN_INTERVAL_MAX - RAIN_INTERVAL_MIN),
@@ -149,18 +154,19 @@ export function createGameState(size: GridSize = { rows: 9, cols: 13 }): GameSta
     nextId: 1,
     paused: false,
   };
+  ensureFairyTree(state);
   seedInitialWildSunflowers(state);
   return state;
 }
 
 type UnknownRecord = Record<string, unknown>;
 
-const TILE_KINDS = ['grass', 'tilled', 'wet_tilled', 'apple_tree'] as const;
+const TILE_KINDS = ['grass', 'tilled', 'wet_tilled', 'apple_tree', 'fairy_tree'] as const;
 const CROP_KINDS = Object.keys(CROP_PRICE) as CropKind[];
 const FACING_VALUES = ['up', 'down', 'left', 'right'] as const;
 const TOOL_TABS = ['farm', 'seeds', 'defense', 'shop'] as const;
 const PEST_KINDS = ['rabbit', 'bird'] as const;
-const DEFENSE_KINDS = ['cat', 'scarecrow', 'beehive'] as const;
+const DEFENSE_KINDS = ['cat', 'kitten', 'scarecrow', 'beehive'] as const;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
@@ -250,6 +256,7 @@ function normalizeTool(raw: unknown, fallback: Tool): Tool {
     case 'buy_beehive':
     case 'buy_fence':
     case 'buy_boots':
+    case 'buy_present':
     case 'buy_expand':
       return { kind: raw.kind };
     case 'seed':
@@ -341,6 +348,7 @@ export function normalizeGameState(raw: unknown): GameState {
 
   const rawTiles = Array.isArray(source.tiles) ? source.tiles : [];
   normalized.tiles = normalized.tiles.map((tile, i) => normalizeTile(rawTiles[i], tile, normalized.time));
+  ensureFairyTree(normalized);
 
   normalized.player = normalizePlayer(source.player, normalized.player, size);
   normalized.pests = Array.isArray(source.pests)
@@ -355,6 +363,9 @@ export function normalizeGameState(raw: unknown): GameState {
   normalized.pendingScarecrows = Math.max(0, finiteInteger(source.pendingScarecrows, normalized.pendingScarecrows));
   normalized.pendingBeehives = Math.max(0, finiteInteger(source.pendingBeehives, normalized.pendingBeehives));
   normalized.pendingFences = Math.max(0, finiteInteger(source.pendingFences, normalized.pendingFences));
+  const hatchAt = finiteNumber(source.fairyTreeGiftHatchAt, NaN);
+  normalized.fairyTreeGiftHatchAt = Number.isFinite(hatchAt) ? Math.max(0, hatchAt) : null;
+  normalized.carryingPresent = source.carryingPresent === true && normalized.fairyTreeGiftHatchAt == null;
   normalized.hasBoots = source.hasBoots === true;
 
   normalized.nextRainAt = finiteNumber(source.nextRainAt, normalized.nextRainAt);
@@ -375,6 +386,34 @@ export function normalizeGameState(raw: unknown): GameState {
   normalized.nextId = Math.max(finiteInteger(source.nextId, normalized.nextId), maxEntityId + 1);
 
   return normalized;
+}
+
+function fairyTreePosition(size: GridSize): { row: number; col: number } {
+  return {
+    row: Math.min(Math.max(1, Math.floor(size.rows * 0.25)), size.rows - 1),
+    col: Math.max(0, size.cols - 2),
+  };
+}
+
+function ensureFairyTree(state: GameState): TileState | null {
+  const pos = fairyTreePosition(state.size);
+  let tree: TileState | null = null;
+  for (const t of state.tiles) {
+    if (t.kind === 'fairy_tree') {
+      if (!tree && t.row === pos.row && t.col === pos.col) {
+        tree = t;
+      } else {
+        t.kind = 'grass';
+      }
+    }
+  }
+  tree = tileAt(state, pos.row, pos.col) ?? tree;
+  if (!tree) return null;
+  tree.kind = 'fairy_tree';
+  tree.crop = null;
+  tree.hasFence = false;
+  tree.isMarket = false;
+  return tree;
 }
 
 function seedInitialWildSunflowers(state: GameState): void {
@@ -549,6 +588,7 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
       if (state[pending] <= 0) return [];
       if (!isArable(state, row, col)) return [];
       if (tile.isMarket || tile.hasFence) return [];
+      if (tile.kind === 'fairy_tree') return [];
       state[pending] -= 1;
       const d = createDefense(state, row, col, kind);
       state.defenses.push(d);
@@ -562,6 +602,7 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
     case 'place_fence': {
       if (state.pendingFences <= 0) return [];
       if (tile.isMarket || tile.hasFence) return [];
+      if (tile.kind === 'fairy_tree') return [];
       // Fences can be placed anywhere — no arable restriction (perimeter walls).
       // Can't place on top of a crop.
       if (tile.crop) return [];
@@ -578,6 +619,7 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
     case 'buy_scarecrow': return buyStack(state, events, COST_SCARECROW, 'pendingScarecrows', { kind: 'place_scarecrow' });
     case 'buy_beehive': return buyStack(state, events, COST_BEEHIVE, 'pendingBeehives', { kind: 'place_beehive' });
     case 'buy_fence': return buyStack(state, events, COST_FENCE, 'pendingFences', { kind: 'place_fence' });
+    case 'buy_present': return buyPresent(state, events);
     case 'buy_boots': {
       const cost = Math.round(COST_BOOTS * seasonShopMultiplier(currentSeason(state.time)));
       if (state.hasBoots || state.money < cost) {
@@ -611,6 +653,18 @@ function placeAt(state: GameState, row: number, col: number, tool: Tool): GameEv
       return events;
     }
   }
+  return events;
+}
+
+function buyPresent(state: GameState, events: GameEvent[]): GameEvent[] {
+  const cost = Math.round(COST_PRESENT * seasonShopMultiplier(currentSeason(state.time)));
+  if (state.carryingPresent || state.fairyTreeGiftHatchAt != null || state.money < cost) {
+    events.push({ type: 'purchase_failed' });
+    return events;
+  }
+  state.money -= cost;
+  state.carryingPresent = true;
+  events.push({ type: 'present_bought' });
   return events;
 }
 
@@ -673,29 +727,34 @@ function harvestTile(state: GameState, row: number, col: number): GameEvent[] {
 // ---------------------------------------------------------------------------
 
 function createDefense(state: GameState, row: number, col: number, kind: DefenseKind): Defense {
+  return createDefenseAtPoint(state, col + 0.5, row + 0.5, kind);
+}
+
+function createDefenseAtPoint(state: GameState, x: number, y: number, kind: DefenseKind): Defense {
   const d: Defense = {
     id: state.nextId++,
     kind,
-    x: col + 0.5,
-    y: row + 0.5,
+    x,
+    y,
     heading: Math.random() * Math.PI * 2,
     nextDecisionAt: 0,
-    moving: kind === 'cat',
+    moving: kind === 'cat' || kind === 'kitten',
   };
   if (kind === 'beehive') d.nextHoneyAt = state.time + BEEHIVE_HONEY_INTERVAL;
   return d;
 }
 
 function tickCat(state: GameState, d: Defense, dt: number): void {
-  if (d.kind !== 'cat') return;
+  if (d.kind !== 'cat' && d.kind !== 'kitten') return;
   if (state.time >= d.nextDecisionAt) {
     d.moving = Math.random() < 0.75;
     d.heading = Math.random() * Math.PI * 2;
     d.nextDecisionAt = state.time + 1.2 + Math.random() * 2.5;
   }
   if (!d.moving) return;
-  const nx = d.x + Math.cos(d.heading) * 1.1 * dt;
-  const ny = d.y + Math.sin(d.heading) * 1.1 * dt;
+  const speed = d.kind === 'kitten' ? 0.75 : 1.1;
+  const nx = d.x + Math.cos(d.heading) * speed * dt;
+  const ny = d.y + Math.sin(d.heading) * speed * dt;
   if (nx < 0.3 || nx >= state.size.cols - 0.3 || ny < 0.3 || ny >= state.size.rows - 0.3) {
     d.heading += Math.PI;
     return;
@@ -789,6 +848,7 @@ function threatProximity(state: GameState, x: number, y: number): { d2: number; 
   if (pMoving) consider(p.x, p.y, playerScareRadius(state));
   for (const d of state.defenses) {
     if (d.kind === 'cat') consider(d.x, d.y, CAT_SCARE_RADIUS);
+    else if (d.kind === 'kitten') consider(d.x, d.y, KITTEN_SCARE_RADIUS);
     else if (d.kind === 'scarecrow') consider(d.x, d.y, SCARECROW_SCARE_RADIUS);
     // Beehives don't scare pests.
   }
@@ -936,6 +996,12 @@ function checkPlayerCollisions(state: GameState): GameEvent[] {
     const sale = sellAll(state);
     if (sale > 0) events.push({ type: 'sold', amount: sale });
   }
+  if (tile && tile.kind === 'fairy_tree' && state.carryingPresent) {
+    state.carryingPresent = false;
+    state.fairyTreeGiftHatchAt = state.time + FAIRY_TREE_KITTEN_SECONDS;
+    events.push({ type: 'present_delivered' });
+    events.push({ type: 'tile_changed', row: tile.row, col: tile.col });
+  }
   // Walk onto a beehive to collect accumulated honey.
   const r2 = BEEHIVE_COLLECT_RADIUS * BEEHIVE_COLLECT_RADIUS;
   for (const d of state.defenses) {
@@ -949,6 +1015,35 @@ function checkPlayerCollisions(state: GameState): GameEvent[] {
     }
   }
   return events;
+}
+
+function kittenSpawnPoint(state: GameState): { x: number; y: number } {
+  const tree = ensureFairyTree(state);
+  if (!tree) return { x: state.player.x, y: state.player.y };
+  const offsets = [
+    [1, 0], [0, -1], [0, 1], [-1, 0],
+    [1, -1], [1, 1], [-1, -1], [-1, 1],
+  ];
+  for (const [dr, dc] of offsets) {
+    const t = tileAt(state, tree.row + dr, tree.col + dc);
+    if (!t || t.isMarket || t.hasFence || t.kind === 'fairy_tree') continue;
+    return { x: t.col + 0.5, y: t.row + 0.5 };
+  }
+  return { x: tree.col + 0.5, y: tree.row + 0.5 };
+}
+
+function tickFairyTreeGift(state: GameState): GameEvent[] {
+  if (state.fairyTreeGiftHatchAt == null || state.time < state.fairyTreeGiftHatchAt) return [];
+  const spawn = kittenSpawnPoint(state);
+  const kitten = createDefenseAtPoint(state, spawn.x, spawn.y, 'kitten');
+  state.defenses.push(kitten);
+  state.fairyTreeGiftHatchAt = null;
+  const tree = ensureFairyTree(state);
+  return [
+    { type: 'defense_added', id: kitten.id },
+    { type: 'kitten_arrived', id: kitten.id },
+    ...(tree ? [{ type: 'tile_changed' as const, row: tree.row, col: tree.col }] : []),
+  ];
 }
 
 /** Compute the gross sale of current inventory at the current season's prices. */
@@ -1067,6 +1162,7 @@ export function tick(state: GameState, dt: number): GameEvent[] {
   }
 
   events.push(...updatePlayer(state, dt));
+  events.push(...tickFairyTreeGift(state));
   events.push(...updateWeather(state));
   events.push(...updateCrops(state, dt));
 

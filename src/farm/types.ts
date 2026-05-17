@@ -30,8 +30,8 @@ export const SEASON_DURATION = 180;
 // Tiles & crops
 // ---------------------------------------------------------------------------
 
-/** apple_tree is a permanent tile type planted via the apple seed tool. */
-export type TileKind = 'grass' | 'tilled' | 'wet_tilled' | 'apple_tree';
+/** apple_tree is planted via the apple seed tool; fairy_tree is the permanent gift tree. */
+export type TileKind = 'grass' | 'tilled' | 'wet_tilled' | 'apple_tree' | 'fairy_tree';
 
 export type CropKind =
   | 'carrot'
@@ -217,7 +217,7 @@ export interface Pest {
   speed: number;
 }
 
-export type DefenseKind = 'cat' | 'scarecrow' | 'beehive';
+export type DefenseKind = 'cat' | 'kitten' | 'scarecrow' | 'beehive';
 
 export interface Defense {
   id: number;
@@ -263,6 +263,10 @@ export const COST_SCARECROW = 20;
 export const COST_BEEHIVE = 60;
 export const COST_FENCE = 8;
 export const COST_BOOTS = 40;
+export const COST_PRESENT = 25;
+
+/** Seconds after giving the present to the fairy tree before the kitten appears. */
+export const FAIRY_TREE_KITTEN_SECONDS = 12;
 
 /** Expansion cost grows with radius. */
 export function costToExpand(currentRadius: number): number {
@@ -300,6 +304,7 @@ export type Tool =
   | { kind: 'buy_beehive' }
   | { kind: 'buy_fence' }
   | { kind: 'buy_boots' }
+  | { kind: 'buy_present' }
   | { kind: 'buy_expand' };
 
 /** Shallow value-equality for tools. Used for toolbar highlighting after loads. */
@@ -334,6 +339,10 @@ export interface GameState {
   pendingScarecrows: number;
   pendingBeehives: number;
   pendingFences: number;
+  /** True after buying a present and before carrying it to the fairy tree. */
+  carryingPresent: boolean;
+  /** Hatch time for a present placed in the fairy tree hole; null when idle. */
+  fairyTreeGiftHatchAt: number | null;
   /** One-time upgrades. */
   hasBoots: boolean;
   /** Continuous game time in seconds. */
@@ -386,6 +395,9 @@ export type GameEvent =
   | { type: 'rain_start' }
   | { type: 'rain_end' }
   | { type: 'purchase_failed' }
+  | { type: 'present_bought' }
+  | { type: 'present_delivered' }
+  | { type: 'kitten_arrived'; id: number }
   | { type: 'crop_eaten'; row: number; col: number }
   | { type: 'season_changed'; season: Season }
   | { type: 'boots_equipped' };
