@@ -20,6 +20,7 @@ const TILE_BG: Record<string, string> = {
   tilled: '#8c5a2a',
   wet_tilled: '#4a321a',
   apple_tree: '#2f6f2a',
+  fairy_tree: '#28643a',
 };
 
 const CROP_EMOJI: Record<CropKind, string> = {
@@ -42,12 +43,15 @@ const PEST_EMOJI: Record<PestKind, string> = {
 
 const PLAYER_EMOJI = '\u{1F9D1}\u200D\u{1F33E}';
 const MARKET_EMOJI = '\u{1F3EA}';
+const PRESENT_EMOJI = '\u{1F381}';
 const RAIN_EMOJI = '\u{1F4A7}';
 const SNOW_EMOJI = '\u2744\uFE0F';
 const CAT_EMOJI = '\u{1F408}';
+const KITTEN_EMOJI = '\u{1F431}';
 const BEEHIVE_EMOJI = '\u{1F36F}';
 const FENCE_EMOJI = '\u{1FAB5}'; // wood emoji as fence stand-in
 const APPLE_TREE_EMOJI = '\u{1F333}';
+const FAIRY_TREE_EMOJI = '\u{1F332}';
 const APPLE_TREE_BASE_Y = 0.88;
 const APPLE_POSITIONS: Record<number, Array<[xPct: number, yPct: number]>> = {
   1: [[50, 52]],
@@ -80,6 +84,8 @@ export class DomRenderer implements Renderer {
   private cropEls: (HTMLElement | null)[] = [];
   private fenceEls: (HTMLElement | null)[] = [];
   private treeEls: (HTMLElement | null)[] = [];
+  private fairyEls: (HTMLElement | null)[] = [];
+  private fairyGiftEls: (HTMLElement | null)[] = [];
   private pestEls: Map<number, HTMLElement> = new Map();
   private defenseEls: Map<number, HTMLElement> = new Map();
   private playerEl!: HTMLElement;
@@ -148,6 +154,8 @@ export class DomRenderer implements Renderer {
     this.cropEls = [];
     this.fenceEls = [];
     this.treeEls = [];
+    this.fairyEls = [];
+    this.fairyGiftEls = [];
     this.pestEls.clear();
     this.defenseEls.clear();
   }
@@ -205,6 +213,8 @@ export class DomRenderer implements Renderer {
       this.cropEls.push(null);
       this.fenceEls.push(null);
       this.treeEls.push(null);
+      this.fairyEls.push(null);
+      this.fairyGiftEls.push(null);
     }
   }
 
@@ -224,7 +234,7 @@ export class DomRenderer implements Renderer {
     this.renderCrops(state);
     this.renderDefenses(state);
     this.renderPests(state);
-    this.renderPlayer(state.player, state.hasBoots);
+    this.renderPlayer(state.player, state.hasBoots, state.carryingPresent);
     this.renderWeather(state);
   }
 
@@ -287,6 +297,65 @@ export class DomRenderer implements Renderer {
       } else if (treeEl) {
         treeEl.remove();
         this.treeEls[i] = null;
+      }
+
+      // Permanent fairy tree with a gift hole.
+      let fairyEl = this.fairyEls[i];
+      if (tile.kind === 'fairy_tree') {
+        if (!fairyEl) {
+          fairyEl = document.createElement('span');
+          fairyEl.className = 'fg-fairy-tree';
+          fairyEl.innerHTML = `<span class="fg-fairy-tree-emoji">${FAIRY_TREE_EMOJI}</span><span class="fg-fairy-tree-hole"></span>`;
+          fairyEl.style.cssText = `
+            position:absolute; left:50%; top:88%;
+            transform:translate(-50%, -100%);
+            font-size:${px * 1.08}px; line-height:1;
+            pointer-events:none;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.45);
+            z-index: 2;
+          `;
+          const hole = fairyEl.querySelector('.fg-fairy-tree-hole') as HTMLElement | null;
+          if (hole) {
+            hole.style.cssText = `
+              position:absolute; left:50%; top:58%;
+              width:0.34em; height:0.28em;
+              transform:translate(-50%, -50%);
+              border-radius:50%;
+              background:#1a140f;
+              box-shadow:0 0 0 0.04em rgba(255,255,255,0.18), 0 0 0.45em rgba(255,235,150,0.45);
+            `;
+          }
+          el.appendChild(fairyEl);
+          this.fairyEls[i] = fairyEl;
+        }
+        fairyEl.style.fontSize = px * 1.08 + 'px';
+      } else if (fairyEl) {
+        fairyEl.remove();
+        this.fairyEls[i] = null;
+      }
+
+      let giftEl = this.fairyGiftEls[i];
+      const hasGift = tile.kind === 'fairy_tree' && state.fairyTreeGiftHatchAt != null;
+      if (hasGift) {
+        if (!giftEl) {
+          giftEl = document.createElement('span');
+          giftEl.className = 'fg-fairy-present';
+          giftEl.textContent = PRESENT_EMOJI;
+          giftEl.style.cssText = `
+            position:absolute; left:50%; top:58%;
+            transform:translate(-50%, -50%);
+            font-size:${px * 0.34}px; line-height:1;
+            pointer-events:none;
+            filter:drop-shadow(0 0 0.35em rgba(255,236,132,0.9));
+            z-index: 3;
+          `;
+          el.appendChild(giftEl);
+          this.fairyGiftEls[i] = giftEl;
+        }
+        giftEl.style.fontSize = px * 0.34 + 'px';
+      } else if (giftEl) {
+        giftEl.remove();
+        this.fairyGiftEls[i] = null;
       }
     }
   }
@@ -400,11 +469,11 @@ export class DomRenderer implements Renderer {
       if (!el) {
         el = document.createElement('div');
         el.className = `fg-${d.kind}`;
-        if (d.kind === 'cat') {
-          el.textContent = CAT_EMOJI;
+        if (d.kind === 'cat' || d.kind === 'kitten') {
+          el.textContent = d.kind === 'kitten' ? KITTEN_EMOJI : CAT_EMOJI;
           el.style.cssText = `
             position:absolute; pointer-events:none;
-            font-size:${px * 0.55}px; line-height:1;
+            font-size:${px * (d.kind === 'kitten' ? 0.42 : 0.55)}px; line-height:1;
             transform:translate(-50%, -55%);
             text-shadow: 0 2px 4px rgba(0,0,0,0.3);
             z-index: 3;
@@ -434,7 +503,7 @@ export class DomRenderer implements Renderer {
       }
       el.style.left = d.x * px + 'px';
       el.style.top = d.y * px + 'px';
-      const sizePct = d.kind === 'scarecrow' ? 0.5 : 0.55;
+      const sizePct = d.kind === 'scarecrow' ? 0.5 : d.kind === 'kitten' ? 0.42 : 0.55;
       el.style.fontSize = px * sizePct + 'px';
       if (d.kind === 'beehive') {
         const badge = el.querySelector('.fg-bh-honey') as HTMLElement | null;
@@ -483,8 +552,9 @@ export class DomRenderer implements Renderer {
 
   // ---- Player ----
 
-  private renderPlayer(player: Player, hasBoots: boolean): void {
+  private renderPlayer(player: Player, hasBoots: boolean, carryingPresent: boolean): void {
     const px = this.tilePx;
+    this.playerEl.textContent = carryingPresent ? `${PLAYER_EMOJI}${PRESENT_EMOJI}` : PLAYER_EMOJI;
     this.playerEl.style.left = player.x * px + 'px';
     this.playerEl.style.top = player.y * px + 'px';
     this.playerEl.style.fontSize = px * 0.65 + 'px';

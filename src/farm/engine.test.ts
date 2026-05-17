@@ -6,7 +6,7 @@ import {
 } from './engine';
 import {
   CROP_PRICE, COST_CAT, COST_SCARECROW, COST_BEEHIVE, COST_FENCE, COST_BOOTS,
-  APPLE_TREE_MAX_AGE_SEASONS, SEASON_DURATION,
+  COST_PRESENT, FAIRY_TREE_KITTEN_SECONDS, APPLE_TREE_MAX_AGE_SEASONS, SEASON_DURATION,
   appleTreeSizeTiles, appleYieldForTreeSize, toolsEqual,
 } from './types';
 import type { Tool, GameState } from './types';
@@ -45,11 +45,18 @@ function fund(state: GameState, amount: number = 100): void {
   state.money = amount;
 }
 
+function fairyTree(state: GameState) {
+  const tree = state.tiles.find((t) => t.kind === 'fairy_tree');
+  if (!tree) throw new Error('expected a fairy tree tile');
+  return tree;
+}
+
 describe('createGameState', () => {
   it('builds a grid, player at centre, and one market tile', () => {
     const s = createGameState({ rows: 6, cols: 8 });
     expect(s.tiles).toHaveLength(48);
     expect(s.tiles.filter((t) => t.isMarket)).toHaveLength(1);
+    expect(s.tiles.filter((t) => t.kind === 'fairy_tree')).toHaveLength(1);
     expect(s.player.x).toBeCloseTo(4.5);
     expect(s.player.y).toBeCloseTo(3.5);
     expect(s.money).toBeGreaterThan(0);
@@ -305,12 +312,56 @@ describe('shop additions', () => {
     expect(s.money).toBe(200 - COST_BOOTS);
   });
 
+  it('buying a present deducts money and marks the player as carrying it', () => {
+    const s = createGameState();
+    s.money = 200;
+    const events = place(s, 0, 0, { kind: 'buy_present' });
+    expect(s.money).toBe(200 - COST_PRESENT);
+    expect(s.carryingPresent).toBe(true);
+    expect(events.some((e) => e.type === 'present_bought')).toBe(true);
+
+    const duplicate = place(s, 0, 0, { kind: 'buy_present' });
+    expect(duplicate.some((e) => e.type === 'purchase_failed')).toBe(true);
+    expect(s.money).toBe(200 - COST_PRESENT);
+  });
+
   it('winter discount reduces shop prices by 25%', () => {
     const s = createGameState();
     s.time = 3 * SEASON_DURATION + 1;
     s.money = 1000;
     place(s, 0, 0, { kind: 'buy_cat' });
     expect(s.money).toBe(1000 - Math.round(COST_CAT * 0.75));
+  });
+});
+
+describe('fairy tree present', () => {
+  it('hatches a baby kitten after the player brings a present to the fairy tree', () => {
+    const s = createGameState({ rows: 9, cols: 13 });
+    s.money = 200;
+    s.nextPestAt = 1e9;
+    s.nextRainAt = 1e9;
+    s.nextWildSunflowerAt = 1e9;
+    place(s, 0, 0, { kind: 'buy_present' });
+    const tree = fairyTree(s);
+
+    s.player.x = tree.col + 0.5;
+    s.player.y = tree.row + 0.5;
+    const delivered = processAction(s, { type: 'tick', dt: 0.01 });
+    expect(s.carryingPresent).toBe(false);
+    expect(s.fairyTreeGiftHatchAt).not.toBeNull();
+    expect(delivered.some((e) => e.type === 'present_delivered')).toBe(true);
+    expect(s.defenses.some((d) => d.kind === 'kitten')).toBe(false);
+
+    const hatchAt = s.fairyTreeGiftHatchAt!;
+    s.time = hatchAt - 0.05;
+    const early = processAction(s, { type: 'tick', dt: 0.01 });
+    expect(early.some((e) => e.type === 'kitten_arrived')).toBe(false);
+    expect(s.defenses.some((d) => d.kind === 'kitten')).toBe(false);
+
+    const hatched = processAction(s, { type: 'tick', dt: FAIRY_TREE_KITTEN_SECONDS });
+    expect(s.fairyTreeGiftHatchAt).toBeNull();
+    expect(s.defenses.some((d) => d.kind === 'kitten')).toBe(true);
+    expect(hatched.some((e) => e.type === 'kitten_arrived')).toBe(true);
   });
 });
 
@@ -450,6 +501,8 @@ describe('save / load round-trip', () => {
     legacy.paused = true;
     delete legacy.pendingBeehives;
     delete legacy.pendingFences;
+    delete legacy.carryingPresent;
+    delete legacy.fairyTreeGiftHatchAt;
     delete legacy.hasBoots;
     delete legacy.nextWildSunflowerAt;
 
@@ -461,6 +514,7 @@ describe('save / load round-trip', () => {
     expect(runtime.inventory.sunflower).toBe(0);
     expect(runtime.inventory.honey).toBe(0);
     expect(runtime.tiles[0].kind).toBe('tilled');
+    expect(runtime.tiles.filter((t) => t.kind === 'fairy_tree')).toHaveLength(1);
     expect(runtime.tiles[0].hasFence).toBe(false);
     expect(runtime.player.x).toBe(2.5);
     expect(runtime.player.y).toBe(3.5);
@@ -468,6 +522,8 @@ describe('save / load round-trip', () => {
     expect(runtime.player.moving.up).toBe(false);
     expect(runtime.selectedTool).toEqual({ kind: 'till' });
     expect(runtime.paused).toBe(false);
+    expect(runtime.carryingPresent).toBe(false);
+    expect(runtime.fairyTreeGiftHatchAt).toBeNull();
 
     processAction(runtime, { type: 'set_player_moving', dir: 'right', moving: true });
     processAction(runtime, { type: 'tick', dt: 0.1 });
