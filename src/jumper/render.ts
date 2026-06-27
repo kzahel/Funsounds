@@ -23,6 +23,7 @@ export interface BuddyRender {
   y: number;
   vy: number;
   facing: number;
+  grounded: boolean;
   colorIndex: number;
   alpha: number;
 }
@@ -94,7 +95,7 @@ export function render(view: View, scene: Scene): void {
   for (let i = scene.buddies.length - 1; i >= 0; i--) {
     const bd = scene.buddies[i];
     const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
-    drawCharacter(ctx, scene.level, bd.x, bd.y, bd.vy, false, bd.facing, view.time, style, bd.alpha, false);
+    drawCharacter(ctx, scene.level, bd.x, bd.y, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false);
   }
   drawCharacter(
     ctx,
