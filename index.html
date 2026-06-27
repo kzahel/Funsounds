@@ -1262,6 +1262,159 @@
             }
         }
 
+        /* === Barrel Hop === */
+        .jp-card-hint {
+            color: rgba(255,255,255,0.85);
+            margin: 0 0 0.6rem;
+            font-size: 0.95rem;
+        }
+        .jp-mode-buttons {
+            display: flex;
+            gap: 0.6rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .jp-mode-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
+            min-width: 92px;
+            padding: 0.7rem 1rem;
+            border: none;
+            border-radius: 18px;
+            background: white;
+            color: #2b6cb0;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.22);
+            transition: transform 0.12s ease-out;
+        }
+        .jp-mode-btn span { font-size: 1.6rem; }
+        .jp-mode-btn:active { transform: scale(0.96); }
+
+        #jumper-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            background: linear-gradient(180deg, #8fd6ff 0%, #dff4ff 100%);
+        }
+        #jp-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none;
+        }
+        #jp-hud {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 20;
+            pointer-events: none;
+        }
+        .jp-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            background: rgba(31, 78, 47, 0.55);
+            border: 1px solid rgba(255,255,255,0.22);
+            color: white;
+            font-size: 1rem;
+        }
+        .jp-pill strong { font-size: 1.15rem; }
+        .jp-pill-mode {
+            pointer-events: auto;
+            cursor: pointer;
+            font-weight: 700;
+            font-family: inherit;
+        }
+        .jp-pill-mode:active { transform: scale(0.97); }
+        #jp-status {
+            position: absolute;
+            top: 78px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.4rem 0.95rem;
+            border-radius: 999px;
+            background: rgba(31, 78, 47, 0.45);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            font-size: 0.95rem;
+            z-index: 20;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #jp-toast {
+            position: absolute;
+            top: 38%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            padding: 1rem 2rem;
+            border-radius: 22px;
+            background: rgba(31, 78, 47, 0.78);
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 800;
+            z-index: 40;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+        }
+        #jp-toast.visible {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        #jp-touch {
+            display: none;
+            position: absolute;
+            left: 18px;
+            right: 18px;
+            bottom: 20px;
+            z-index: 35;
+            align-items: end;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+        .jp-touch-move { display: flex; gap: 12px; }
+        .jp-touch-btn {
+            width: 72px;
+            height: 72px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 20px;
+            background: rgba(31, 78, 47, 0.5);
+            color: white;
+            font-size: 1.7rem;
+            font-weight: 800;
+            pointer-events: auto;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .jp-touch-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.22); }
+        .jp-touch-jump {
+            width: 116px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #6bcb77 0%, #43a233 100%);
+            font-size: 1.2rem;
+        }
+        @media (hover: none), (pointer: coarse) {
+            #jp-touch { display: flex; }
+        }
+        @media (max-width: 768px) {
+            #jp-status { top: 116px; font-size: 0.85rem; }
+            .jp-pill { font-size: 0.9rem; padding: 0.5rem 0.8rem; }
+            #jp-toast { font-size: 1.4rem; }
+        }
+
         #instruction-hint {
             position: fixed;
             bottom: 20px;
@@ -2378,6 +2531,16 @@
         </div>
 
         <div class="game-card">
+            <h2>Barrel Hop</h2>
+            <p class="jp-card-hint">Jump over and onto barrels!</p>
+            <div class="jp-mode-buttons">
+                <button class="jp-mode-btn" data-jp-mode="practice"><span>🌳</span>Practice</button>
+                <button class="jp-mode-btn" data-jp-mode="easy"><span>🛢️</span>Jump Over</button>
+                <button class="jp-mode-btn" data-jp-mode="hard"><span>⭐</span>Jump On</button>
+            </div>
+        </div>
+
+        <div class="game-card">
             <h2>Q*bert</h2>
             <button id="qbert-btn">Q*bert</button>
         </div>
@@ -2493,6 +2656,25 @@
                 <button class="fc-touch-btn fc-touch-btn-right" data-fc-dir="ArrowRight">→</button>
             </div>
             <button class="fc-touch-btn fc-touch-btn-shield" data-fc-shield="true">Shield</button>
+        </div>
+    </div>
+
+    <div id="jumper-screen">
+        <canvas id="jp-canvas"></canvas>
+        <div id="jp-hud">
+            <button class="jp-pill jp-pill-mode" id="jp-mode">🛢️ Jump Over</button>
+            <div class="jp-pill">Points <strong id="jp-score">0</strong></div>
+            <div class="jp-pill">Best <strong id="jp-best">0</strong></div>
+            <div class="jp-pill">Lives <strong id="jp-hearts">❤️❤️❤️</strong></div>
+        </div>
+        <div id="jp-status">Arrows move • hold Up to jump higher</div>
+        <div id="jp-toast"></div>
+        <div id="jp-touch">
+            <div class="jp-touch-move">
+                <button class="jp-touch-btn" data-jp-dir="ArrowLeft">←</button>
+                <button class="jp-touch-btn" data-jp-dir="ArrowRight">→</button>
+            </div>
+            <button class="jp-touch-btn jp-touch-jump" data-jp-jump="true">JUMP</button>
         </div>
     </div>
 

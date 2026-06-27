@@ -6,9 +6,10 @@ import { initUno } from './uno/index';
 import { initQbert } from './qbert/index';
 import { initTrain } from './train/index';
 import { initFarm } from './farm/index';
+import { initJumper } from './jumper/index';
 
 async function init() {
-  await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComets(), initUno(), initQbert(), initTrain(), initFarm()]);
+  await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComets(), initUno(), initQbert(), initTrain(), initFarm(), initJumper()]);
 }
 
 if (document.readyState === 'loading') {
