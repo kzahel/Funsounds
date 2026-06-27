@@ -28,7 +28,7 @@ import {
   type Tuning,
 } from './core';
 import { MODES, MODE_ORDER, GROUND_Y, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
-import { render, type Scene, type View } from './render';
+import { render, type BuddyRender, type Scene, type View } from './render';
 import { themeForLevel, type Theme } from './themes';
 import type { Barrel, Checkpoint, Level, ModeConfig, Particle } from './types';
 
@@ -39,6 +39,22 @@ const CELEBRATE_DUR = 1.7; // total celebration before advancing
 const FLAG_DUR = 1.0; // time for the flag to slide all the way down
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
+
+// Buddy mode: followers trail along the player's recorded path at a fixed
+// path-length gap (a conga line). Path-length spacing means a buddy holds its
+// distance when you stop instead of piling on — no rest overlap.
+const BUDDY_SPACING = 116;
+const TRAIL_WINDOW = 5 * BUDDY_SPACING + 280; // arc length of path to retain
+const TRAIL_MIN_STEP = 1.5; // min movement to record a breadcrumb
+const BUDDY_FADE = 0.45; // seconds for a new buddy to fade in
+
+interface TrailPoint {
+  x: number;
+  y: number;
+  vy: number;
+  facing: number;
+  s: number; // cumulative path length
+}
 
 let gameActive = false;
 let mode: ModeConfig = MODES.easy;
@@ -63,6 +79,13 @@ let toastTimer = 0;
 let phase: 'playing' | 'celebrating' = 'playing';
 let celebrateT = 0;
 
+// Buddy mode state.
+let buddyDir = 1; // +1 heading to the right flag, -1 to the left flag
+let buddyCount = 0;
+const buddies: Array<{ colorIndex: number; bornAt: number }> = [];
+let trail: TrailPoint[] = [];
+let lastSafe = { x: 0, y: 0 }; // last ground-ledge stance, for respawns
+
 // Input.
 const moveCodes = new Set<string>();
 const jumpCodes = new Set<string>();
@@ -79,6 +102,8 @@ let modeChipEl: HTMLElement;
 let scoreEl: HTMLElement;
 let bestEl: HTMLElement;
 let heartsEl: HTMLElement;
+let buddiesPillEl: HTMLElement;
+let buddiesEl: HTMLElement;
 let statusEl: HTMLElement;
 let toastEl: HTMLElement;
 
@@ -200,6 +225,12 @@ function updateHud(): void {
   } else {
     heartsEl.textContent = '∞';
   }
+  if (isBuddyMode()) {
+    buddiesPillEl.style.display = '';
+    buddiesEl.textContent = `${buddyCount}/${mode.buddies}`;
+  } else {
+    buddiesPillEl.style.display = 'none';
+  }
 }
 
 function setStatus(text: string): void {
@@ -231,29 +262,134 @@ function buildLevel(): void {
   facing = 1;
   phase = 'playing';
   celebrateT = 0;
+  buddyDir = 1;
+  buddyCount = 0;
+  buddies.length = 0;
+  lastSafe = { x: level.startX, y: level.startY };
+  resetTrail(level.startX, level.startY);
 }
 
-function respawn(cp: Checkpoint): void {
-  body.x = cp.x;
-  body.y = cp.y;
-  body.prevX = cp.x;
-  body.prevY = cp.y;
+function isBuddyMode(): boolean {
+  return mode.buddies !== undefined;
+}
+
+// --- buddy path trail -------------------------------------------------------
+
+function resetTrail(x: number, y: number): void {
+  trail = [{ x, y, vy: 0, facing, s: 0 }];
+}
+
+function recordTrail(): void {
+  const head = trail[trail.length - 1];
+  const dist = Math.hypot(body.x - head.x, body.y - head.y);
+  if (dist < TRAIL_MIN_STEP) return;
+  trail.push({ x: body.x, y: body.y, vy: body.vy, facing, s: head.s + dist });
+  const headS = trail[trail.length - 1].s;
+  while (trail.length > 2 && headS - trail[0].s > TRAIL_WINDOW) trail.shift();
+}
+
+/** Position along the recorded path at cumulative length `targetS`. */
+function sampleTrail(targetS: number): TrailPoint {
+  if (targetS <= trail[0].s) return trail[0];
+  for (let i = trail.length - 1; i > 0; i--) {
+    const a = trail[i - 1];
+    const b = trail[i];
+    if (targetS >= a.s && targetS <= b.s) {
+      const f = b.s === a.s ? 0 : (targetS - a.s) / (b.s - a.s);
+      return {
+        x: a.x + (b.x - a.x) * f,
+        y: a.y + (b.y - a.y) * f,
+        vy: a.vy + (b.vy - a.vy) * f,
+        facing: f < 0.5 ? a.facing : b.facing,
+        s: targetS,
+      };
+    }
+  }
+  return trail[trail.length - 1];
+}
+
+function computeBuddies(now: number): BuddyRender[] {
+  if (buddyCount === 0) return [];
+  const headS = trail[trail.length - 1].s;
+  const out: BuddyRender[] = [];
+  for (let i = 0; i < buddyCount; i++) {
+    const p = sampleTrail(headS - (i + 1) * BUDDY_SPACING);
+    const age = (now - buddies[i].bornAt) / 1000;
+    out.push({
+      x: p.x,
+      y: p.y,
+      vy: p.vy,
+      facing: p.facing,
+      colorIndex: buddies[i].colorIndex,
+      alpha: clamp(age / BUDDY_FADE, 0, 1),
+    });
+  }
+  return out;
+}
+
+function collectBuddy(): void {
+  buddyCount++;
+  buddies.push({ colorIndex: (buddyCount - 1) % 5, bornAt: performance.now() });
+  sfx.score();
+  spawnSparks(body.x + PLAYER_W / 2, body.y, 14);
+  if (score > best) {
+    best = score;
+    saveBest(mode.id, best);
+  }
+  const target = mode.buddies ?? 5;
+  if (buddyCount >= target) {
+    finalizeBuddies();
+  } else {
+    buddyDir *= -1;
+    const word = buddyCount === 1 ? 'buddy' : 'buddies';
+    showToast(`${buddyCount} ${word}! 👫`);
+    speakText(`${buddyCount} ${word}`, { rate: 1, pitch: 1.25 });
+    setStatus(buddyDir > 0 ? 'Run to the right flag →' : '← Run to the left flag');
+  }
+  updateHud();
+}
+
+function finalizeBuddies(): void {
+  phase = 'celebrating';
+  celebrateT = 0;
+  body.vy = -540;
+  body.grounded = false;
+  body.jumping = false;
+  playCheer();
+  spawnConfetti(screenEl);
+  spawnSparks(level.goalX, GROUND_Y - 120, 20);
+  showToast('Five buddies! 🎉');
+  speakText('Five buddies! Yay!', { rate: 1, pitch: 1.25 });
+  setStatus('All buddies! 🎉');
+  updateHud();
+}
+
+function respawnTo(pos: { x: number; y: number }): void {
+  body.x = pos.x;
+  body.y = pos.y;
+  body.prevX = pos.x;
+  body.prevY = pos.y;
   body.vx = 0;
   body.vy = 0;
   body.grounded = false;
   body.jumping = false;
   body.coyote = 0;
   body.buffer = 0;
-  // Let barrels ahead of the checkpoint be earned again on the retry.
+  // Let barrels ahead of the respawn be earned again on the retry.
   for (const b of level.barrels) {
-    if (b.x + b.w > cp.x) scored.delete(b.id);
+    if (b.x + b.w > pos.x) scored.delete(b.id);
   }
   invulnUntil = performance.now() + INVULN_MS;
+  // Buddies regroup at the respawn point, then spread out again as you move.
+  if (isBuddyMode()) resetTrail(pos.x, pos.y);
 }
 
 function loseHeart(): void {
+  // Buddy mode laps both directions, so respawn at the last safe ledge rather
+  // than a forward-only checkpoint.
+  const target = isBuddyMode() ? lastSafe : lastCheckpoint;
   if (!mode.canFail) {
-    respawn(lastCheckpoint);
+    respawnTo(target);
     return;
   }
   const now = performance.now();
@@ -266,7 +402,7 @@ function loseHeart(): void {
     hearts = HEART_MAX;
     showToast("Let's try again! 💪");
   }
-  respawn(lastCheckpoint);
+  respawnTo(target);
   updateHud();
 }
 
@@ -356,6 +492,12 @@ function update(dt: number): void {
     spawnDust(body.x + PLAYER_W / 2, body.y + PLAYER_H, 5);
   }
 
+  // Remember the last safe ground-ledge stance (for buddy-mode respawns).
+  if (body.grounded && res.landedOn && !isBarrel(res.landedOn.ref)) {
+    lastSafe = { x: body.x, y: body.y };
+  }
+  if (isBuddyMode()) recordTrail();
+
   // Scoring.
   const landedRef = res.landedOn?.ref;
   if (mode.scoreBy === 'on' || mode.scoreBy === 'either') {
@@ -388,8 +530,12 @@ function update(dt: number): void {
     if (body.x > cp.x && cp.x > lastCheckpoint.x) lastCheckpoint = cp;
   }
 
-  // Reached the flag.
-  if (body.x + body.w / 2 > level.goalX) {
+  // Endpoints.
+  if (isBuddyMode()) {
+    const cx = body.x + body.w / 2;
+    if (buddyDir > 0 && cx > level.goalX) collectBuddy();
+    else if (buddyDir < 0 && level.leftGoalX !== undefined && cx < level.leftGoalX) collectBuddy();
+  } else if (body.x + body.w / 2 > level.goalX) {
     reachGoal();
   }
 
@@ -407,7 +553,9 @@ function renderFrame(alpha: number): void {
   const px = lerp(body.prevX, body.x, alpha);
   const py = lerp(body.prevY, body.y, alpha);
   const maxCam = Math.max(0, level.width - viewW);
-  cameraX = clamp(px + PLAYER_W / 2 - viewW * 0.4, 0, maxCam);
+  // Bias the view toward the travel direction so you see what's ahead.
+  const lookFrac = facing > 0 ? 0.4 : 0.6;
+  cameraX = clamp(px + PLAYER_W / 2 - viewW * lookFrac, 0, maxCam);
 
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const view: View = {
@@ -431,6 +579,7 @@ function renderFrame(alpha: number): void {
     facing,
     invuln: performance.now() < invulnUntil,
     flagDown: phase === 'celebrating' ? clamp(celebrateT / FLAG_DUR, 0, 1) : 0,
+    buddies: isBuddyMode() ? computeBuddies(performance.now()) : [],
     particles,
   };
   render(view, scene);
@@ -506,6 +655,7 @@ function onKeyDown(event: KeyboardEvent): void {
   if (code === 'Digit1') return void switchMode('practice');
   if (code === 'Digit2') return void switchMode('easy');
   if (code === 'Digit3') return void switchMode('hard');
+  if (code === 'Digit4') return void switchMode('buddy');
 
   if (MOVE_CODES.has(code)) {
     event.preventDefault();
@@ -577,6 +727,8 @@ export async function initJumper(): Promise<void> {
   scoreEl = document.getElementById('jp-score')!;
   bestEl = document.getElementById('jp-best')!;
   heartsEl = document.getElementById('jp-hearts')!;
+  buddiesPillEl = document.getElementById('jp-buddies-pill')!;
+  buddiesEl = document.getElementById('jp-buddies')!;
   statusEl = document.getElementById('jp-status')!;
   toastEl = document.getElementById('jp-toast')!;
 

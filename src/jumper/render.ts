@@ -18,6 +18,15 @@ export interface View {
   time: number; // seconds
 }
 
+export interface BuddyRender {
+  x: number; // top-left, world units
+  y: number;
+  vy: number;
+  facing: number;
+  colorIndex: number;
+  alpha: number;
+}
+
 export interface Scene {
   level: Level;
   theme: Theme;
@@ -30,7 +39,14 @@ export interface Scene {
   invuln: boolean;
   /** 0 = flag up, 1 = flag fully lowered (level-clear celebration). */
   flagDown: number;
+  buddies: BuddyRender[];
   particles: Particle[];
+}
+
+interface CharStyle {
+  body: string;
+  bodyDark: string;
+  belly: string;
 }
 
 // Constant (non-themed) colors: wooden barrels + the character.
@@ -45,6 +61,17 @@ const FIXED = {
   belly: '#bdf0c5',
 };
 
+const PLAYER_STYLE: CharStyle = { body: FIXED.body, bodyDark: FIXED.bodyDark, belly: FIXED.belly };
+
+// Distinct, friendly colors for the trailing buddies.
+export const BUDDY_STYLES: CharStyle[] = [
+  { body: '#5aa9ff', bodyDark: '#3a7fd0', belly: '#d2e9ff' }, // blue
+  { body: '#c08bff', bodyDark: '#8f5fd0', belly: '#ecd9ff' }, // purple
+  { body: '#ffb24d', bodyDark: '#d98a2b', belly: '#ffe6c2' }, // orange
+  { body: '#ff8fc4', bodyDark: '#d65f9b', belly: '#ffd9ec' }, // pink
+  { body: '#4fd0c4', bodyDark: '#2fa79b', belly: '#cdf3ee' }, // teal
+];
+
 export function render(view: View, scene: Scene): void {
   const { ctx, dpr } = view;
   const theme = scene.theme;
@@ -55,10 +82,33 @@ export function render(view: View, scene: Scene): void {
   ctx.setTransform(s, 0, 0, s, -view.cameraX * s, 0);
 
   drawPlatforms(ctx, scene.level.platforms, theme);
+  if (scene.level.leftGoalX !== undefined) {
+    drawFlag(ctx, scene.level.leftGoalX, view.time, 0, -1);
+  }
   drawGoal(ctx, scene.level, view.time, scene.flagDown);
   for (const b of scene.level.barrels) drawBarrel(ctx, b);
   drawParticles(ctx, scene.particles);
-  drawPlayer(ctx, scene, view.time);
+
+  // Buddies trail behind; draw farthest-first so nearer ones overlap on top,
+  // then the player on top of all.
+  for (let i = scene.buddies.length - 1; i >= 0; i--) {
+    const bd = scene.buddies[i];
+    const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
+    drawCharacter(ctx, scene.level, bd.x, bd.y, bd.vy, false, bd.facing, view.time, style, bd.alpha, false);
+  }
+  drawCharacter(
+    ctx,
+    scene.level,
+    scene.px,
+    scene.py,
+    scene.vy,
+    scene.grounded,
+    scene.facing,
+    view.time,
+    PLAYER_STYLE,
+    1,
+    scene.invuln,
+  );
 
   // Ambient weather overlays the whole scene (screen space).
   drawWeather(view, theme);
@@ -233,27 +283,32 @@ function floorBelow(level: Level, left: number, right: number, footY: number): n
 }
 
 function drawGoal(ctx: CanvasRenderingContext2D, level: Level, time: number, flagDown: number): void {
-  const x = level.goalX;
+  drawFlag(ctx, level.goalX, time, flagDown, 1);
+}
+
+/** A flag on a pole. `dir` = 1 points the pennant right, -1 points it left. */
+function drawFlag(ctx: CanvasRenderingContext2D, x: number, time: number, flagDown: number, dir: number): void {
   const top = GROUND_Y - 130;
+  const px = dir > 0 ? x - 3 : x + 3; // pole edge the flag attaches to
   ctx.fillStyle = '#cfd6df';
   ctx.fillRect(x - 3, top, 6, 130);
   ctx.fillStyle = '#8a929c';
-  ctx.fillRect(x - 3, top, 3, 130);
+  ctx.fillRect(dir > 0 ? x - 3 : x, top, 3, 130);
 
   // The flag slides down the pole during the level-clear celebration.
   const wave = Math.sin(time * 4) * 4 * (1 - flagDown);
   const flagY = top + 4 + flagDown * 92;
-  ctx.fillStyle = '#ff5a5f';
+  ctx.fillStyle = dir > 0 ? '#ff5a5f' : '#4d96ff';
   ctx.beginPath();
-  ctx.moveTo(x + 3, flagY);
-  ctx.lineTo(x + 62, flagY + 12 + wave);
-  ctx.lineTo(x + 3, flagY + 26);
+  ctx.moveTo(px, flagY);
+  ctx.lineTo(px + dir * 59, flagY + 12 + wave);
+  ctx.lineTo(px, flagY + 26);
   ctx.closePath();
   ctx.fill();
 
   ctx.fillStyle = '#ffd23f';
   ctx.beginPath();
-  ctx.arc(x - 3, top, 6, 0, Math.PI * 2);
+  ctx.arc(x, top, 6, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -273,18 +328,31 @@ function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]): vo
   ctx.globalAlpha = 1;
 }
 
-function drawPlayer(ctx: CanvasRenderingContext2D, scene: Scene, time: number): void {
-  const cx = scene.px + PLAYER_W / 2;
-  const feetY = scene.py + PLAYER_H;
+// Draws a frog character (player or buddy). `style` recolors the body; `alpha`
+// fades buddies in; `invuln` makes the player flicker after a hit.
+function drawCharacter(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  topX: number,
+  topY: number,
+  vy: number,
+  grounded: boolean,
+  facing: number,
+  time: number,
+  style: CharStyle,
+  alpha: number,
+  invuln: boolean,
+): void {
+  const cx = topX + PLAYER_W / 2;
+  const feetY = topY + PLAYER_H;
 
-  // Shadow falls on the surface directly below the player — and not at all when
-  // the player is over a chasm with nothing underneath.
-  const floorY = floorBelow(scene.level, scene.px, scene.px + PLAYER_W, feetY);
+  // Shadow falls on the surface directly below — and not at all over a chasm.
+  const floorY = floorBelow(level, topX, topX + PLAYER_W, feetY);
   if (floorY !== null) {
     const drop = floorY - feetY; // >= 0
     const t = clampNum(1 - drop / 320, 0, 1);
     ctx.save();
-    ctx.globalAlpha = 0.06 + 0.16 * t;
+    ctx.globalAlpha = alpha * (0.06 + 0.16 * t);
     ctx.fillStyle = '#1d3a1d';
     ctx.beginPath();
     ctx.ellipse(cx, floorY - 2, PLAYER_W * (0.32 + 0.18 * t), 6 * (0.6 + 0.4 * t), 0, 0, Math.PI * 2);
@@ -293,7 +361,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, scene: Scene, time: number): 
   }
 
   let sy = 1;
-  if (!scene.grounded) sy = clampNum(1 + -scene.vy / 4200, 0.9, 1.16);
+  if (!grounded) sy = clampNum(1 + -vy / 4200, 0.9, 1.16);
   const sx = 2 - sy;
   const w = PLAYER_W * sx;
   const h = PLAYER_H * sy;
@@ -301,27 +369,27 @@ function drawPlayer(ctx: CanvasRenderingContext2D, scene: Scene, time: number): 
   const y = feetY - h;
 
   ctx.save();
-  if (scene.invuln && Math.floor(time * 12) % 2 === 0) ctx.globalAlpha = 0.45;
+  ctx.globalAlpha = alpha * (invuln && Math.floor(time * 12) % 2 === 0 ? 0.45 : 1);
 
-  ctx.fillStyle = FIXED.bodyDark;
+  ctx.fillStyle = style.bodyDark;
   ctx.beginPath();
   ctx.ellipse(cx - w * 0.22, feetY - 3, w * 0.2, 6, 0, 0, Math.PI * 2);
   ctx.ellipse(cx + w * 0.22, feetY - 3, w * 0.2, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
   roundRect(ctx, x, y, w, h, w * 0.42);
-  ctx.fillStyle = FIXED.body;
+  ctx.fillStyle = style.body;
   ctx.fill();
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = FIXED.bodyDark;
+  ctx.strokeStyle = style.bodyDark;
   ctx.stroke();
 
-  ctx.fillStyle = FIXED.belly;
+  ctx.fillStyle = style.belly;
   ctx.beginPath();
   ctx.ellipse(cx, y + h * 0.66, w * 0.26, h * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const ex = scene.facing * w * 0.12;
+  const ex = facing * w * 0.12;
   const eyeY = y + h * 0.26;
   for (const side of [-1, 1]) {
     const px = cx + side * w * 0.22 + ex * 0.3;

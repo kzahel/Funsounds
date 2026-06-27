@@ -62,5 +62,21 @@ test('Barrel Hop smoke test — modes start, render and score without errors', a
   await expect(page.locator('#jp-hearts')).toHaveText('∞');
   await page.screenshot({ path: '/tmp/jumper-practice.png' });
 
+  // Switch to Buddy mode and play briefly (exercises trail recording + buddy
+  // rendering without errors).
+  await page.keyboard.press('Digit4');
+  await page.waitForTimeout(300);
+  await expect(page.locator('#jp-mode')).toContainText('Buddies');
+  await expect(page.locator('#jp-buddies-pill')).toBeVisible();
+  await expect(page.locator('#jp-buddies')).toHaveText('0/5');
+  await page.keyboard.down('ArrowRight');
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.down('ArrowUp');
+    await page.waitForTimeout(220);
+    await page.keyboard.up('ArrowUp');
+    await page.waitForTimeout(200);
+  }
+  await page.keyboard.up('ArrowRight');
+
   expect(errors).toEqual([]);
 });

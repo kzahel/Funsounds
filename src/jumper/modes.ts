@@ -160,6 +160,50 @@ function buildHard(levelNum: number): Level {
   };
 }
 
+// --- Buddy: shorter Jump-On course you lap, collecting followers ------------
+
+function buildBuddy(levelNum: number): Level {
+  const platforms: Platform[] = [];
+  const barrels: Barrel[] = [];
+  const checkpoints: Checkpoint[] = [];
+
+  const startW = 360;
+  platforms.push(ground(0, startW));
+  checkpoints.push({ x: 120, y: SPAWN_Y });
+
+  // Shorter than Jump-On since you traverse it five times.
+  const groups = 3 + Math.min(levelNum - 1, 2);
+  const edgeGap = Math.min(112, 84 + levelNum * 3);
+  let x = startW;
+
+  for (let g = 0; g < groups; g++) {
+    const inGroup = g % 3 === 2 ? 2 : 1;
+    let bx = x + edgeGap;
+    for (let i = 0; i < inGroup; i++) {
+      barrels.push(pillarBarrel(bx, pick([0, 26, 50])));
+      bx += BARREL_W + edgeGap;
+    }
+    const ledgeW = 190;
+    platforms.push(ground(bx, ledgeW));
+    checkpoints.push({ x: bx + 40, y: SPAWN_Y });
+    x = bx + ledgeW;
+  }
+
+  const goalX = x - 80;
+  const width = x + 160;
+  return {
+    width,
+    startX: 70,
+    startY: SPAWN_Y,
+    goalX,
+    leftGoalX: 120,
+    platforms,
+    barrels,
+    checkpoints,
+    killY: PIT_KILL_Y,
+  };
+}
+
 export const MODES: Record<string, ModeConfig> = {
   practice: {
     id: 'practice',
@@ -188,6 +232,16 @@ export const MODES: Record<string, ModeConfig> = {
     scoreBy: 'on',
     build: (levelNum) => buildHard(levelNum),
   },
+  buddy: {
+    id: 'buddy',
+    name: 'Buddies',
+    emoji: '👫',
+    intro: 'Make five buddies! Run to each flag.',
+    canFail: true,
+    scoreBy: 'on',
+    buddies: 5,
+    build: (levelNum) => buildBuddy(levelNum),
+  },
 };
 
-export const MODE_ORDER: Array<keyof typeof MODES> = ['practice', 'easy', 'hard'];
+export const MODE_ORDER: Array<keyof typeof MODES> = ['practice', 'easy', 'hard', 'buddy'];
