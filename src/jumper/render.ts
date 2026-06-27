@@ -1,8 +1,10 @@
 // Barrel Hop — Canvas 2D renderer. Bright, flat, friendly; cheap to draw so it
 // holds 60fps on an old laptop. Background is drawn in screen space (parallax),
-// the world in scaled world space.
+// the world in scaled world space. Colors come from the level's Theme; barrels
+// and the character stay constant so they're always easy to read.
 
 import type { Barrel, Level, Particle, Platform } from './types';
+import type { Theme } from './themes';
 import { GROUND_Y, PLAYER_H, PLAYER_W, VIRTUAL_H } from './modes';
 
 export interface View {
@@ -18,6 +20,7 @@ export interface View {
 
 export interface Scene {
   level: Level;
+  theme: Theme;
   px: number; // interpolated player top-left
   py: number;
   vx: number;
@@ -25,20 +28,13 @@ export interface Scene {
   grounded: boolean;
   facing: number; // 1 right, -1 left
   invuln: boolean;
+  /** 0 = flag up, 1 = flag fully lowered (level-clear celebration). */
+  flagDown: number;
   particles: Particle[];
 }
 
-const COLORS = {
-  skyTop: '#8fd6ff',
-  skyBottom: '#dff4ff',
-  sun: '#fff4b0',
-  hillFar: '#bfe89a',
-  hillNear: '#9bdc79',
-  grass: '#5fbe4a',
-  grassDark: '#43a233',
-  dirt: '#9c6a3c',
-  dirtDark: '#7c5230',
-  plank: '#caa15f',
+// Constant (non-themed) colors: wooden barrels + the character.
+const FIXED = {
   plankDark: '#a07b3f',
   barrel: '#cf8a3e',
   barrelLight: '#e0a85b',
@@ -51,45 +47,39 @@ const COLORS = {
 
 export function render(view: View, scene: Scene): void {
   const { ctx, dpr } = view;
-  drawBackground(view);
+  const theme = scene.theme;
+  drawBackground(view, theme);
 
   // World space transform (scale + camera), folded with device pixel ratio.
   const s = view.scale * dpr;
   ctx.setTransform(s, 0, 0, s, -view.cameraX * s, 0);
 
-  drawPlatforms(ctx, scene.level.platforms);
-  drawGoal(ctx, scene.level, view.time);
+  drawPlatforms(ctx, scene.level.platforms, theme);
+  drawGoal(ctx, scene.level, view.time, scene.flagDown);
   for (const b of scene.level.barrels) drawBarrel(ctx, b);
   drawParticles(ctx, scene.particles);
   drawPlayer(ctx, scene, view.time);
+
+  // Ambient weather overlays the whole scene (screen space).
+  drawWeather(view, theme);
 }
 
-function drawBackground(view: View): void {
+function drawBackground(view: View, theme: Theme): void {
   const { ctx, dpr, cssW, cssH } = view;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  sky.addColorStop(0, COLORS.skyTop);
-  sky.addColorStop(1, COLORS.skyBottom);
+  sky.addColorStop(0, theme.skyTop);
+  sky.addColorStop(1, theme.skyBottom);
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  // Sun, top-right.
-  ctx.save();
-  ctx.globalAlpha = 0.9;
-  ctx.fillStyle = COLORS.sun;
-  ctx.beginPath();
-  ctx.arc(cssW - 90, 90, 46, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 0.25;
-  ctx.beginPath();
-  ctx.arc(cssW - 90, 90, 70, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  if (theme.stars) drawStars(view);
+  drawCelestial(view, theme);
 
   // Drifting clouds (slow parallax).
   const cloudShift = (view.cameraX * 0.15 + view.time * 8) % (cssW + 240);
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillStyle = theme.cloud;
   for (let i = 0; i < 4; i++) {
     const cx = ((i * (cssW / 3) - cloudShift + cssW + 240) % (cssW + 240)) - 120;
     const cy = 70 + (i % 2) * 60;
@@ -98,8 +88,54 @@ function drawBackground(view: View): void {
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  hills(ctx, view, COLORS.hillFar, 0.3, groundScreenY + 6, 120, 320);
-  hills(ctx, view, COLORS.hillNear, 0.5, groundScreenY + 14, 90, 240);
+  hills(ctx, view, theme.hillFar, 0.3, groundScreenY + 6, 120, 320);
+  hills(ctx, view, theme.hillNear, 0.5, groundScreenY + 14, 90, 240);
+}
+
+function drawStars(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 60; i++) {
+    const x = (((i * 73) % 100) / 100) * cssW;
+    const y = (((i * 131) % 60) / 100) * cssH * 0.9;
+    const tw = 0.45 + 0.45 * Math.sin(view.time * 2 + i * 1.7);
+    ctx.globalAlpha = tw;
+    ctx.beginPath();
+    ctx.arc(x, y, i % 7 === 0 ? 1.8 : 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCelestial(view: View, theme: Theme): void {
+  const { ctx, cssW } = view;
+  const x = cssW - 90;
+  const y = 90;
+
+  ctx.save();
+  // Soft glow.
+  ctx.globalAlpha = theme.celestial === 'moon' ? 0.18 : 0.25;
+  ctx.fillStyle = theme.celestialColor;
+  ctx.beginPath();
+  ctx.arc(x, y, 72, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = theme.celestial === 'moon' ? 0.95 : 0.9;
+  ctx.beginPath();
+  ctx.arc(x, y, 46, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (theme.celestial === 'moon') {
+    // A couple of soft craters.
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = '#5a5a4a';
+    ctx.beginPath();
+    ctx.arc(x - 14, y - 10, 8, 0, Math.PI * 2);
+    ctx.arc(x + 12, y + 8, 11, 0, Math.PI * 2);
+    ctx.arc(x + 4, y - 16, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function cloud(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
@@ -132,32 +168,31 @@ function hills(
   ctx.fill();
 }
 
-function drawPlatforms(ctx: CanvasRenderingContext2D, platforms: Platform[]): void {
+function drawPlatforms(ctx: CanvasRenderingContext2D, platforms: Platform[], theme: Theme): void {
   for (const p of platforms) {
     if (p.kind === 'ground') {
-      ctx.fillStyle = COLORS.dirt;
+      ctx.fillStyle = theme.dirt;
       ctx.fillRect(p.x, p.y, p.w, p.h);
-      ctx.fillStyle = COLORS.dirtDark;
+      ctx.fillStyle = theme.dirtDark;
       ctx.fillRect(p.x, p.y + p.h - 10, p.w, 10);
-      ctx.fillStyle = COLORS.grass;
+      ctx.fillStyle = theme.grass;
       ctx.fillRect(p.x, p.y, p.w, 14);
-      ctx.fillStyle = COLORS.grassDark;
+      ctx.fillStyle = theme.grassDark;
       ctx.fillRect(p.x, p.y + 13, p.w, 4);
     } else {
       roundRect(ctx, p.x, p.y, p.w, p.h + 6, 7);
-      ctx.fillStyle = COLORS.plankDark;
+      ctx.fillStyle = FIXED.plankDark;
       ctx.fill();
       roundRect(ctx, p.x, p.y, p.w, 12, 6);
-      ctx.fillStyle = COLORS.grass;
+      ctx.fillStyle = theme.grass;
       ctx.fill();
     }
   }
 }
 
 function drawBarrel(ctx: CanvasRenderingContext2D, b: Barrel): void {
-  // Body.
   roundRect(ctx, b.x, b.y, b.w, b.h, 9);
-  ctx.fillStyle = COLORS.barrel;
+  ctx.fillStyle = FIXED.barrel;
   ctx.fill();
 
   ctx.save();
@@ -165,44 +200,57 @@ function drawBarrel(ctx: CanvasRenderingContext2D, b: Barrel): void {
   roundRect(ctx, b.x, b.y, b.w, b.h, 9);
   ctx.clip();
 
-  // Vertical staves.
   const staves = 4;
   for (let i = 0; i < staves; i++) {
-    ctx.fillStyle = i % 2 === 0 ? COLORS.barrelLight : COLORS.barrel;
+    ctx.fillStyle = i % 2 === 0 ? FIXED.barrelLight : FIXED.barrel;
     ctx.fillRect(b.x + (i * b.w) / staves, b.y, b.w / staves - 1.5, b.h);
   }
-  // Hoops.
-  ctx.fillStyle = COLORS.hoop;
+  ctx.fillStyle = FIXED.hoop;
   const hoopH = Math.max(4, b.h * 0.08);
   ctx.fillRect(b.x, b.y + b.h * 0.16, b.w, hoopH);
   ctx.fillRect(b.x, b.y + b.h * 0.74, b.w, hoopH);
-  // Rim highlight on top.
-  ctx.fillStyle = COLORS.barrelLight;
+  ctx.fillStyle = FIXED.barrelLight;
   ctx.fillRect(b.x + 3, b.y + 3, b.w - 6, 4);
   ctx.restore();
 
   ctx.lineWidth = 2;
-  ctx.strokeStyle = COLORS.barrelDark;
+  ctx.strokeStyle = FIXED.barrelDark;
   roundRect(ctx, b.x, b.y, b.w, b.h, 9);
   ctx.stroke();
 }
 
-function drawGoal(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+/** Highest solid surface beneath the player's footprint, or null over a gap. */
+function floorBelow(level: Level, left: number, right: number, footY: number): number | null {
+  let best: number | null = null;
+  const consider = (sx: number, sw: number, sy: number) => {
+    if (sx < right && sx + sw > left && sy >= footY - 1) {
+      if (best === null || sy < best) best = sy;
+    }
+  };
+  for (const p of level.platforms) consider(p.x, p.w, p.y);
+  for (const b of level.barrels) consider(b.x, b.w, b.y);
+  return best;
+}
+
+function drawGoal(ctx: CanvasRenderingContext2D, level: Level, time: number, flagDown: number): void {
   const x = level.goalX;
   const top = GROUND_Y - 130;
   ctx.fillStyle = '#cfd6df';
   ctx.fillRect(x - 3, top, 6, 130);
   ctx.fillStyle = '#8a929c';
   ctx.fillRect(x - 3, top, 3, 130);
-  // Wavy flag.
-  const wave = Math.sin(time * 4) * 4;
+
+  // The flag slides down the pole during the level-clear celebration.
+  const wave = Math.sin(time * 4) * 4 * (1 - flagDown);
+  const flagY = top + 4 + flagDown * 92;
   ctx.fillStyle = '#ff5a5f';
   ctx.beginPath();
-  ctx.moveTo(x + 3, top + 4);
-  ctx.lineTo(x + 62, top + 16 + wave);
-  ctx.lineTo(x + 3, top + 30);
+  ctx.moveTo(x + 3, flagY);
+  ctx.lineTo(x + 62, flagY + 12 + wave);
+  ctx.lineTo(x + 3, flagY + 26);
   ctx.closePath();
   ctx.fill();
+
   ctx.fillStyle = '#ffd23f';
   ctx.beginPath();
   ctx.arc(x - 3, top, 6, 0, Math.PI * 2);
@@ -229,16 +277,21 @@ function drawPlayer(ctx: CanvasRenderingContext2D, scene: Scene, time: number): 
   const cx = scene.px + PLAYER_W / 2;
   const feetY = scene.py + PLAYER_H;
 
-  // Soft shadow on the ground line below the player.
-  ctx.save();
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = '#1d3a1d';
-  ctx.beginPath();
-  ctx.ellipse(cx, GROUND_Y - 2, PLAYER_W * 0.5, 7, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  // Shadow falls on the surface directly below the player — and not at all when
+  // the player is over a chasm with nothing underneath.
+  const floorY = floorBelow(scene.level, scene.px, scene.px + PLAYER_W, feetY);
+  if (floorY !== null) {
+    const drop = floorY - feetY; // >= 0
+    const t = clampNum(1 - drop / 320, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = 0.06 + 0.16 * t;
+    ctx.fillStyle = '#1d3a1d';
+    ctx.beginPath();
+    ctx.ellipse(cx, floorY - 2, PLAYER_W * (0.32 + 0.18 * t), 6 * (0.6 + 0.4 * t), 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
-  // Squash & stretch from vertical speed; anchored at the feet.
   let sy = 1;
   if (!scene.grounded) sy = clampNum(1 + -scene.vy / 4200, 0.9, 1.16);
   const sx = 2 - sy;
@@ -250,28 +303,24 @@ function drawPlayer(ctx: CanvasRenderingContext2D, scene: Scene, time: number): 
   ctx.save();
   if (scene.invuln && Math.floor(time * 12) % 2 === 0) ctx.globalAlpha = 0.45;
 
-  // Feet.
-  ctx.fillStyle = COLORS.bodyDark;
+  ctx.fillStyle = FIXED.bodyDark;
   ctx.beginPath();
   ctx.ellipse(cx - w * 0.22, feetY - 3, w * 0.2, 6, 0, 0, Math.PI * 2);
   ctx.ellipse(cx + w * 0.22, feetY - 3, w * 0.2, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Body.
   roundRect(ctx, x, y, w, h, w * 0.42);
-  ctx.fillStyle = COLORS.body;
+  ctx.fillStyle = FIXED.body;
   ctx.fill();
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = COLORS.bodyDark;
+  ctx.strokeStyle = FIXED.bodyDark;
   ctx.stroke();
 
-  // Belly.
-  ctx.fillStyle = COLORS.belly;
+  ctx.fillStyle = FIXED.belly;
   ctx.beginPath();
   ctx.ellipse(cx, y + h * 0.66, w * 0.26, h * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes (big, friendly), nudged toward facing.
   const ex = scene.facing * w * 0.12;
   const eyeY = y + h * 0.26;
   for (const side of [-1, 1]) {
@@ -286,13 +335,68 @@ function drawPlayer(ctx: CanvasRenderingContext2D, scene: Scene, time: number): 
     ctx.fill();
   }
 
-  // Smile.
   ctx.strokeStyle = '#23351f';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(cx + ex * 0.4, y + h * 0.46, w * 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
   ctx.stroke();
 
+  ctx.restore();
+}
+
+function drawWeather(view: View, theme: Theme): void {
+  if (theme.weather === 'none') return;
+  const { ctx, dpr, cssW, cssH } = view;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const cycleH = cssH + 60;
+  const count = theme.weather === 'snow' ? 44 : 28;
+  const leafColors = ['#e07b39', '#d2a23c', '#c4502e', '#e6a04d'];
+
+  for (let i = 0; i < count; i++) {
+    const speed = 26 + (i % 5) * 12;
+    const y = (((view.time * speed + i * 53) % cycleH) + cycleH) % cycleH - 30;
+    const baseX = (((i * 97) % 100) / 100) * cssW;
+    const sway = Math.sin(view.time * 1.3 + i) * (theme.weather === 'snow' ? 14 : 26);
+    const x = baseX + sway;
+
+    if (theme.weather === 'snow') {
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, i % 4 === 0 ? 3.4 : 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (theme.weather === 'leaves') {
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = leafColors[i % leafColors.length];
+      drawLeaf(ctx, x, y, 6, view.time * 2 + i);
+    } else {
+      // petals
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = i % 2 === 0 ? '#ffd1e6' : '#ffb6d5';
+      drawPetal(ctx, x, y, 5, view.time * 1.6 + i);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLeaf(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPetal(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 

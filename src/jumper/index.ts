@@ -27,19 +27,24 @@ import {
   type Solid,
   type Tuning,
 } from './core';
-import { MODES, MODE_ORDER, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
+import { MODES, MODE_ORDER, GROUND_Y, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
 import { render, type Scene, type View } from './render';
+import { themeForLevel, type Theme } from './themes';
 import type { Barrel, Checkpoint, Level, ModeConfig, Particle } from './types';
 
 const HEART_MAX = 3;
 const INVULN_MS = 1100;
 const MAX_PARTICLES = 200;
+const CELEBRATE_DUR = 1.7; // total celebration before advancing
+const FLAG_DUR = 1.0; // time for the flag to slide all the way down
 const tuning: Tuning = DEFAULT_TUNING;
+const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
 let gameActive = false;
 let mode: ModeConfig = MODES.easy;
 let levelNum = 1;
 let level: Level;
+let theme: Theme = themeForLevel(1);
 let solids: Solid[] = [];
 let body: Body;
 
@@ -55,6 +60,8 @@ let cameraX = 0;
 let facing = 1;
 let startTime = 0;
 let toastTimer = 0;
+let phase: 'playing' | 'celebrating' = 'playing';
+let celebrateT = 0;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -210,6 +217,7 @@ function showToast(text: string): void {
 
 function buildLevel(): void {
   level = mode.build(levelNum);
+  theme = themeForLevel(levelNum);
   solids = [
     ...level.platforms.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h })),
     ...level.barrels.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h, ref: b })),
@@ -221,6 +229,8 @@ function buildLevel(): void {
   cameraX = 0;
   invulnUntil = 0;
   facing = 1;
+  phase = 'playing';
+  celebrateT = 0;
 }
 
 function respawn(cp: Checkpoint): void {
@@ -277,18 +287,33 @@ function isBarrel(ref: unknown): ref is Barrel {
   return !!ref && typeof ref === 'object' && 'id' in (ref as object);
 }
 
-function nextLevel(): void {
-  playCheer();
-  spawnConfetti(screenEl);
-  spawnSparks(body.x + PLAYER_W / 2, body.y, 16);
+// Player touched the flag: kick off the celebration (flag lowers, confetti,
+// a happy hop) before the next level loads.
+function reachGoal(): void {
+  if (phase === 'celebrating') return;
+  phase = 'celebrating';
+  celebrateT = 0;
+  body.vy = -540; // little victory hop
+  body.grounded = false;
+  body.jumping = false;
   if (score > best) {
     best = score;
     saveBest(mode.id, best);
   }
-  showToast(`Level ${levelNum} done! ⭐`);
+  playCheer();
+  spawnConfetti(screenEl);
+  spawnSparks(level.goalX, GROUND_Y - 120, 18);
+  setStatus('You made it! 🎉');
+  updateHud();
+}
+
+function advanceLevel(): void {
   levelNum++;
   hearts = HEART_MAX;
   buildLevel();
+  showToast(`Level ${levelNum}: ${theme.name} ${theme.emoji}`);
+  speakText(theme.name, { rate: 1, pitch: 1.2 });
+  setStatus('Arrows move • hold Up to jump higher');
   updateHud();
 }
 
@@ -296,6 +321,17 @@ function nextLevel(): void {
 
 function update(dt: number): void {
   if (!gameActive) return;
+
+  // During the level-clear celebration the player just settles from the victory
+  // hop; no input, scoring or hazards until the next level loads.
+  if (phase === 'celebrating') {
+    celebrateT += dt;
+    jumpEdge = false;
+    stepBody(body, solids, NEUTRAL_INPUT, tuning, dt);
+    updateParticles(dt);
+    if (celebrateT >= CELEBRATE_DUR) advanceLevel();
+    return;
+  }
 
   const left = moveCodes.has('ArrowLeft') || moveCodes.has('KeyA');
   const right = moveCodes.has('ArrowRight') || moveCodes.has('KeyD');
@@ -354,7 +390,7 @@ function update(dt: number): void {
 
   // Reached the flag.
   if (body.x + body.w / 2 > level.goalX) {
-    nextLevel();
+    reachGoal();
   }
 
   updateParticles(dt);
@@ -386,6 +422,7 @@ function renderFrame(alpha: number): void {
   };
   const scene: Scene = {
     level,
+    theme,
     px,
     py,
     vx: body.vx,
@@ -393,6 +430,7 @@ function renderFrame(alpha: number): void {
     grounded: body.grounded,
     facing,
     invuln: performance.now() < invulnUntil,
+    flagDown: phase === 'celebrating' ? clamp(celebrateT / FLAG_DUR, 0, 1) : 0,
     particles,
   };
   render(view, scene);
