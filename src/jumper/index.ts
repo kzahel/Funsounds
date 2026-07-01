@@ -450,7 +450,7 @@ function hasBuddyChain(): boolean {
 }
 
 function weddingPartnerKind(): WeddingPartnerKind {
-  return undergroundWorld || underwaterWorld || deepSeaWorld ? 'fish' : 'buddy';
+  return underwaterWorld || deepSeaWorld ? 'fish' : 'buddy';
 }
 
 function weddingBabySpecies(kind: WeddingPartnerKind): BuddySpecies {
