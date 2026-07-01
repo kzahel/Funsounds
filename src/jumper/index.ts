@@ -59,6 +59,11 @@ const SNAKE_H = 28;
 const TRAMPOLINE_W = 82;
 const TRAMPOLINE_H = 24;
 const UNDERGROUND_RETURN_DUR = 2.15;
+const SNAKE_SPEED = 42;
+const FISH_W = 82;
+const FISH_H = 34;
+const FISH_SPEED = 76;
+const UNDERWATER_RETURN_DUR = 2.4;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
@@ -89,11 +94,26 @@ interface SnakeState {
   y: number;
   kind: SnakeKind;
   t: number;
+  dir: number;
+  minX: number;
+  maxX: number;
 }
 interface UndergroundReturn {
   t: number;
   startX: number;
   startY: number;
+}
+interface FishState {
+  x: number;
+  y: number;
+  dir: number;
+  t: number;
+}
+interface UnderwaterReturn {
+  t: number;
+  startX: number;
+  startY: number;
+  fishDir: number;
 }
 
 let gameActive = false;
@@ -137,6 +157,10 @@ let undergroundWorld = false;
 let snake: SnakeState | null = null;
 let snakeCooldown = 0;
 let undergroundReturn: UndergroundReturn | null = null;
+let underwaterWorld = false;
+let fish: FishState | null = null;
+let fishCooldown = 0;
+let underwaterReturn: UnderwaterReturn | null = null;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -352,6 +376,10 @@ function buildLevel(): void {
   snake = null;
   snakeCooldown = 0;
   undergroundReturn = null;
+  underwaterWorld = false;
+  fish = null;
+  fishCooldown = 0;
+  underwaterReturn = null;
   chain.reset(level.startX, level.startY);
 }
 
@@ -428,12 +456,12 @@ function resetBirdTrip(side: BirdTripSide): void {
 }
 
 function noteBirdTripSide(side: BirdTripSide): void {
-  if (!hasBuddyChain() || candyWorld || undergroundWorld || birdTripSide === side) return;
+  if (!hasBuddyChain() || candyWorld || undergroundWorld || underwaterWorld || birdTripSide === side) return;
   resetBirdTrip(side);
 }
 
 function updateBirdTripSide(cx: number): void {
-  if (!hasBuddyChain() || candyWorld || undergroundWorld || level.leftGoalX === undefined) return;
+  if (!hasBuddyChain() || candyWorld || undergroundWorld || underwaterWorld || level.leftGoalX === undefined) return;
   if (cx <= level.leftGoalX) noteBirdTripSide('left');
   else if (cx >= level.goalX) noteBirdTripSide('right');
 }
@@ -447,7 +475,7 @@ function birdTripHasStarted(): boolean {
 }
 
 function canSpawnBird(): boolean {
-  return hasBuddyChain() && !candyWorld && !undergroundWorld && !birdRide && !weddingEvent && phase === 'playing';
+  return hasBuddyChain() && !candyWorld && !undergroundWorld && !underwaterWorld && !birdRide && !weddingEvent && phase === 'playing';
 }
 
 function spawnBird(): void {
@@ -528,7 +556,18 @@ function spawnSnake(): void {
     const cx = clamp(body.x + PLAYER_W / 2 + offset, 40 + SNAKE_W / 2, level.width - 40 - SNAKE_W / 2);
     const top = platformTopAtCenter(cx);
     if (top === null) continue;
-    snake = { x: cx - SNAKE_W / 2, y: top - SNAKE_H, kind: 'snake', t: 0 };
+    const platform = level.platforms.find((p) => p.x <= cx && p.x + p.w >= cx);
+    const minX = platform ? platform.x + 14 : Math.max(0, cx - 180);
+    const maxX = platform ? platform.x + platform.w - SNAKE_W - 14 : Math.min(level.width - SNAKE_W, cx + 180);
+    snake = {
+      x: clamp(cx - SNAKE_W / 2, minX, maxX),
+      y: top - SNAKE_H,
+      kind: 'snake',
+      t: 0,
+      dir: Math.random() < 0.5 ? -1 : 1,
+      minX,
+      maxX,
+    };
     return;
   }
   snakeCooldown = 2.5;
@@ -603,7 +642,7 @@ function updateUndergroundReturn(dt: number): boolean {
 }
 
 function updateSnake(dt: number): void {
-  if (!undergroundWorld || undergroundReturn) return;
+  if (!undergroundWorld || underwaterWorld || undergroundReturn) return;
 
   if (!snake) {
     snakeCooldown -= dt;
@@ -612,6 +651,13 @@ function updateSnake(dt: number): void {
   }
 
   snake.t += dt;
+  if (snake.kind === 'snake') {
+    snake.x += snake.dir * SNAKE_SPEED * dt;
+    if (snake.x <= snake.minX || snake.x >= snake.maxX) {
+      snake.x = clamp(snake.x, snake.minX, snake.maxX);
+      snake.dir *= -1;
+    }
+  }
   if (snake.x + SNAKE_W < body.x - 820 || snake.x > body.x + 900) {
     snake = null;
     snakeCooldown = 3 + Math.random() * 3;
@@ -628,6 +674,9 @@ function updateSnake(dt: number): void {
     snake.kind = 'trampoline';
     snake.x += (SNAKE_W - TRAMPOLINE_W) / 2;
     snake.y += SNAKE_H - TRAMPOLINE_H;
+    snake.minX = snake.x;
+    snake.maxX = snake.x;
+    snake.dir = 0;
     body.vy = -520;
     sfx.score();
     spawnSparks(snake.x + TRAMPOLINE_W / 2, snake.y, 14);
@@ -636,6 +685,105 @@ function updateSnake(dt: number): void {
     setStatus('Jump on the trampoline to get back up.');
   } else {
     startUndergroundReturn();
+  }
+}
+
+function spawnFish(): void {
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  fish = {
+    x: body.x + (dir > 0 ? -430 : 520),
+    y: GROUND_Y - 130 - Math.random() * 60,
+    dir,
+    t: Math.random() * Math.PI * 2,
+  };
+}
+
+function startFishRide(): void {
+  if (!fish || underwaterReturn) return;
+  underwaterReturn = { t: 0, startX: body.x, startY: body.y, fishDir: fish.dir };
+  body.vx = 0;
+  body.vy = 0;
+  body.grounded = false;
+  body.jumping = false;
+  fish.x = body.x + PLAYER_W / 2 - FISH_W / 2;
+  fish.y = body.y - FISH_H + 18;
+  spawnSparks(body.x + PLAYER_W / 2, body.y + PLAYER_H * 0.4, 14);
+  showToast('Fish ride!');
+  speakText('Fish ride!', { rate: 1.05, pitch: 1.25 });
+  setStatus('The fish is swimming you back up to the cave.');
+}
+
+function updateUnderwaterReturn(dt: number): boolean {
+  if (!underwaterReturn) return false;
+
+  underwaterReturn.t += dt;
+  const p = clamp(underwaterReturn.t / UNDERWATER_RETURN_DUR, 0, 1);
+  const lift = smoothstep(p);
+  body.prevX = body.x;
+  body.prevY = body.y;
+  body.x = underwaterReturn.startX + Math.sin(p * Math.PI * 4) * 16;
+  body.y = underwaterReturn.startY - lift * 320;
+  body.vx = 0;
+  body.vy = -420 * (1 - p);
+  body.grounded = false;
+  body.jumping = false;
+
+  if (fish) {
+    fish.dir = underwaterReturn.fishDir;
+    fish.t += dt * 8;
+    fish.x = body.x + PLAYER_W / 2 - FISH_W / 2;
+    fish.y = body.y - FISH_H + 18;
+  }
+
+  if (p >= 1) {
+    const landingX = underwaterReturn.startX;
+    const top = platformTopAtCenter(landingX + PLAYER_W / 2);
+    underwaterWorld = false;
+    undergroundWorld = true;
+    underwaterReturn = null;
+    fish = null;
+    fishCooldown = 0;
+    snake = null;
+    snakeCooldown = 1.2;
+    body.x = top !== null ? landingX : lastSafe.x;
+    body.y = top !== null ? top - PLAYER_H : lastSafe.y;
+    body.prevX = body.x;
+    body.prevY = body.y;
+    body.vx = 0;
+    body.vy = 0;
+    body.grounded = false;
+    lastSafe = { x: body.x, y: body.y };
+    spawnSparks(body.x + PLAYER_W / 2, body.y + 8, 18);
+    showToast('Back in the cave!');
+    speakText('Back in the cave!', { rate: 1, pitch: 1.05 });
+    setStatus('Back in the cave. Find the snake trampoline to reach the surface.');
+  }
+
+  updateParticles(dt);
+  return true;
+}
+
+function updateFish(dt: number): void {
+  if (!underwaterWorld || underwaterReturn) return;
+
+  if (!fish) {
+    fishCooldown -= dt;
+    if (fishCooldown <= 0) spawnFish();
+    return;
+  }
+
+  fish.t += dt * 6;
+  fish.x += fish.dir * FISH_SPEED * dt;
+  fish.y += Math.sin(fish.t) * 12 * dt;
+
+  if (fish.x < body.x - 760 || fish.x > body.x + 900) {
+    fish = null;
+    fishCooldown = 2.5 + Math.random() * 3;
+    return;
+  }
+
+  if (overlapsRect(body.x, body.y, body.w, body.h, fish.x + 8, fish.y + 4, FISH_W - 16, FISH_H - 8)) {
+    startFishRide();
   }
 }
 
@@ -895,8 +1043,11 @@ function loseHeart(): void {
 function enterUndergroundWorld(): void {
   candyWorld = false;
   undergroundWorld = true;
+  underwaterWorld = false;
   bird = null;
   birdRide = null;
+  fish = null;
+  underwaterReturn = null;
   chain.releaseCarriedBuddy();
   snake = null;
   snakeCooldown = 0.8 + Math.random() * 1.2;
@@ -907,12 +1058,53 @@ function enterUndergroundWorld(): void {
   setStatus('Underground cave! Find a snake trampoline to get back up.');
 }
 
+function leaveCandyWorld(): void {
+  candyWorld = false;
+  undergroundWorld = false;
+  underwaterWorld = false;
+  bird = null;
+  birdRide = null;
+  snake = null;
+  fish = null;
+  chain.releaseCarriedBuddy();
+  const cx = body.x + body.w / 2;
+  const midpoint = level.leftGoalX === undefined ? level.width / 2 : (level.leftGoalX + level.goalX) / 2;
+  resetBirdTrip(cx <= midpoint ? 'left' : 'right');
+  respawnTo(lastSafe);
+  spawnDust(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 10);
+  showToast('Back to the surface!');
+  setStatus(isWeddingMode() ? 'Back on the ground. Find another bird when you are ready.' : 'Back on the ground. Find another bird to return to candy clouds.');
+}
+
+function enterUnderwaterWorld(): void {
+  candyWorld = false;
+  undergroundWorld = false;
+  underwaterWorld = true;
+  snake = null;
+  undergroundReturn = null;
+  fish = null;
+  fishCooldown = 0.8 + Math.random() * 1.3;
+  respawnTo(lastSafe);
+  spawnDust(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 8);
+  showToast('Underwater world!');
+  speakText('Underwater world!', { rate: 1, pitch: 1.15 });
+  setStatus('Underwater world! Touch a fish to swim back up to the cave.');
+}
+
 function handlePitFall(): void {
-  if (undergroundWorld) {
+  if (candyWorld) {
+    leaveCandyWorld();
+    return;
+  }
+  if (underwaterWorld) {
     respawnTo(lastSafe);
-    snakeCooldown = Math.min(snakeCooldown, 1);
-    showToast('Back to the cave ledge.');
-    setStatus('Find a snake trampoline to return to the surface.');
+    fishCooldown = Math.min(fishCooldown, 1);
+    showToast('Back to the reef ledge.');
+    setStatus('Touch a fish to swim back up to the cave.');
+    return;
+  }
+  if (undergroundWorld) {
+    enterUnderwaterWorld();
     return;
   }
   enterUndergroundWorld();
@@ -989,6 +1181,11 @@ function update(dt: number): void {
     return;
   }
   if (updateUndergroundReturn(dt)) {
+    jumpEdge = false;
+    interactEdge = false;
+    return;
+  }
+  if (updateUnderwaterReturn(dt)) {
     jumpEdge = false;
     interactEdge = false;
     return;
@@ -1076,6 +1273,7 @@ function update(dt: number): void {
   }
 
   updateSnake(dt);
+  updateFish(dt);
 
   // Falling into a pit.
   if (body.y > level.killY) {
@@ -1169,6 +1367,8 @@ function renderFrame(alpha: number): void {
     skyRideT: birdRide ? clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1) : 0,
     undergroundWorld,
     undergroundLiftT: undergroundReturn ? clamp(undergroundReturn.t / UNDERGROUND_RETURN_DUR, 0, 1) : 0,
+    underwaterWorld,
+    underwaterLiftT: underwaterReturn ? clamp(underwaterReturn.t / UNDERWATER_RETURN_DUR, 0, 1) : 0,
     bird: bird ? {
       x: bird.x,
       y: bird.y,
@@ -1181,6 +1381,14 @@ function renderFrame(alpha: number): void {
       y: snake.y,
       kind: snake.kind,
       t: snake.t,
+      dir: snake.dir,
+    } : undefined,
+    fish: fish ? {
+      x: fish.x,
+      y: fish.y,
+      dir: fish.dir,
+      t: fish.t,
+      carrying: underwaterReturn !== null,
     } : undefined,
     particles,
   };
