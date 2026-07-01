@@ -7,6 +7,7 @@
 // conga line from piling up when you stop.
 
 import { clamp } from './core';
+import { buddyVariantIndex } from './buddy-looks';
 import type { BuddyRender } from './render';
 
 const FOOTHOLD_GAP = 100; // record a new foothold this far apart along ground
@@ -16,6 +17,7 @@ const FADE = 0.45; // seconds for a new buddy to fade in
 
 export interface Buddy {
   colorIndex: number;
+  variantIndex: number;
   bornAt: number;
   startScale: number;
   growDuration: number;
@@ -72,6 +74,7 @@ export class BuddyChain {
     const f = this.footholds[idx] ?? { x: px, y: py };
     this.list.push({
       colorIndex,
+      variantIndex: buddyVariantIndex(this.list.length),
       bornAt: now,
       startScale: growth?.startScale ?? 1,
       growDuration: growth?.duration ?? 0,
@@ -143,6 +146,7 @@ export class BuddyChain {
         facing: bd.facing,
         grounded,
         colorIndex: bd.colorIndex,
+        variantIndex: bd.variantIndex,
         alpha: clamp((now - bd.bornAt) / 1000 / FADE, 0, 1),
         scale: bd.startScale + (1 - bd.startScale) * growT,
       };

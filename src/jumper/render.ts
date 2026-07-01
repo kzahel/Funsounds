@@ -6,6 +6,7 @@
 import type { Barrel, Level, Particle, Platform } from './types';
 import type { Theme } from './themes';
 import { GROUND_Y, PLAYER_H, PLAYER_W, VIRTUAL_H } from './modes';
+import { BUDDY_LOOKS, type BuddyLook } from './buddy-looks';
 
 export interface View {
   ctx: CanvasRenderingContext2D;
@@ -25,6 +26,7 @@ export interface BuddyRender {
   facing: number;
   grounded: boolean;
   colorIndex: number;
+  variantIndex: number;
   alpha: number;
   scale?: number;
 }
@@ -113,10 +115,13 @@ export function render(view: View, scene: Scene): void {
   for (let i = scene.buddies.length - 1; i >= 0; i--) {
     const bd = scene.buddies[i];
     const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
-    const buddyScale = bd.scale ?? 1;
-    const bx = bd.x + (PLAYER_W * (1 - buddyScale)) / 2;
-    const by = bd.y + PLAYER_H * (1 - buddyScale);
-    drawCharacter(ctx, scene.level, bx, by, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false, buddyScale);
+    const look = BUDDY_LOOKS[bd.variantIndex % BUDDY_LOOKS.length];
+    const buddyScale = (bd.scale ?? 1) * look.size;
+    const buddyW = PLAYER_W * buddyScale * look.width;
+    const buddyH = PLAYER_H * buddyScale * look.height;
+    const bx = bd.x + (PLAYER_W - buddyW) / 2;
+    const by = bd.y + PLAYER_H - buddyH;
+    drawCharacter(ctx, scene.level, bx, by, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false, buddyScale, look);
   }
   if (scene.wedding) {
     drawWeddingPartnerAndEffects(ctx, scene.level, scene.wedding, scene.px, scene.py, view.time);
@@ -534,9 +539,12 @@ function drawCharacter(
   alpha: number,
   invuln: boolean,
   scale = 1,
+  look: BuddyLook | null = null,
 ): void {
-  const charW = PLAYER_W * scale;
-  const charH = PLAYER_H * scale;
+  const widthScale = look?.width ?? 1;
+  const heightScale = look?.height ?? 1;
+  const charW = PLAYER_W * scale * widthScale;
+  const charH = PLAYER_H * scale * heightScale;
   const cx = topX + charW / 2;
   const feetY = topY + charH;
 
@@ -578,6 +586,9 @@ function drawCharacter(
   ctx.strokeStyle = style.bodyDark;
   ctx.stroke();
 
+  drawBuddyHair(ctx, cx, y, w, h, scale, style, look);
+  drawBuddyHeadAccessory(ctx, cx, y, w, h, scale, look);
+
   ctx.fillStyle = style.belly;
   ctx.beginPath();
   ctx.ellipse(cx, y + h * 0.66, w * 0.26, h * 0.22, 0, 0, Math.PI * 2);
@@ -587,22 +598,281 @@ function drawCharacter(
   const eyeY = y + h * 0.26;
   for (const side of [-1, 1]) {
     const px = cx + side * w * 0.22 + ex * 0.3;
+    drawBuddyEye(ctx, px, eyeY, w, h, ex, side, scale, look);
+  }
+  drawBuddyFaceAccessory(ctx, cx, eyeY, w, ex, scale, look);
+
+  drawBuddyMouth(ctx, cx + ex * 0.4, y + h * 0.46, w, h, scale, look);
+
+  ctx.restore();
+}
+
+function drawBuddyEye(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  eyeY: number,
+  w: number,
+  h: number,
+  ex: number,
+  side: number,
+  scale: number,
+  look: BuddyLook | null,
+): void {
+  const eyes = look?.eyes ?? 'normal';
+  if (eyes === 'sleepy') {
+    ctx.strokeStyle = '#23351f';
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.arc(px + ex * 0.3, eyeY + h * 0.02, w * 0.12, 0.08 * Math.PI, 0.92 * Math.PI);
+    ctx.stroke();
+    return;
+  }
+
+  const eyeR = w * (eyes === 'wide' ? 0.18 : 0.16);
+  const pupilR = w * (eyes === 'wide' ? 0.08 : 0.07);
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(px, eyeY, eyeR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#23351f';
+  ctx.beginPath();
+  ctx.arc(px + ex, eyeY + 1, pupilR, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (eyes === 'grumpy') {
+    ctx.strokeStyle = '#23351f';
+    ctx.lineWidth = 2.1 * scale;
+    ctx.beginPath();
+    ctx.moveTo(px - side * w * 0.1, eyeY - h * 0.18);
+    ctx.lineTo(px + side * w * 0.1, eyeY - h * 0.1);
+    ctx.stroke();
+  }
+}
+
+function drawBuddyMouth(
+  ctx: CanvasRenderingContext2D,
+  mx: number,
+  my: number,
+  w: number,
+  h: number,
+  scale: number,
+  look: BuddyLook | null,
+): void {
+  const mouth = look?.mouth ?? 'smile';
+  ctx.strokeStyle = '#23351f';
+  ctx.fillStyle = '#23351f';
+  ctx.lineWidth = 2 * scale;
+
+  if (mouth === 'grumpy') {
+    ctx.beginPath();
+    ctx.arc(mx, my + h * 0.13, w * 0.15, 1.15 * Math.PI, 1.85 * Math.PI);
+    ctx.stroke();
+    return;
+  }
+
+  if (mouth === 'toothy') {
+    roundRect(ctx, mx - w * 0.15, my - h * 0.02, w * 0.3, h * 0.12, 3 * scale);
     ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(px, eyeY, w * 0.16, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#23351f';
+    ctx.strokeStyle = '#23351f';
+    ctx.stroke();
     ctx.beginPath();
-    ctx.arc(px + ex, eyeY + 1, w * 0.07, 0, Math.PI * 2);
+    ctx.moveTo(mx, my - h * 0.015);
+    ctx.lineTo(mx, my + h * 0.09);
+    ctx.stroke();
+    return;
+  }
+
+  if (mouth === 'open') {
+    ctx.beginPath();
+    ctx.ellipse(mx, my + h * 0.03, w * 0.13, h * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff8ca8';
+    ctx.beginPath();
+    ctx.ellipse(mx, my + h * 0.08, w * 0.07, h * 0.035, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  if (mouth === 'sleepy') {
+    ctx.beginPath();
+    ctx.moveTo(mx - w * 0.11, my + h * 0.03);
+    ctx.lineTo(mx + w * 0.11, my + h * 0.03);
+    ctx.stroke();
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.arc(mx, my, w * 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
+}
+
+function drawBuddyHair(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  y: number,
+  w: number,
+  h: number,
+  scale: number,
+  style: CharStyle,
+  look: BuddyLook | null,
+): void {
+  if (!look || look.hair === 'none') return;
+  ctx.save();
+  ctx.strokeStyle = style.bodyDark;
+  ctx.fillStyle = style.bodyDark;
+  ctx.lineWidth = 3 * scale;
+  ctx.lineCap = 'round';
+
+  if (look.hair === 'tuft') {
+    for (const dx of [-0.09, 0, 0.09]) {
+      ctx.beginPath();
+      ctx.moveTo(cx, y + h * 0.04);
+      ctx.quadraticCurveTo(cx + w * dx, y - h * 0.14, cx + w * dx * 1.7, y - h * 0.04);
+      ctx.stroke();
+    }
+  } else if (look.hair === 'curls') {
+    for (const dx of [-0.18, 0, 0.18]) {
+      ctx.beginPath();
+      ctx.arc(cx + w * dx, y + h * 0.03, w * 0.085, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (look.hair === 'mohawk') {
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx + i * w * 0.08 - w * 0.045, y + h * 0.07);
+      ctx.lineTo(cx + i * w * 0.08, y - h * 0.13);
+      ctx.lineTo(cx + i * w * 0.08 + w * 0.045, y + h * 0.07);
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else if (look.hair === 'swoop') {
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.24, y + h * 0.12);
+    ctx.bezierCurveTo(cx - w * 0.05, y - h * 0.12, cx + w * 0.28, y - h * 0.02, cx + w * 0.12, y + h * 0.16);
+    ctx.quadraticCurveTo(cx - w * 0.03, y + h * 0.1, cx - w * 0.24, y + h * 0.12);
+    ctx.fill();
+  } else if (look.hair === 'sprout') {
+    ctx.strokeStyle = '#2f8f4c';
+    ctx.beginPath();
+    ctx.moveTo(cx, y + h * 0.03);
+    ctx.lineTo(cx, y - h * 0.13);
+    ctx.stroke();
+    ctx.fillStyle = '#6bcb77';
+    ctx.beginPath();
+    ctx.ellipse(cx - w * 0.08, y - h * 0.1, w * 0.09, h * 0.045, -0.6, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.08, y - h * 0.1, w * 0.09, h * 0.045, 0.6, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.strokeStyle = '#23351f';
-  ctx.lineWidth = 2 * scale;
-  ctx.beginPath();
-  ctx.arc(cx + ex * 0.4, y + h * 0.46, w * 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
-  ctx.stroke();
+  ctx.restore();
+}
 
+function drawBuddyHeadAccessory(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  y: number,
+  w: number,
+  h: number,
+  scale: number,
+  look: BuddyLook | null,
+): void {
+  if (!look || look.accessory === 'none' || look.accessory === 'glasses') return;
+  ctx.save();
+  ctx.lineWidth = 2 * scale;
+
+  if (look.accessory === 'cap') {
+    ctx.fillStyle = '#264653';
+    ctx.beginPath();
+    ctx.ellipse(cx, y + h * 0.07, w * 0.31, h * 0.11, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(cx - w * 0.28, y + h * 0.07, w * 0.5, h * 0.08);
+    ctx.fillStyle = '#f4a261';
+    ctx.fillRect(cx + w * 0.12, y + h * 0.1, w * 0.26, h * 0.035);
+  } else if (look.accessory === 'partyHat') {
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.18, y + h * 0.05);
+    ctx.lineTo(cx, y - h * 0.28);
+    ctx.lineTo(cx + w * 0.18, y + h * 0.05);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#d65f9b';
+    ctx.stroke();
+    ctx.fillStyle = '#ff5a9a';
+    ctx.beginPath();
+    ctx.arc(cx, y - h * 0.29, 4 * scale, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (look.accessory === 'bow') {
+    ctx.fillStyle = '#ff5a9a';
+    const bx = cx + w * 0.26;
+    const by = y + h * 0.13;
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx - w * 0.16, by - h * 0.08);
+    ctx.lineTo(bx - w * 0.14, by + h * 0.08);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx + w * 0.16, by - h * 0.08);
+    ctx.lineTo(bx + w * 0.14, by + h * 0.08);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffd1e6';
+    ctx.beginPath();
+    ctx.arc(bx, by, 3.5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (look.accessory === 'crown') {
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.24, y + h * 0.03);
+    ctx.lineTo(cx - w * 0.17, y - h * 0.15);
+    ctx.lineTo(cx, y - h * 0.03);
+    ctx.lineTo(cx + w * 0.17, y - h * 0.15);
+    ctx.lineTo(cx + w * 0.24, y + h * 0.03);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#b98500';
+    ctx.stroke();
+  } else if (look.accessory === 'propeller') {
+    ctx.strokeStyle = '#23351f';
+    ctx.beginPath();
+    ctx.moveTo(cx, y + h * 0.02);
+    ctx.lineTo(cx, y - h * 0.16);
+    ctx.stroke();
+    ctx.fillStyle = '#4d96ff';
+    ctx.beginPath();
+    ctx.ellipse(cx - w * 0.12, y - h * 0.17, w * 0.16, h * 0.035, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.12, y - h * 0.17, w * 0.16, h * 0.035, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawBuddyFaceAccessory(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  eyeY: number,
+  w: number,
+  ex: number,
+  scale: number,
+  look: BuddyLook | null,
+): void {
+  if (look?.accessory !== 'glasses') return;
+  ctx.save();
+  ctx.strokeStyle = '#23351f';
+  ctx.lineWidth = 1.8 * scale;
+  const r = w * 0.17;
+  const lx = cx - w * 0.22 + ex * 0.3;
+  const rx = cx + w * 0.22 + ex * 0.3;
+  ctx.beginPath();
+  ctx.arc(lx, eyeY, r, 0, Math.PI * 2);
+  ctx.arc(rx, eyeY, r, 0, Math.PI * 2);
+  ctx.moveTo(lx + r, eyeY);
+  ctx.lineTo(rx - r, eyeY);
+  ctx.stroke();
   ctx.restore();
 }
 

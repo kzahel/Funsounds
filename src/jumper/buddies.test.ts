@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BuddyChain } from './buddies';
+import { BUDDY_LOOKS } from './buddy-looks';
 
 const GROUND = 400;
 const dt = 1 / 60;
@@ -84,6 +85,17 @@ describe('BuddyChain', () => {
     expect(chain.renders(0)[0].scale).toBeCloseTo(0.38, 5);
     expect(chain.renders(30_000)[0].scale).toBeCloseTo(0.69, 5);
     expect(chain.renders(60_000)[0].scale).toBeCloseTo(1, 5);
+  });
+
+  it('assigns varied buddy looks beyond color swaps', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    for (let i = 0; i < 5; i++) chain.add(i % 5, 1, 0, 0, GROUND);
+
+    const looks = chain.renders(0).map((r) => BUDDY_LOOKS[r.variantIndex]);
+    expect(new Set(looks.map((l) => l.accessory)).size).toBeGreaterThan(2);
+    expect(new Set(looks.map((l) => l.mouth)).size).toBeGreaterThan(2);
+    expect(new Set(looks.map((l) => `${l.width}:${l.height}:${l.size}`)).size).toBeGreaterThan(3);
   });
 
   it('regroups buddies onto the ground after a respawn', () => {
