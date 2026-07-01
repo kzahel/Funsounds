@@ -2,6 +2,7 @@ export type BuddyMouth = 'smile' | 'grumpy' | 'toothy' | 'open' | 'sleepy';
 export type BuddyEyes = 'normal' | 'wide' | 'sleepy' | 'grumpy';
 export type BuddyHair = 'none' | 'tuft' | 'curls' | 'mohawk' | 'swoop' | 'sprout';
 export type BuddyAccessory = 'none' | 'cap' | 'partyHat' | 'bow' | 'crown' | 'glasses' | 'propeller';
+export type BuddySpecies = 'buddy' | 'fishBuddy';
 
 export interface BuddyLook {
   size: number;

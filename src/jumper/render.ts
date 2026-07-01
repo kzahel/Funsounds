@@ -6,7 +6,7 @@
 import type { Barrel, Level, Particle, Platform } from './types';
 import type { Theme } from './themes';
 import { GROUND_Y, PLAYER_H, PLAYER_W, VIRTUAL_H } from './modes';
-import { BUDDY_LOOKS, type BuddyLook } from './buddy-looks';
+import { BUDDY_LOOKS, type BuddyLook, type BuddySpecies } from './buddy-looks';
 
 export interface View {
   ctx: CanvasRenderingContext2D;
@@ -27,19 +27,25 @@ export interface BuddyRender {
   grounded: boolean;
   colorIndex: number;
   variantIndex: number;
+  species: BuddySpecies;
   alpha: number;
   scale?: number;
 }
 
 export type WeddingPhase = 'idle' | 'kiss' | 'sparkle' | 'baby';
+export type WeddingPartnerKind = 'buddy' | 'fish';
 
 export interface WeddingRender {
   partnerX: number;
   partnerY: number;
+  partnerKind: WeddingPartnerKind;
   near: boolean;
   phase: WeddingPhase;
   phaseT: number;
   colorIndex: number;
+  babySpecies: BuddySpecies;
+  babyBaseX: number;
+  babyBaseY: number;
 }
 
 export interface BirdRender {
@@ -56,6 +62,15 @@ export interface SnakeRender {
   kind: 'snake' | 'trampoline';
   t: number;
   dir: number;
+}
+
+export interface TarantulaRender {
+  x: number;
+  y: number;
+  dir: number;
+  t: number;
+  emergeT: number;
+  torchX: number;
 }
 
 export interface FishRender {
@@ -88,6 +103,7 @@ export interface Scene {
   underwaterLiftT: number;
   bird?: BirdRender;
   snake?: SnakeRender;
+  tarantulas: TarantulaRender[];
   fish?: FishRender;
   particles: Particle[];
 }
@@ -118,6 +134,7 @@ const WEDDING_BABY_CRY_DUR = 3.2;
 const WEDDING_BABY_START_SCALE = 0.38;
 const BIRD_RENDER_W = 72;
 const BIRD_RENDER_H = 42;
+const TARANTULA_RENDER_W = 42;
 
 // Distinct, friendly colors for the trailing buddies.
 export const BUDDY_STYLES: CharStyle[] = [
@@ -161,6 +178,9 @@ export function render(view: View, scene: Scene): void {
     else drawBarrel(ctx, b);
   }
   if (scene.candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
+  if (scene.undergroundWorld) {
+    for (const tarantula of scene.tarantulas) drawTarantula(ctx, tarantula);
+  }
   if (scene.snake) drawSnake(ctx, scene.snake);
   if (scene.fish) drawFish(ctx, scene.fish);
   drawParticles(ctx, scene.particles);
@@ -177,7 +197,22 @@ export function render(view: View, scene: Scene): void {
     const buddyH = PLAYER_H * buddyScale * look.height;
     const bx = bd.x + (PLAYER_W - buddyW) / 2;
     const by = bd.y + PLAYER_H - buddyH;
-    drawCharacter(ctx, scene.level, bx, by, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false, buddyScale, look);
+    drawCharacter(
+      ctx,
+      scene.level,
+      bx,
+      by,
+      bd.vy,
+      bd.grounded,
+      bd.facing,
+      view.time,
+      style,
+      bd.alpha,
+      false,
+      buddyScale,
+      look,
+      bd.species,
+    );
   }
   if (scene.wedding) {
     drawWeddingPartnerAndEffects(ctx, scene.level, scene.wedding, scene.px, scene.py, view.time);
@@ -1180,6 +1215,71 @@ function drawDwarf(ctx: CanvasRenderingContext2D, x: number, groundY: number, ti
   ctx.restore();
 }
 
+function drawTarantula(ctx: CanvasRenderingContext2D, tarantula: TarantulaRender): void {
+  const emerge = smoothstep(clampNum(tarantula.emergeT, 0, 1));
+  const crawlCx = tarantula.x + TARANTULA_RENDER_W / 2;
+  const cx = lerpNum(tarantula.torchX, crawlCx, emerge);
+  const cy = lerpNum(tarantula.y - 35, tarantula.y - 12, emerge) + Math.sin(tarantula.t * 9) * 1.4 * emerge;
+  const legStep = Math.sin(tarantula.t * 11);
+
+  ctx.save();
+  ctx.globalAlpha = clampNum(0.35 + emerge * 0.65, 0, 1);
+  if (emerge < 1) {
+    ctx.strokeStyle = 'rgba(230,230,210,0.62)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(tarantula.torchX, tarantula.y - 34);
+    ctx.lineTo(cx, cy - 5);
+    ctx.stroke();
+  }
+
+  ctx.translate(cx, cy);
+  ctx.scale(tarantula.dir >= 0 ? 1 : -1, 1);
+
+  ctx.strokeStyle = '#140c0a';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const y = -5 + i * 4.2;
+      const reach = 17 + (i % 2) * 4;
+      const lift = legStep * (i % 2 === 0 ? 2.4 : -2.4);
+      ctx.beginPath();
+      ctx.moveTo(-4 + i * 2, y);
+      ctx.quadraticCurveTo(side * 12, y - 9 + lift, side * reach, y - 4 + lift);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = '#2a1410';
+  ctx.strokeStyle = '#080403';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(-7, 1, 15, 11, 0, 0, Math.PI * 2);
+  ctx.ellipse(10, -2, 10, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = '#7a3d25';
+  ctx.lineWidth = 1.3;
+  for (let i = 0; i < 6; i++) {
+    const a = -0.7 + i * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(-16 + i * 3.2, -8);
+    ctx.lineTo(-18 + i * 3.2 + Math.cos(a) * 4, -14 + Math.sin(a) * 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#ffb347';
+  for (const eye of [6, 11]) {
+    ctx.beginPath();
+    ctx.arc(eye, -6, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawSnake(ctx: CanvasRenderingContext2D, snake: SnakeRender): void {
   if (snake.kind === 'trampoline') {
     drawTrampoline(ctx, snake);
@@ -1377,19 +1477,23 @@ function drawWeddingPartnerAndEffects(
   const partnerFacing = -playerFacingPartner;
   const partnerBounce = wedding.phase === 'kiss' ? kissBounce(wedding.phaseT) : 0;
 
-  drawCharacter(
-    ctx,
-    level,
-    wedding.partnerX,
-    wedding.partnerY - partnerBounce,
-    0,
-    true,
-    partnerFacing,
-    time,
-    PARTNER_STYLE,
-    1,
-    false,
-  );
+  if (wedding.partnerKind === 'fish') {
+    drawWeddingFishPartner(ctx, wedding.partnerX, wedding.partnerY - partnerBounce, partnerFacing, time);
+  } else {
+    drawCharacter(
+      ctx,
+      level,
+      wedding.partnerX,
+      wedding.partnerY - partnerBounce,
+      0,
+      true,
+      partnerFacing,
+      time,
+      PARTNER_STYLE,
+      1,
+      false,
+    );
+  }
 
   if (wedding.phase === 'kiss' || wedding.phase === 'sparkle') {
     drawKissHearts(ctx, wedding, playerX, playerY, playerFacingPartner);
@@ -1412,8 +1516,10 @@ function drawKissHearts(
     y: playerY + PLAYER_H * 0.42,
   };
   const partnerMouth = {
-    x: wedding.partnerX + PLAYER_W / 2 + partnerFacing * PLAYER_W * 0.18,
-    y: wedding.partnerY + PLAYER_H * 0.42,
+    x: wedding.partnerKind === 'fish'
+      ? wedding.partnerX + PLAYER_W / 2 + partnerFacing * 35
+      : wedding.partnerX + PLAYER_W / 2 + partnerFacing * PLAYER_W * 0.18,
+    y: wedding.partnerKind === 'fish' ? wedding.partnerY + PLAYER_H * 0.58 : wedding.partnerY + PLAYER_H * 0.42,
   };
   const centerX = (playerMouth.x + partnerMouth.x) / 2;
   const centerY = (playerMouth.y + partnerMouth.y) / 2 - 8;
@@ -1442,23 +1548,62 @@ function drawGrowingBaby(
   ctx: CanvasRenderingContext2D,
   level: Level,
   wedding: WeddingRender,
-  playerX: number,
+  _playerX: number,
   time: number,
 ): void {
   const pop = smoothstep(clampNum(wedding.phaseT / WEDDING_BABY_POP_DUR, 0, 1));
   const scale = 0.32 + (WEDDING_BABY_START_SCALE - 0.32) * pop;
-  const midX = (playerX + PLAYER_W / 2 + wedding.partnerX + PLAYER_W / 2) / 2;
+  const midX = wedding.babyBaseX + PLAYER_W / 2;
   const popHop = Math.max(0, Math.sin(time * 9)) * (16 - 4 * pop);
   const cradleHop = Math.max(0, Math.sin(time * 7)) * 3;
   const hop = wedding.phaseT < WEDDING_BABY_POP_DUR ? popHop : cradleHop;
   const topX = midX - (PLAYER_W * scale) / 2;
-  const topY = GROUND_Y - PLAYER_H * scale - hop;
+  const topY = wedding.babyBaseY + PLAYER_H - PLAYER_H * scale - hop;
   const style = BUDDY_STYLES[wedding.colorIndex % BUDDY_STYLES.length];
   const crying = wedding.phaseT < WEDDING_BABY_CRY_DUR;
 
   if (!crying) drawHeart(ctx, midX, topY - 20, 8 + 5 * Math.sin(time * 6) ** 2, '#ff5a9a');
-  drawCharacter(ctx, level, topX, topY, hop > 1 ? -180 : 0, hop <= 1, 1, time, style, 1, false, scale);
+  drawCharacter(ctx, level, topX, topY, hop > 1 ? -180 : 0, hop <= 1, 1, time, style, 1, false, scale, null, wedding.babySpecies);
   if (crying) drawCryingBabyOverlay(ctx, topX, topY, scale, time);
+}
+
+function drawWeddingFishPartner(
+  ctx: CanvasRenderingContext2D,
+  partnerX: number,
+  partnerY: number,
+  partnerFacing: number,
+  time: number,
+): void {
+  const fishX = partnerX + PLAYER_W / 2 - 41;
+  const fishY = partnerY + 13 + Math.sin(time * 3.2) * 3;
+  drawFish(ctx, {
+    x: fishX,
+    y: fishY,
+    dir: partnerFacing,
+    t: time * 3.4,
+    carrying: false,
+  });
+
+  ctx.save();
+  ctx.translate(partnerX + PLAYER_W / 2, fishY + 8);
+  ctx.fillStyle = '#ff8fc4';
+  ctx.beginPath();
+  ctx.moveTo(-8, 0);
+  ctx.lineTo(-24, -8);
+  ctx.lineTo(-22, 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-8, 0);
+  ctx.lineTo(8, -8);
+  ctx.lineTo(9, 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd1e6';
+  ctx.beginPath();
+  ctx.arc(0, 0, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawCryingBabyOverlay(ctx: CanvasRenderingContext2D, topX: number, topY: number, scale: number, time: number): void {
@@ -1592,6 +1737,7 @@ function drawCharacter(
   invuln: boolean,
   scale = 1,
   look: BuddyLook | null = null,
+  species: BuddySpecies = 'buddy',
 ): void {
   const widthScale = look?.width ?? 1;
   const heightScale = look?.height ?? 1;
@@ -1625,11 +1771,15 @@ function drawCharacter(
   ctx.save();
   ctx.globalAlpha = alpha * (invuln && Math.floor(time * 12) % 2 === 0 ? 0.45 : 1);
 
-  ctx.fillStyle = style.bodyDark;
-  ctx.beginPath();
-  ctx.ellipse(cx - w * 0.22, feetY - 3 * scale, w * 0.2, 6 * scale, 0, 0, Math.PI * 2);
-  ctx.ellipse(cx + w * 0.22, feetY - 3 * scale, w * 0.2, 6 * scale, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (species === 'fishBuddy') {
+    drawFishBuddyTail(ctx, cx, y, w, h, facing, scale, time, style);
+  } else {
+    ctx.fillStyle = style.bodyDark;
+    ctx.beginPath();
+    ctx.ellipse(cx - w * 0.22, feetY - 3 * scale, w * 0.2, 6 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.22, feetY - 3 * scale, w * 0.2, 6 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   roundRect(ctx, x, y, w, h, w * 0.42);
   ctx.fillStyle = style.body;
@@ -1637,6 +1787,8 @@ function drawCharacter(
   ctx.lineWidth = 2.5 * scale;
   ctx.strokeStyle = style.bodyDark;
   ctx.stroke();
+
+  if (species === 'fishBuddy') drawFishBuddyFins(ctx, cx, y, w, h, facing, scale);
 
   drawBuddyHair(ctx, cx, y, w, h, scale, style, look);
   drawBuddyHeadAccessory(ctx, cx, y, w, h, scale, look);
@@ -1656,6 +1808,70 @@ function drawCharacter(
 
   drawBuddyMouth(ctx, cx + ex * 0.4, y + h * 0.46, w, h, scale, look);
 
+  ctx.restore();
+}
+
+function drawFishBuddyTail(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  y: number,
+  w: number,
+  h: number,
+  facing: number,
+  scale: number,
+  time: number,
+  style: CharStyle,
+): void {
+  const tailX = cx - facing * w * 0.42;
+  const tailY = y + h * 0.58;
+  const flick = Math.sin(time * 7) * h * 0.04;
+  ctx.save();
+  ctx.fillStyle = '#42d6d9';
+  ctx.strokeStyle = style.bodyDark;
+  ctx.lineWidth = 2 * scale;
+  ctx.beginPath();
+  ctx.moveTo(tailX, tailY);
+  ctx.lineTo(tailX - facing * w * 0.35, tailY - h * 0.18 + flick);
+  ctx.lineTo(tailX - facing * w * 0.24, tailY + flick * 0.2);
+  ctx.lineTo(tailX - facing * w * 0.35, tailY + h * 0.18 - flick);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFishBuddyFins(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  y: number,
+  w: number,
+  h: number,
+  facing: number,
+  scale: number,
+): void {
+  ctx.save();
+  ctx.fillStyle = '#7ff0ff';
+  ctx.strokeStyle = '#2fa79b';
+  ctx.lineWidth = 1.8 * scale;
+
+  const frontX = cx + facing * w * 0.26;
+  const sideY = y + h * 0.55;
+  ctx.beginPath();
+  ctx.moveTo(frontX, sideY);
+  ctx.quadraticCurveTo(frontX + facing * w * 0.2, sideY + h * 0.03, frontX + facing * w * 0.12, sideY + h * 0.24);
+  ctx.quadraticCurveTo(frontX - facing * w * 0.02, sideY + h * 0.14, frontX, sideY);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = '#2fa79b';
+  ctx.lineWidth = 1.4 * scale;
+  for (let i = 0; i < 3; i++) {
+    const gx = cx - w * 0.07 + i * w * 0.07;
+    ctx.beginPath();
+    ctx.moveTo(gx, y + h * 0.33);
+    ctx.lineTo(gx - facing * w * 0.07, y + h * 0.42);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

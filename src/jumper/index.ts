@@ -24,12 +24,14 @@ import {
   type Body,
   type Loop,
   type MoveInput,
+  type StepResult,
   type Solid,
   type Tuning,
 } from './core';
 import { MODES, MODE_ORDER, GROUND_Y, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
-import { render, type BuddyRender, type Scene, type View } from './render';
+import { render, type BuddyRender, type Scene, type View, type WeddingPartnerKind } from './render';
 import { BuddyChain } from './buddies';
+import type { BuddySpecies } from './buddy-looks';
 import { themeForLevel, type Theme } from './themes';
 import type { Barrel, Checkpoint, Level, ModeConfig, Particle } from './types';
 
@@ -43,6 +45,7 @@ const LOOK_FRAC_LEFT = 0.6;
 const LOOK_FRAC_SHIFT_PER_SEC = 0.7; // full left/right bias change in ~0.3s
 const WEDDING_INTERACT_DIST = 82;
 const WEDDING_KISS_DUR = 0.9;
+const WEDDING_MOVEMENT_LOCK_DUR = 0.35;
 const WEDDING_BABY_WAIT = 0.9;
 const WEDDING_BABY_POP_DUR = 1.35;
 const WEDDING_BABY_CRADLE_DUR = 10;
@@ -60,10 +63,18 @@ const TRAMPOLINE_W = 82;
 const TRAMPOLINE_H = 24;
 const UNDERGROUND_RETURN_DUR = 2.15;
 const SNAKE_SPEED = 42;
+const TARANTULA_MAX = 4;
+const TARANTULA_W = 42;
+const TARANTULA_SPEED = 34;
+const TARANTULA_EMERGE_DUR = 0.9;
 const FISH_W = 82;
 const FISH_H = 34;
 const FISH_SPEED = 76;
 const UNDERWATER_RETURN_DUR = 2.4;
+const SWIM_ACCEL = 920;
+const SWIM_DRAG = 5.4;
+const SWIM_MAX_X = 230;
+const SWIM_MAX_Y = 210;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
@@ -74,6 +85,10 @@ interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
   colorIndex: number;
+  partnerKind: WeddingPartnerKind;
+  babySpecies: BuddySpecies;
+  babyBaseX: number;
+  babyBaseY: number;
 }
 interface BirdState {
   x: number;
@@ -102,6 +117,16 @@ interface UndergroundReturn {
   t: number;
   startX: number;
   startY: number;
+}
+interface TarantulaState {
+  x: number;
+  y: number;
+  dir: number;
+  t: number;
+  emergeT: number;
+  minX: number;
+  maxX: number;
+  torchX: number;
 }
 interface FishState {
   x: number;
@@ -159,6 +184,8 @@ let undergroundWorld = false;
 let snake: SnakeState | null = null;
 let snakeCooldown = 0;
 let undergroundReturn: UndergroundReturn | null = null;
+let tarantulas: TarantulaState[] = [];
+let tarantulaCooldown = 0;
 let underwaterWorld = false;
 let fish: FishState | null = null;
 let fishCooldown = 0;
@@ -167,6 +194,7 @@ let underwaterReturn: UnderwaterReturn | null = null;
 // Input.
 const moveCodes = new Set<string>();
 const jumpCodes = new Set<string>();
+const interactCodes = new Set<string>();
 let jumpEdge = false;
 let interactEdge = false;
 
@@ -378,6 +406,8 @@ function buildLevel(): void {
   snake = null;
   snakeCooldown = 0;
   undergroundReturn = null;
+  tarantulas = [];
+  tarantulaCooldown = 0;
   underwaterWorld = false;
   fish = null;
   fishCooldown = 0;
@@ -395,6 +425,18 @@ function isWeddingMode(): boolean {
 
 function hasBuddyChain(): boolean {
   return isBuddyChallenge() || isWeddingMode();
+}
+
+function weddingPartnerKind(): WeddingPartnerKind {
+  return undergroundWorld || underwaterWorld ? 'fish' : 'buddy';
+}
+
+function weddingBabySpecies(kind: WeddingPartnerKind): BuddySpecies {
+  return kind === 'fish' ? 'fishBuddy' : 'buddy';
+}
+
+function weddingMovementLocked(): boolean {
+  return weddingEvent?.phase === 'kiss' && weddingEvent.t < WEDDING_MOVEMENT_LOCK_DUR;
 }
 
 function isRightGoalPlatform(solid: Solid | null | undefined): boolean {
@@ -424,9 +466,11 @@ function isNearWeddingPartner(): boolean {
 function weddingBabyBasePosition(): { x: number; y: number } {
   const partner = weddingPartnerCenter();
   const midX = partner ? (body.x + PLAYER_W / 2 + partner.x) / 2 : body.x + PLAYER_W / 2;
+  const partnerTop = level.partnerY ?? GROUND_Y - PLAYER_H;
+  const midY = partner ? (body.y + partnerTop) / 2 : body.y;
   return {
     x: midX - PLAYER_W / 2,
-    y: GROUND_Y - PLAYER_H,
+    y: clamp(midY, 72, GROUND_Y - PLAYER_H),
   };
 }
 
@@ -624,6 +668,8 @@ function updateUndergroundReturn(dt: number): boolean {
     undergroundReturn = null;
     snake = null;
     snakeCooldown = 0;
+    tarantulas = [];
+    tarantulaCooldown = 0;
     body.x = top !== null ? landingX : lastSafe.x;
     body.y = top !== null ? top - PLAYER_H : lastSafe.y;
     body.prevX = body.x;
@@ -688,6 +734,73 @@ function updateSnake(dt: number): void {
   } else {
     startUndergroundReturn();
   }
+}
+
+function caveTorchSpots(): Array<{ x: number; y: number; minX: number; maxX: number }> {
+  const spots: Array<{ x: number; y: number; minX: number; maxX: number }> = [];
+  let torches = 0;
+  for (let i = 0; i < level.platforms.length && torches < 10; i++) {
+    const p = level.platforms[i];
+    if (p.w < 120) continue;
+    const x = p.x + 42 + ((i * 149) % Math.max(1, p.w - 84));
+    const minX = p.x + 14;
+    const maxX = p.x + p.w - TARANTULA_W - 14;
+    if (maxX > minX) spots.push({ x, y: p.y, minX, maxX });
+    torches++;
+  }
+  return spots;
+}
+
+function spawnTarantula(): boolean {
+  const cx = body.x + PLAYER_W / 2;
+  const spots = caveTorchSpots();
+  const nearby = spots.filter(
+    (spot) =>
+      Math.abs(spot.x - cx) < 760
+      && !tarantulas.some((tarantula) => Math.abs(tarantula.torchX - spot.x) < 6 && Math.abs(tarantula.y - spot.y) < 6),
+  );
+  const choices = nearby.length > 0 ? nearby : spots;
+  if (choices.length === 0) return false;
+
+  const spot = choices[Math.floor(Math.random() * choices.length)];
+  const startX = clamp(spot.x - TARANTULA_W / 2, spot.minX, spot.maxX);
+  tarantulas.push({
+    x: startX,
+    y: spot.y,
+    dir: Math.random() < 0.5 ? -1 : 1,
+    t: 0,
+    emergeT: 0,
+    minX: spot.minX,
+    maxX: spot.maxX,
+    torchX: spot.x,
+  });
+  return true;
+}
+
+function updateTarantulas(dt: number): void {
+  if (!undergroundWorld || underwaterWorld || undergroundReturn) return;
+
+  for (let i = tarantulas.length - 1; i >= 0; i--) {
+    const tarantula = tarantulas[i];
+    tarantula.t += dt;
+    tarantula.emergeT = Math.min(1, tarantula.emergeT + dt / TARANTULA_EMERGE_DUR);
+    if (tarantula.emergeT >= 1) {
+      tarantula.x += tarantula.dir * TARANTULA_SPEED * dt;
+      if (tarantula.x <= tarantula.minX || tarantula.x >= tarantula.maxX) {
+        tarantula.x = clamp(tarantula.x, tarantula.minX, tarantula.maxX);
+        tarantula.dir *= -1;
+      }
+    }
+    if (tarantula.t > 2 && (tarantula.x + TARANTULA_W < body.x - 900 || tarantula.x > body.x + 980)) {
+      tarantulas.splice(i, 1);
+    }
+  }
+
+  if (tarantulas.length >= TARANTULA_MAX) return;
+  tarantulaCooldown -= dt;
+  if (tarantulaCooldown > 0) return;
+  spawnTarantula();
+  tarantulaCooldown = 1.8 + Math.random() * 3.2;
 }
 
 function spawnFish(): void {
@@ -795,6 +908,8 @@ function updateUnderwaterReturn(dt: number): boolean {
       undergroundWorld = true;
       snake = null;
       snakeCooldown = 1.2;
+      tarantulas = [];
+      tarantulaCooldown = 0.6 + Math.random() * 1.1;
       body.x = top !== null ? landingX : lastSafe.x;
       body.y = top !== null ? top - PLAYER_H : lastSafe.y;
       body.prevX = body.x;
@@ -842,6 +957,76 @@ function updateFish(dt: number): void {
   if (overlapsRect(body.x, body.y, body.w, body.h, fish.x + 8, fish.y + 4, FISH_W - 16, FISH_H - 8)) {
     startFishRide();
   }
+}
+
+function applyDragVelocity(v: number, drag: number): number {
+  if (v > 0) return Math.max(0, v - drag);
+  if (v < 0) return Math.min(0, v + drag);
+  return 0;
+}
+
+function stepSwimBody(
+  body: Body,
+  solids: Solid[],
+  input: MoveInput & { downHeld: boolean },
+  dt: number,
+): StepResult {
+  const res: StepResult = {
+    landed: false,
+    startedJump: input.jumpPressed,
+    landedOn: null,
+    wallHits: [],
+    ceilingHit: null,
+  };
+
+  body.prevX = body.x;
+  body.prevY = body.y;
+  body.grounded = false;
+  body.jumping = false;
+  body.coyote = 0;
+  body.buffer = 0;
+  body.jumpHold = 0;
+
+  const xDir = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+  const yDir = (input.jumpHeld || input.jumpPressed ? -1 : 0) + (input.downHeld ? 1 : 0);
+  if (xDir !== 0) body.vx = clamp(body.vx + xDir * SWIM_ACCEL * dt, -SWIM_MAX_X, SWIM_MAX_X);
+  else body.vx = applyDragVelocity(body.vx, SWIM_DRAG * SWIM_MAX_X * dt);
+  if (yDir !== 0) body.vy = clamp(body.vy + yDir * SWIM_ACCEL * dt, -SWIM_MAX_Y, SWIM_MAX_Y);
+  else body.vy = applyDragVelocity(body.vy, SWIM_DRAG * SWIM_MAX_Y * dt);
+
+  body.x += body.vx * dt;
+  for (const s of solids) {
+    if (!overlapsRect(body.x, body.y, body.w, body.h, s.x, s.y, s.w, s.h)) continue;
+    if (body.vx > 0) {
+      body.x = s.x - body.w;
+      body.vx = 0;
+      res.wallHits.push(s);
+    } else if (body.vx < 0) {
+      body.x = s.x + s.w;
+      body.vx = 0;
+      res.wallHits.push(s);
+    }
+  }
+
+  const wasGrounded = body.grounded;
+  body.y += body.vy * dt;
+  for (const s of solids) {
+    if (!overlapsRect(body.x, body.y, body.w, body.h, s.x, s.y, s.w, s.h)) continue;
+    if (body.vy > 0) {
+      body.y = s.y - body.h;
+      body.vy = 0;
+      body.grounded = true;
+      res.landedOn = s;
+    } else if (body.vy < 0) {
+      body.y = s.y + s.h;
+      body.vy = 0;
+      res.ceilingHit = s;
+    }
+  }
+  if (body.grounded && !wasGrounded) res.landed = true;
+
+  body.x = clamp(body.x, 0, Math.max(0, level.width - body.w));
+  return res;
 }
 
 function findBuddyCollision(x: number, y: number, w: number, h: number): { index: number; render: BuddyRender } | null {
@@ -981,17 +1166,27 @@ function startWeddingSmooch(): boolean {
   const partner = weddingPartnerCenter();
   if (!partner) return false;
 
+  const partnerKind = weddingPartnerKind();
+  const babyBase = weddingBabyBasePosition();
   body.vx = 0;
   body.vy = 0;
   body.jumping = false;
   facing = body.x + body.w / 2 <= partner.x ? 1 : -1;
   weddingReadyForSmooch = false;
-  weddingEvent = { phase: 'kiss', t: 0, colorIndex: chain.count % 5 };
+  weddingEvent = {
+    phase: 'kiss',
+    t: 0,
+    colorIndex: chain.count % 5,
+    partnerKind,
+    babySpecies: weddingBabySpecies(partnerKind),
+    babyBaseX: babyBase.x,
+    babyBaseY: babyBase.y,
+  };
   sfx.smooch();
   spawnSparks((body.x + body.w / 2 + partner.x) / 2, body.y + 14, 10);
-  showToast('Smooch! ♥');
-  speakText('Smooch!', { rate: 1.05, pitch: 1.3 });
-  setStatus('Smooch!');
+  showToast(partnerKind === 'fish' ? 'Fish smooch!' : 'Smooch! ♥');
+  speakText(partnerKind === 'fish' ? 'Fish smooch!' : 'Smooch!', { rate: 1.05, pitch: 1.3 });
+  setStatus(partnerKind === 'fish' ? 'Fish smooch!' : 'Smooch!');
   return true;
 }
 
@@ -1008,20 +1203,23 @@ function updateWeddingEvent(dt: number): void {
     weddingEvent = { ...weddingEvent, phase: 'baby', t: 0 };
     sfx.baby();
     spawnSparks(body.x + PLAYER_W / 2 + 22 * facing, body.y + 6, 16);
-    showToast('Tiny buddy!');
-    speakText('Tiny buddy!', { rate: 1.05, pitch: 1.35 });
+    const fishBaby = weddingEvent.babySpecies === 'fishBuddy';
+    showToast(fishBaby ? 'Tiny fish-buddy!' : 'Tiny buddy!');
+    speakText(fishBaby ? 'Tiny fish buddy!' : 'Tiny buddy!', { rate: 1.05, pitch: 1.35 });
     return;
   }
 
   if (weddingEvent.phase === 'baby' && weddingEvent.t >= WEDDING_BABY_CRADLE_DUR) {
     const colorIndex = weddingEvent.colorIndex;
-    const joinFrom = weddingBabyBasePosition();
+    const joinFrom = { x: weddingEvent.babyBaseX, y: weddingEvent.babyBaseY };
+    const species = weddingEvent.babySpecies;
     weddingEvent = null;
     chain.add(colorIndex, facing, performance.now(), body.x, body.y, {
       startScale: WEDDING_BABY_START_SCALE,
       duration: WEDDING_BABY_GROW_DUR,
       joinFrom,
       joinDuration: WEDDING_BABY_JOIN_DUR,
+      species,
     });
     sfx.score();
     spawnSparks(joinFrom.x + PLAYER_W / 2, joinFrom.y, 14);
@@ -1120,6 +1318,8 @@ function enterUndergroundWorld(): void {
   chain.releaseCarriedBuddy();
   snake = null;
   snakeCooldown = 0.8 + Math.random() * 1.2;
+  tarantulas = [];
+  tarantulaCooldown = 0.5 + Math.random() * 1.2;
   respawnTo(lastSafe);
   spawnDust(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 10);
   showToast('Underground cave!');
@@ -1134,6 +1334,8 @@ function leaveCandyWorld(): void {
   bird = null;
   birdRide = null;
   snake = null;
+  tarantulas = [];
+  tarantulaCooldown = 0;
   fish = null;
   chain.releaseCarriedBuddy();
   const cx = body.x + body.w / 2;
@@ -1151,6 +1353,8 @@ function enterUnderwaterWorld(): void {
   underwaterWorld = true;
   snake = null;
   undergroundReturn = null;
+  tarantulas = [];
+  tarantulaCooldown = 0;
   fish = null;
   fishCooldown = 0.8 + Math.random() * 1.3;
   respawnTo(lastSafe);
@@ -1262,13 +1466,14 @@ function update(dt: number): void {
 
   const left = moveCodes.has('ArrowLeft') || moveCodes.has('KeyA');
   const right = moveCodes.has('ArrowRight') || moveCodes.has('KeyD');
+  const downHeld = interactCodes.size > 0;
   const pressedInteract = interactEdge;
   interactEdge = false;
   if (pressedInteract && isWeddingMode() && !startWeddingSmooch()) {
     setStatus(weddingInteractHint());
   }
 
-  const lockForWeddingEvent = weddingEvent !== null;
+  const lockForWeddingEvent = weddingMovementLocked();
   const input: MoveInput = {
     left: lockForWeddingEvent ? false : left,
     right: lockForWeddingEvent ? false : right,
@@ -1286,7 +1491,9 @@ function update(dt: number): void {
     LOOK_FRAC_SHIFT_PER_SEC * dt,
   );
 
-  const res = stepBody(body, solids, input, tuning, dt);
+  const res = underwaterWorld
+    ? stepSwimBody(body, solids, { ...input, downHeld: lockForWeddingEvent ? false : downHeld }, dt)
+    : stepBody(body, solids, input, tuning, dt);
 
   if (res.startedJump) {
     sfx.jump();
@@ -1342,6 +1549,7 @@ function update(dt: number): void {
   }
 
   updateSnake(dt);
+  updateTarantulas(dt);
   updateFish(dt);
 
   // Falling into a pit.
@@ -1427,10 +1635,14 @@ function renderFrame(alpha: number): void {
     wedding: isWeddingMode() && level.partnerX !== undefined ? {
       partnerX: level.partnerX,
       partnerY: level.partnerY ?? GROUND_Y - PLAYER_H,
+      partnerKind: weddingEvent?.partnerKind ?? weddingPartnerKind(),
       near: isNearWeddingPartner(),
       phase: weddingEvent?.phase ?? 'idle',
       phaseT: weddingEvent?.t ?? 0,
       colorIndex: weddingEvent?.colorIndex ?? chain.count % 5,
+      babySpecies: weddingEvent?.babySpecies ?? weddingBabySpecies(weddingPartnerKind()),
+      babyBaseX: weddingEvent?.babyBaseX ?? weddingBabyBasePosition().x,
+      babyBaseY: weddingEvent?.babyBaseY ?? weddingBabyBasePosition().y,
     } : undefined,
     candyWorld,
     skyRideT: birdRide ? clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1) : 0,
@@ -1452,6 +1664,14 @@ function renderFrame(alpha: number): void {
       t: snake.t,
       dir: snake.dir,
     } : undefined,
+    tarantulas: undergroundWorld ? tarantulas.map((tarantula) => ({
+      x: tarantula.x,
+      y: tarantula.y,
+      dir: tarantula.dir,
+      t: tarantula.t,
+      emergeT: tarantula.emergeT,
+      torchX: tarantula.torchX,
+    })) : [],
     fish: fish ? {
       x: fish.x,
       y: fish.y,
@@ -1518,6 +1738,7 @@ function switchMode(modeId: string): void {
 function clearInput(): void {
   moveCodes.clear();
   jumpCodes.clear();
+  interactCodes.clear();
   jumpEdge = false;
   interactEdge = false;
 }
@@ -1548,6 +1769,7 @@ function onKeyDown(event: KeyboardEvent): void {
     jumpCodes.add(code);
   } else if (INTERACT_CODES.has(code)) {
     event.preventDefault();
+    interactCodes.add(code);
     if (!event.repeat) interactEdge = true;
   }
 }
@@ -1563,6 +1785,7 @@ function onKeyUp(event: KeyboardEvent): void {
     jumpCodes.delete(code);
   } else if (INTERACT_CODES.has(code)) {
     event.preventDefault();
+    interactCodes.delete(code);
   }
 }
 
@@ -1606,10 +1829,19 @@ function bindTouchControls(): void {
   document.querySelectorAll<HTMLElement>('[data-jp-interact]').forEach((btn) => {
     const press = (e: Event) => {
       e.preventDefault();
+      interactCodes.add('TouchInteract');
       interactEdge = true;
     };
+    const release = (e: Event) => {
+      e.preventDefault();
+      interactCodes.delete('TouchInteract');
+    };
     btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('touchend', release, { passive: false });
+    btn.addEventListener('touchcancel', release, { passive: false });
     btn.addEventListener('mousedown', press);
+    btn.addEventListener('mouseup', release);
+    btn.addEventListener('mouseleave', release);
   });
 }
 

@@ -87,6 +87,14 @@ describe('BuddyChain', () => {
     expect(chain.renders(60_000)[0].scale).toBeCloseTo(1, 5);
   });
 
+  it('can mark a wedding baby as a fish-buddy', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    chain.add(0, 1, 0, 0, GROUND, { startScale: 0.38, duration: 60, species: 'fishBuddy' });
+
+    expect(chain.renders(0)[0].species).toBe('fishBuddy');
+  });
+
   it('can add a buddy by hopping in from a birth position', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);
