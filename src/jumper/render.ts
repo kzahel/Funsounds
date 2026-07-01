@@ -28,6 +28,17 @@ export interface BuddyRender {
   alpha: number;
 }
 
+export type WeddingPhase = 'idle' | 'kiss' | 'sparkle' | 'baby';
+
+export interface WeddingRender {
+  partnerX: number;
+  partnerY: number;
+  near: boolean;
+  phase: WeddingPhase;
+  phaseT: number;
+  colorIndex: number;
+}
+
 export interface Scene {
   level: Level;
   theme: Theme;
@@ -41,6 +52,7 @@ export interface Scene {
   /** 0 = flag up, 1 = flag fully lowered (level-clear celebration). */
   flagDown: number;
   buddies: BuddyRender[];
+  wedding?: WeddingRender;
   particles: Particle[];
 }
 
@@ -63,6 +75,9 @@ const FIXED = {
 };
 
 const PLAYER_STYLE: CharStyle = { body: FIXED.body, bodyDark: FIXED.bodyDark, belly: FIXED.belly };
+const PARTNER_STYLE: CharStyle = { body: '#ff8fc4', bodyDark: '#d65f9b', belly: '#ffd9ec' };
+const WEDDING_KISS_DUR = 0.9;
+const WEDDING_BABY_GROW_DUR = 2.25;
 
 // Distinct, friendly colors for the trailing buddies.
 export const BUDDY_STYLES: CharStyle[] = [
@@ -87,6 +102,7 @@ export function render(view: View, scene: Scene): void {
     drawFlag(ctx, scene.level.leftGoalX, view.time, 0, -1);
   }
   drawGoal(ctx, scene.level, view.time, scene.flagDown);
+  if (scene.wedding) drawWeddingDecor(ctx, scene.level, scene.wedding, view.time);
   for (const b of scene.level.barrels) drawBarrel(ctx, b);
   drawParticles(ctx, scene.particles);
 
@@ -97,14 +113,22 @@ export function render(view: View, scene: Scene): void {
     const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
     drawCharacter(ctx, scene.level, bd.x, bd.y, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false);
   }
+  if (scene.wedding) {
+    drawWeddingPartnerAndEffects(ctx, scene.level, scene.wedding, scene.px, scene.py, view.time);
+  }
+  let weddingFacing = scene.facing;
+  if (scene.wedding && scene.wedding.phase !== 'idle') {
+    weddingFacing = scene.px + PLAYER_W / 2 <= scene.wedding.partnerX + PLAYER_W / 2 ? 1 : -1;
+  }
+  const playerBounce = scene.wedding?.phase === 'kiss' ? kissBounce(scene.wedding.phaseT) : 0;
   drawCharacter(
     ctx,
     scene.level,
     scene.px,
-    scene.py,
+    scene.py - playerBounce,
     scene.vy,
     scene.grounded,
-    scene.facing,
+    weddingFacing,
     view.time,
     PLAYER_STYLE,
     1,
@@ -313,6 +337,167 @@ function drawFlag(ctx: CanvasRenderingContext2D, x: number, time: number, flagDo
   ctx.fill();
 }
 
+function drawWeddingDecor(ctx: CanvasRenderingContext2D, level: Level, wedding: WeddingRender, time: number): void {
+  const partnerCx = wedding.partnerX + PLAYER_W / 2;
+  const partyStart = level.goalX + 18;
+  const partyEnd = partnerCx + 96;
+  const lineY = GROUND_Y - 158;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(partyStart, lineY);
+  ctx.quadraticCurveTo((partyStart + partyEnd) / 2, lineY + 24, partyEnd, lineY);
+  ctx.stroke();
+
+  const pennants = ['#ff8fc4', '#ffd23f', '#4d96ff', '#6bcb77'];
+  for (let i = 0; i < 9; i++) {
+    const t = i / 8;
+    const x = partyStart + (partyEnd - partyStart) * t;
+    const y = lineY + Math.sin(t * Math.PI) * 24;
+    ctx.fillStyle = pennants[i % pennants.length];
+    ctx.beginPath();
+    ctx.moveTo(x - 9, y + 2);
+    ctx.lineTo(x + 9, y + 2);
+    ctx.lineTo(x, y + 22);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = 'rgba(255,245,250,0.95)';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(partnerCx - 52, GROUND_Y - 2);
+  ctx.bezierCurveTo(partnerCx - 48, GROUND_Y - 116, partnerCx + 48, GROUND_Y - 116, partnerCx + 52, GROUND_Y - 2);
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,143,196,0.85)';
+  ctx.stroke();
+
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI + (i / 6) * Math.PI;
+    const x = partnerCx + Math.cos(a) * 50;
+    const y = GROUND_Y - 4 + Math.sin(a) * 108;
+    ctx.fillStyle = i % 2 === 0 ? '#ff8fc4' : '#ffd23f';
+    ctx.beginPath();
+    ctx.arc(x, y, 5 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(partnerCx - 10, GROUND_Y - 2, 78, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (wedding.near && wedding.phase === 'idle') {
+    const pulse = 1 + Math.sin(time * 6) * 0.12;
+    ctx.globalAlpha = 0.88;
+    drawHeart(ctx, partnerCx, GROUND_Y - 158, 16 * pulse, '#ff5a9a');
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+function drawWeddingPartnerAndEffects(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  wedding: WeddingRender,
+  playerX: number,
+  playerY: number,
+  time: number,
+): void {
+  const playerCx = playerX + PLAYER_W / 2;
+  const partnerCx = wedding.partnerX + PLAYER_W / 2;
+  const playerFacingPartner = playerCx <= partnerCx ? 1 : -1;
+  const partnerFacing = -playerFacingPartner;
+  const partnerBounce = wedding.phase === 'kiss' ? kissBounce(wedding.phaseT) : 0;
+
+  drawCharacter(
+    ctx,
+    level,
+    wedding.partnerX,
+    wedding.partnerY - partnerBounce,
+    0,
+    true,
+    partnerFacing,
+    time,
+    PARTNER_STYLE,
+    1,
+    false,
+  );
+
+  if (wedding.phase === 'kiss' || wedding.phase === 'sparkle') {
+    drawKissHearts(ctx, wedding, playerX, playerY, playerFacingPartner);
+  }
+  if (wedding.phase === 'baby') {
+    drawGrowingBaby(ctx, level, wedding, playerX, time);
+  }
+}
+
+function drawKissHearts(
+  ctx: CanvasRenderingContext2D,
+  wedding: WeddingRender,
+  playerX: number,
+  playerY: number,
+  playerFacing: number,
+): void {
+  const partnerFacing = -playerFacing;
+  const playerMouth = {
+    x: playerX + PLAYER_W / 2 + playerFacing * PLAYER_W * 0.18,
+    y: playerY + PLAYER_H * 0.42,
+  };
+  const partnerMouth = {
+    x: wedding.partnerX + PLAYER_W / 2 + partnerFacing * PLAYER_W * 0.18,
+    y: wedding.partnerY + PLAYER_H * 0.42,
+  };
+  const centerX = (playerMouth.x + partnerMouth.x) / 2;
+  const centerY = (playerMouth.y + partnerMouth.y) / 2 - 8;
+
+  ctx.save();
+  if (wedding.phase === 'kiss') {
+    const t = clampNum(wedding.phaseT / WEDDING_KISS_DUR, 0, 1);
+    const lift = Math.sin(t * Math.PI) * 18;
+    drawHeart(ctx, lerpNum(playerMouth.x, centerX, t), lerpNum(playerMouth.y, centerY, t) - lift, 12, '#ff5a9a');
+    drawHeart(ctx, lerpNum(partnerMouth.x, centerX, t), lerpNum(partnerMouth.y, centerY, t) - lift, 12, '#ff8fc4');
+    drawHeart(ctx, centerX, centerY - 20 * t, 8 + 13 * t, '#ffd1e6');
+  } else {
+    const t = wedding.phaseT;
+    for (let i = 0; i < 6; i++) {
+      const a = t * 3 + i * (Math.PI * 2 / 6);
+      const r = 14 + i * 4 + t * 18;
+      ctx.globalAlpha = clampNum(1 - t * 0.75, 0, 1);
+      drawHeart(ctx, centerX + Math.cos(a) * r, centerY - 12 + Math.sin(a) * r * 0.55, 8, i % 2 ? '#ff8fc4' : '#ffd23f');
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+function drawGrowingBaby(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  wedding: WeddingRender,
+  playerX: number,
+  time: number,
+): void {
+  const grow = smoothstep(clampNum(wedding.phaseT / WEDDING_BABY_GROW_DUR, 0, 1));
+  const scale = 0.34 + 0.66 * grow;
+  const midX = (playerX + PLAYER_W / 2 + wedding.partnerX + PLAYER_W / 2) / 2;
+  const hop = Math.max(0, Math.sin(time * 9)) * (16 - 7 * grow);
+  const topX = midX - (PLAYER_W * scale) / 2;
+  const topY = GROUND_Y - PLAYER_H * scale - hop;
+  const style = BUDDY_STYLES[wedding.colorIndex % BUDDY_STYLES.length];
+
+  drawHeart(ctx, midX, topY - 20, 8 + 5 * Math.sin(time * 6) ** 2, '#ff5a9a');
+  drawCharacter(ctx, level, topX, topY, hop > 1 ? -180 : 0, hop <= 1, 1, time, style, 1, false, scale);
+}
+
+function kissBounce(t: number): number {
+  return Math.max(0, Math.sin(clampNum(t / WEDDING_KISS_DUR, 0, 1) * Math.PI * 4)) * 4;
+}
+
 function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]): void {
   for (const p of particles) {
     const a = Math.max(0, p.life / p.maxLife);
@@ -343,12 +528,15 @@ function drawCharacter(
   style: CharStyle,
   alpha: number,
   invuln: boolean,
+  scale = 1,
 ): void {
-  const cx = topX + PLAYER_W / 2;
-  const feetY = topY + PLAYER_H;
+  const charW = PLAYER_W * scale;
+  const charH = PLAYER_H * scale;
+  const cx = topX + charW / 2;
+  const feetY = topY + charH;
 
   // Shadow falls on the surface directly below — and not at all over a chasm.
-  const floorY = floorBelow(level, topX, topX + PLAYER_W, feetY);
+  const floorY = floorBelow(level, topX, topX + charW, feetY);
   if (floorY !== null) {
     const drop = floorY - feetY; // >= 0
     const t = clampNum(1 - drop / 320, 0, 1);
@@ -356,7 +544,7 @@ function drawCharacter(
     ctx.globalAlpha = alpha * (0.06 + 0.16 * t);
     ctx.fillStyle = '#1d3a1d';
     ctx.beginPath();
-    ctx.ellipse(cx, floorY - 2, PLAYER_W * (0.32 + 0.18 * t), 6 * (0.6 + 0.4 * t), 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, floorY - 2, charW * (0.32 + 0.18 * t), 6 * scale * (0.6 + 0.4 * t), 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -364,8 +552,8 @@ function drawCharacter(
   let sy = 1;
   if (!grounded) sy = clampNum(1 + -vy / 4200, 0.9, 1.16);
   const sx = 2 - sy;
-  const w = PLAYER_W * sx;
-  const h = PLAYER_H * sy;
+  const w = charW * sx;
+  const h = charH * sy;
   const x = cx - w / 2;
   const y = feetY - h;
 
@@ -374,14 +562,14 @@ function drawCharacter(
 
   ctx.fillStyle = style.bodyDark;
   ctx.beginPath();
-  ctx.ellipse(cx - w * 0.22, feetY - 3, w * 0.2, 6, 0, 0, Math.PI * 2);
-  ctx.ellipse(cx + w * 0.22, feetY - 3, w * 0.2, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - w * 0.22, feetY - 3 * scale, w * 0.2, 6 * scale, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + w * 0.22, feetY - 3 * scale, w * 0.2, 6 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
 
   roundRect(ctx, x, y, w, h, w * 0.42);
   ctx.fillStyle = style.body;
   ctx.fill();
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.5 * scale;
   ctx.strokeStyle = style.bodyDark;
   ctx.stroke();
 
@@ -405,7 +593,7 @@ function drawCharacter(
   }
 
   ctx.strokeStyle = '#23351f';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2 * scale;
   ctx.beginPath();
   ctx.arc(cx + ex * 0.4, y + h * 0.46, w * 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
   ctx.stroke();
@@ -475,6 +663,14 @@ function clampNum(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
 }
 
+function lerpNum(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -511,4 +707,17 @@ function star(
   }
   ctx.closePath();
   ctx.fill();
+}
+
+function drawHeart(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size / 16, size / 16);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, 5);
+  ctx.bezierCurveTo(-11, -2, -8, -12, 0, -6);
+  ctx.bezierCurveTo(8, -12, 11, -2, 0, 5);
+  ctx.fill();
+  ctx.restore();
 }

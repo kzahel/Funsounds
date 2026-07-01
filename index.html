@@ -1386,6 +1386,7 @@
             pointer-events: none;
         }
         .jp-touch-move { display: flex; gap: 12px; }
+        .jp-touch-actions { display: flex; gap: 12px; align-items: end; }
         .jp-touch-btn {
             width: 72px;
             height: 72px;
@@ -1406,6 +1407,12 @@
             background: linear-gradient(135deg, #6bcb77 0%, #43a233 100%);
             font-size: 1.2rem;
         }
+        .jp-touch-interact {
+            display: none;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #ff8fc4 0%, #ff5a9a 100%);
+        }
+        .jp-touch-interact.visible { display: block; }
         @media (hover: none), (pointer: coarse) {
             #jp-touch { display: flex; }
         }
@@ -2538,6 +2545,7 @@
                 <button class="jp-mode-btn" data-jp-mode="easy"><span>🛢️</span>Jump Over</button>
                 <button class="jp-mode-btn" data-jp-mode="hard"><span>⭐</span>Jump On</button>
                 <button class="jp-mode-btn" data-jp-mode="buddy"><span>👫</span>Buddies</button>
+                <button class="jp-mode-btn" data-jp-mode="wedding"><span>💒</span>Wedding</button>
             </div>
         </div>
 
@@ -2667,7 +2675,7 @@
             <div class="jp-pill">Points <strong id="jp-score">0</strong></div>
             <div class="jp-pill">Best <strong id="jp-best">0</strong></div>
             <div class="jp-pill">Lives <strong id="jp-hearts">❤️❤️❤️</strong></div>
-            <div class="jp-pill" id="jp-buddies-pill" style="display:none">Buddies <strong id="jp-buddies">0/5</strong></div>
+            <div class="jp-pill" id="jp-buddies-pill" style="display:none"><span id="jp-buddies-label">Buddies</span> <strong id="jp-buddies">0/5</strong></div>
         </div>
         <div id="jp-status">Arrows move • hold Up to jump higher</div>
         <div id="jp-toast"></div>
@@ -2676,7 +2684,10 @@
                 <button class="jp-touch-btn" data-jp-dir="ArrowLeft">←</button>
                 <button class="jp-touch-btn" data-jp-dir="ArrowRight">→</button>
             </div>
-            <button class="jp-touch-btn jp-touch-jump" data-jp-jump="true">JUMP</button>
+            <div class="jp-touch-actions">
+                <button class="jp-touch-btn jp-touch-interact" id="jp-touch-interact" data-jp-interact="true">♥</button>
+                <button class="jp-touch-btn jp-touch-jump" data-jp-jump="true">JUMP</button>
+            </div>
         </div>
     </div>
 

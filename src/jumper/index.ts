@@ -38,9 +38,22 @@ const INVULN_MS = 1100;
 const MAX_PARTICLES = 200;
 const CELEBRATE_DUR = 1.7; // total celebration before advancing
 const FLAG_DUR = 1.0; // time for the flag to slide all the way down
+const LOOK_FRAC_RIGHT = 0.4;
+const LOOK_FRAC_LEFT = 0.6;
+const LOOK_FRAC_SHIFT_PER_SEC = 0.7; // full left/right bias change in ~0.3s
+const WEDDING_INTERACT_DIST = 82;
+const WEDDING_KISS_DUR = 0.9;
+const WEDDING_BABY_WAIT = 0.9;
+const WEDDING_BABY_GROW_DUR = 2.25;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
+type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
+interface WeddingEvent {
+  phase: WeddingEventPhase;
+  t: number;
+  colorIndex: number;
+}
 
 let gameActive = false;
 let mode: ModeConfig = MODES.easy;
@@ -59,6 +72,7 @@ let lastCheckpoint: Checkpoint = { x: 0, y: 0 };
 const scored = new Set<number>();
 let particles: Particle[] = [];
 let cameraX = 0;
+let cameraLookFrac = LOOK_FRAC_RIGHT;
 let facing = 1;
 let startTime = 0;
 let toastTimer = 0;
@@ -69,11 +83,13 @@ let celebrateT = 0;
 let buddyDir = 1; // +1 heading to the right flag, -1 to the left flag
 const chain = new BuddyChain();
 let lastSafe = { x: 0, y: 0 }; // last ground-ledge stance, for respawns
+let weddingEvent: WeddingEvent | null = null;
 
 // Input.
 const moveCodes = new Set<string>();
 const jumpCodes = new Set<string>();
 let jumpEdge = false;
+let interactEdge = false;
 
 let loop: Loop;
 let actx: AudioContext | null = null;
@@ -87,9 +103,11 @@ let scoreEl: HTMLElement;
 let bestEl: HTMLElement;
 let heartsEl: HTMLElement;
 let buddiesPillEl: HTMLElement;
+let buddiesLabelEl: HTMLElement;
 let buddiesEl: HTMLElement;
 let statusEl: HTMLElement;
 let toastEl: HTMLElement;
+let touchInteractEl: HTMLElement;
 
 // --- audio ------------------------------------------------------------------
 
@@ -124,6 +142,8 @@ const sfx = {
   land: () => tone(240, 130, 0.09, 'sine', 0.14),
   score: () => tone(760, 1080, 0.18, 'triangle', 0.18),
   hurt: () => tone(320, 130, 0.26, 'sawtooth', 0.16),
+  smooch: () => tone(660, 460, 0.18, 'sine', 0.13),
+  baby: () => tone(760, 1180, 0.2, 'triangle', 0.15),
 };
 
 // --- best score persistence -------------------------------------------------
@@ -184,6 +204,12 @@ function capParticles(): void {
   if (particles.length > MAX_PARTICLES) particles.splice(0, particles.length - MAX_PARTICLES);
 }
 
+function approach(current: number, target: number, maxDelta: number): number {
+  if (current < target) return Math.min(target, current + maxDelta);
+  if (current > target) return Math.max(target, current - maxDelta);
+  return target;
+}
+
 function updateParticles(dt: number): void {
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -209,12 +235,14 @@ function updateHud(): void {
   } else {
     heartsEl.textContent = '∞';
   }
-  if (isBuddyMode()) {
+  if (hasBuddyChain()) {
     buddiesPillEl.style.display = '';
-    buddiesEl.textContent = `${chain.count}/${mode.buddies}`;
+    buddiesLabelEl.textContent = isWeddingMode() ? 'Mini buddies' : 'Buddies';
+    buddiesEl.textContent = isWeddingMode() ? String(chain.count) : `${chain.count}/${mode.buddies}`;
   } else {
     buddiesPillEl.style.display = 'none';
   }
+  touchInteractEl.classList.toggle('visible', isWeddingMode());
 }
 
 function setStatus(text: string): void {
@@ -226,6 +254,10 @@ function showToast(text: string): void {
   toastEl.classList.add('visible');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toastEl.classList.remove('visible'), 1600);
+}
+
+function startStatus(): string {
+  return isWeddingMode() ? 'Reach the flag, then meet your partner.' : 'Arrows move • hold Up to jump higher';
 }
 
 // --- level / run setup ------------------------------------------------------
@@ -242,17 +274,90 @@ function buildLevel(): void {
   scored.clear();
   particles = [];
   cameraX = 0;
+  cameraLookFrac = LOOK_FRAC_RIGHT;
   invulnUntil = 0;
   facing = 1;
   phase = 'playing';
   celebrateT = 0;
   buddyDir = 1;
   lastSafe = { x: level.startX, y: level.startY };
+  weddingEvent = null;
   chain.reset(level.startX, level.startY);
 }
 
-function isBuddyMode(): boolean {
+function isBuddyChallenge(): boolean {
   return mode.buddies !== undefined;
+}
+
+function isWeddingMode(): boolean {
+  return mode.wedding === true;
+}
+
+function hasBuddyChain(): boolean {
+  return isBuddyChallenge() || isWeddingMode();
+}
+
+function weddingPartnerCenter(): { x: number; y: number } | null {
+  if (level.partnerX === undefined) return null;
+  return {
+    x: level.partnerX + PLAYER_W / 2,
+    y: (level.partnerY ?? GROUND_Y - PLAYER_H) + PLAYER_H / 2,
+  };
+}
+
+function isNearWeddingPartner(): boolean {
+  const partner = weddingPartnerCenter();
+  if (!partner) return false;
+  const cx = body.x + body.w / 2;
+  const cy = body.y + body.h / 2;
+  return Math.hypot(cx - partner.x, cy - partner.y) <= WEDDING_INTERACT_DIST;
+}
+
+function startWeddingSmooch(): boolean {
+  if (!isWeddingMode() || weddingEvent || !isNearWeddingPartner()) return false;
+  const partner = weddingPartnerCenter();
+  if (!partner) return false;
+
+  body.vx = 0;
+  body.vy = 0;
+  body.jumping = false;
+  facing = body.x + body.w / 2 <= partner.x ? 1 : -1;
+  weddingEvent = { phase: 'kiss', t: 0, colorIndex: chain.count % 5 };
+  sfx.smooch();
+  spawnSparks((body.x + body.w / 2 + partner.x) / 2, body.y + 14, 10);
+  showToast('Smooch! ♥');
+  speakText('Smooch!', { rate: 1.05, pitch: 1.3 });
+  setStatus('Smooch!');
+  return true;
+}
+
+function updateWeddingEvent(dt: number): void {
+  if (!weddingEvent) return;
+  weddingEvent.t += dt;
+
+  if (weddingEvent.phase === 'kiss' && weddingEvent.t >= WEDDING_KISS_DUR) {
+    weddingEvent = { ...weddingEvent, phase: 'sparkle', t: 0 };
+    return;
+  }
+
+  if (weddingEvent.phase === 'sparkle' && weddingEvent.t >= WEDDING_BABY_WAIT) {
+    weddingEvent = { ...weddingEvent, phase: 'baby', t: 0 };
+    sfx.baby();
+    spawnSparks(body.x + PLAYER_W / 2 + 22 * facing, body.y + 6, 16);
+    showToast('Tiny buddy!');
+    speakText('Tiny buddy!', { rate: 1.05, pitch: 1.35 });
+    return;
+  }
+
+  if (weddingEvent.phase === 'baby' && weddingEvent.t >= WEDDING_BABY_GROW_DUR) {
+    const colorIndex = weddingEvent.colorIndex;
+    weddingEvent = null;
+    chain.add(colorIndex, facing, performance.now(), body.x, body.y);
+    sfx.score();
+    spawnSparks(body.x + PLAYER_W / 2, body.y, 14);
+    setStatus('Another smooch? Press Down by your partner.');
+    updateHud();
+  }
 }
 
 function collectBuddy(): void {
@@ -308,13 +413,13 @@ function respawnTo(pos: { x: number; y: number }): void {
   }
   invulnUntil = performance.now() + INVULN_MS;
   // Buddies regroup at the respawn point, then spread out again as you move.
-  if (isBuddyMode()) chain.regroup(pos.x, pos.y);
+  if (hasBuddyChain()) chain.regroup(pos.x, pos.y);
 }
 
 function loseHeart(): void {
-  // Buddy mode laps both directions, so respawn at the last safe ledge rather
-  // than a forward-only checkpoint.
-  const target = isBuddyMode() ? lastSafe : lastCheckpoint;
+  // Follower modes may travel back and forth near hazards, so respawn at the
+  // last safe ledge rather than a forward-only checkpoint.
+  const target = hasBuddyChain() ? lastSafe : lastCheckpoint;
   if (!mode.canFail) {
     respawnTo(target);
     return;
@@ -376,7 +481,7 @@ function advanceLevel(): void {
   buildLevel();
   showToast(`Level ${levelNum}: ${theme.name} ${theme.emoji}`);
   speakText(theme.name, { rate: 1, pitch: 1.2 });
-  setStatus('Arrows move • hold Up to jump higher');
+  setStatus(startStatus());
   updateHud();
 }
 
@@ -390,8 +495,9 @@ function update(dt: number): void {
   if (phase === 'celebrating') {
     celebrateT += dt;
     jumpEdge = false;
+    interactEdge = false;
     stepBody(body, solids, NEUTRAL_INPUT, tuning, dt);
-    if (isBuddyMode()) chain.step(dt, body.x, body.y);
+    if (hasBuddyChain()) chain.step(dt, body.x, body.y);
     updateParticles(dt);
     if (celebrateT >= CELEBRATE_DUR) advanceLevel();
     return;
@@ -399,15 +505,29 @@ function update(dt: number): void {
 
   const left = moveCodes.has('ArrowLeft') || moveCodes.has('KeyA');
   const right = moveCodes.has('ArrowRight') || moveCodes.has('KeyD');
+  const pressedInteract = interactEdge;
+  interactEdge = false;
+  if (pressedInteract && isWeddingMode() && !startWeddingSmooch()) {
+    setStatus('Stand next to your partner after the flag.');
+  }
+
+  const lockForWeddingEvent = weddingEvent !== null;
   const input: MoveInput = {
-    left,
-    right,
-    jumpHeld: jumpCodes.size > 0,
-    jumpPressed: jumpEdge,
+    left: lockForWeddingEvent ? false : left,
+    right: lockForWeddingEvent ? false : right,
+    jumpHeld: lockForWeddingEvent ? false : jumpCodes.size > 0,
+    jumpPressed: lockForWeddingEvent ? false : jumpEdge,
   };
   jumpEdge = false;
-  if (right && !left) facing = 1;
+  if (lockForWeddingEvent) {
+    body.vx = 0;
+  } else if (right && !left) facing = 1;
   else if (left && !right) facing = -1;
+  cameraLookFrac = approach(
+    cameraLookFrac,
+    facing > 0 ? LOOK_FRAC_RIGHT : LOOK_FRAC_LEFT,
+    LOOK_FRAC_SHIFT_PER_SEC * dt,
+  );
 
   const res = stepBody(body, solids, input, tuning, dt);
 
@@ -420,11 +540,11 @@ function update(dt: number): void {
     spawnDust(body.x + PLAYER_W / 2, body.y + PLAYER_H, 5);
   }
 
-  // Remember the last safe ground-ledge stance (for buddy-mode respawns).
+  // Remember the last safe ground-ledge stance (for follower-mode respawns).
   if (body.grounded && res.landedOn && !isBarrel(res.landedOn.ref)) {
     lastSafe = { x: body.x, y: body.y };
   }
-  if (isBuddyMode()) {
+  if (hasBuddyChain()) {
     chain.record(body.grounded, body.x, body.y);
     chain.step(dt, body.x, body.y);
   }
@@ -462,12 +582,20 @@ function update(dt: number): void {
   }
 
   // Endpoints.
-  if (isBuddyMode()) {
+  if (isBuddyChallenge()) {
     const cx = body.x + body.w / 2;
     if (buddyDir > 0 && cx > level.goalX) collectBuddy();
     else if (buddyDir < 0 && level.leftGoalX !== undefined && cx < level.leftGoalX) collectBuddy();
-  } else if (body.x + body.w / 2 > level.goalX) {
+  } else if (!isWeddingMode() && body.x + body.w / 2 > level.goalX) {
     reachGoal();
+  }
+
+  if (isWeddingMode()) {
+    updateWeddingEvent(dt);
+    if (!weddingEvent) {
+      if (isNearWeddingPartner()) setStatus('Press Down by your partner.');
+      else if (body.x + body.w / 2 > level.goalX) setStatus('Find your partner after the flag.');
+    }
   }
 
   updateParticles(dt);
@@ -484,9 +612,7 @@ function renderFrame(alpha: number): void {
   const px = lerp(body.prevX, body.x, alpha);
   const py = lerp(body.prevY, body.y, alpha);
   const maxCam = Math.max(0, level.width - viewW);
-  // Bias the view toward the travel direction so you see what's ahead.
-  const lookFrac = facing > 0 ? 0.4 : 0.6;
-  cameraX = clamp(px + PLAYER_W / 2 - viewW * lookFrac, 0, maxCam);
+  cameraX = clamp(px + PLAYER_W / 2 - viewW * cameraLookFrac, 0, maxCam);
 
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const view: View = {
@@ -510,7 +636,15 @@ function renderFrame(alpha: number): void {
     facing,
     invuln: performance.now() < invulnUntil,
     flagDown: phase === 'celebrating' ? clamp(celebrateT / FLAG_DUR, 0, 1) : 0,
-    buddies: isBuddyMode() ? chain.renders(performance.now()) : [],
+    buddies: hasBuddyChain() ? chain.renders(performance.now()) : [],
+    wedding: isWeddingMode() && level.partnerX !== undefined ? {
+      partnerX: level.partnerX,
+      partnerY: level.partnerY ?? GROUND_Y - PLAYER_H,
+      near: isNearWeddingPartner(),
+      phase: weddingEvent?.phase ?? 'idle',
+      phaseT: weddingEvent?.t ?? 0,
+      colorIndex: weddingEvent?.colorIndex ?? chain.count % 5,
+    } : undefined,
     particles,
   };
   render(view, scene);
@@ -548,7 +682,7 @@ async function startGame(modeId: string): Promise<void> {
   resizeCanvas();
   clearInput();
   updateHud();
-  setStatus('Arrows move • hold Up to jump higher');
+  setStatus(startStatus());
   speakText(mode.intro, { rate: 1, pitch: 1.2 });
   loop.start();
 }
@@ -571,12 +705,14 @@ function clearInput(): void {
   moveCodes.clear();
   jumpCodes.clear();
   jumpEdge = false;
+  interactEdge = false;
 }
 
 // --- input ------------------------------------------------------------------
 
 const MOVE_CODES = new Set(['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD']);
 const JUMP_CODES = new Set(['ArrowUp', 'Space', 'KeyW']);
+const INTERACT_CODES = new Set(['ArrowDown', 'KeyS']);
 
 function onKeyDown(event: KeyboardEvent): void {
   if (!gameActive) return;
@@ -587,6 +723,7 @@ function onKeyDown(event: KeyboardEvent): void {
   if (code === 'Digit2') return void switchMode('easy');
   if (code === 'Digit3') return void switchMode('hard');
   if (code === 'Digit4') return void switchMode('buddy');
+  if (code === 'Digit5') return void switchMode('wedding');
 
   if (MOVE_CODES.has(code)) {
     event.preventDefault();
@@ -595,6 +732,9 @@ function onKeyDown(event: KeyboardEvent): void {
     event.preventDefault();
     if (!event.repeat && !jumpCodes.has(code)) jumpEdge = true;
     jumpCodes.add(code);
+  } else if (INTERACT_CODES.has(code)) {
+    event.preventDefault();
+    if (!event.repeat) interactEdge = true;
   }
 }
 
@@ -607,6 +747,8 @@ function onKeyUp(event: KeyboardEvent): void {
   } else if (JUMP_CODES.has(code)) {
     event.preventDefault();
     jumpCodes.delete(code);
+  } else if (INTERACT_CODES.has(code)) {
+    event.preventDefault();
   }
 }
 
@@ -646,6 +788,15 @@ function bindTouchControls(): void {
     btn.addEventListener('mouseup', release);
     btn.addEventListener('mouseleave', release);
   });
+
+  document.querySelectorAll<HTMLElement>('[data-jp-interact]').forEach((btn) => {
+    const press = (e: Event) => {
+      e.preventDefault();
+      interactEdge = true;
+    };
+    btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('mousedown', press);
+  });
 }
 
 // --- init -------------------------------------------------------------------
@@ -659,9 +810,11 @@ export async function initJumper(): Promise<void> {
   bestEl = document.getElementById('jp-best')!;
   heartsEl = document.getElementById('jp-hearts')!;
   buddiesPillEl = document.getElementById('jp-buddies-pill')!;
+  buddiesLabelEl = document.getElementById('jp-buddies-label')!;
   buddiesEl = document.getElementById('jp-buddies')!;
   statusEl = document.getElementById('jp-status')!;
   toastEl = document.getElementById('jp-toast')!;
+  touchInteractEl = document.getElementById('jp-touch-interact')!;
 
   loop = createLoop(update, renderFrame);
 

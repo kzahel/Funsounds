@@ -160,9 +160,9 @@ function buildHard(levelNum: number): Level {
   };
 }
 
-// --- Buddy: shorter Jump-On course you lap, collecting followers ------------
+// --- Buddy variants: shorter Jump-On courses with followers -----------------
 
-function buildBuddy(levelNum: number): Level {
+function buildBuddyCourse(levelNum: number, wedding: boolean): Level {
   const platforms: Platform[] = [];
   const barrels: Barrel[] = [];
   const checkpoints: Checkpoint[] = [];
@@ -190,9 +190,8 @@ function buildBuddy(levelNum: number): Level {
   }
 
   const goalX = x - 80;
-  const width = x + 160;
-  return {
-    width,
+  const level: Level = {
+    width: x + 160,
     startX: 70,
     startY: SPAWN_Y,
     goalX,
@@ -202,6 +201,25 @@ function buildBuddy(levelNum: number): Level {
     checkpoints,
     killY: PIT_KILL_Y,
   };
+
+  if (wedding) {
+    const partyGroundW = 420;
+    platforms.push(ground(x, partyGroundW));
+    level.width = x + partyGroundW;
+    level.partnerX = goalX + 112;
+    level.partnerY = SPAWN_Y;
+    delete level.leftGoalX;
+  }
+
+  return level;
+}
+
+function buildBuddy(levelNum: number): Level {
+  return buildBuddyCourse(levelNum, false);
+}
+
+function buildWedding(levelNum: number): Level {
+  return buildBuddyCourse(levelNum, true);
 }
 
 export const MODES: Record<string, ModeConfig> = {
@@ -242,6 +260,16 @@ export const MODES: Record<string, ModeConfig> = {
     buddies: 5,
     build: (levelNum) => buildBuddy(levelNum),
   },
+  wedding: {
+    id: 'wedding',
+    name: 'Wedding',
+    emoji: '💒',
+    intro: 'Meet your partner after the flag. Press Down nearby for a smooch.',
+    canFail: true,
+    scoreBy: 'on',
+    wedding: true,
+    build: (levelNum) => buildWedding(levelNum),
+  },
 };
 
-export const MODE_ORDER: Array<keyof typeof MODES> = ['practice', 'easy', 'hard', 'buddy'];
+export const MODE_ORDER: Array<keyof typeof MODES> = ['practice', 'easy', 'hard', 'buddy', 'wedding'];

@@ -2,7 +2,7 @@
 // The physics primitives (Body, Solid, Tuning) live in core.ts; this file holds
 // the higher-level, game-specific shapes (levels, modes, particles).
 
-export type ModeId = 'practice' | 'easy' | 'hard' | 'buddy';
+export type ModeId = 'practice' | 'easy' | 'hard' | 'buddy' | 'wedding';
 
 /** A solid the player can stand on / bump into. `kind` drives gameplay meaning. */
 export interface Platform {
@@ -36,6 +36,9 @@ export interface Level {
   goalX: number;
   /** Left-side goal flag (buddy mode does laps between the two flags). */
   leftGoalX?: number;
+  /** Wedding-mode partner, placed just past the right-side flag. */
+  partnerX?: number;
+  partnerY?: number;
   platforms: Platform[];
   barrels: Barrel[];
   checkpoints: Checkpoint[];
@@ -56,6 +59,8 @@ export interface ModeConfig {
   scoreBy: 'over' | 'on' | 'either';
   /** If set, this is a Buddy-mode lap challenge: collect this many buddies. */
   buddies?: number;
+  /** If true, this mode creates unlimited mini buddies at the partner. */
+  wedding?: boolean;
   /** Build the course for a given 1-based level number. */
   build: (levelNum: number) => Level;
 }
