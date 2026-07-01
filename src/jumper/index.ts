@@ -45,16 +45,20 @@ const WEDDING_INTERACT_DIST = 82;
 const WEDDING_KISS_DUR = 0.9;
 const WEDDING_BABY_WAIT = 0.9;
 const WEDDING_BABY_POP_DUR = 1.35;
+const WEDDING_BABY_CRADLE_DUR = 10;
 const WEDDING_BABY_START_SCALE = 0.38;
 const WEDDING_BABY_GROW_DUR = 60;
+const WEDDING_BABY_JOIN_DUR = 1.15;
 const BIRD_SPEED = 58;
 const BIRD_W = 72;
 const BIRD_H = 42;
 const BIRD_RIDE_DUR = 3.2;
+const BIRD_TRIP_START_BUFFER = 150;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
 type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
+type BirdTripSide = 'left' | 'right';
 interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
@@ -108,6 +112,8 @@ let candyWorld = false;
 let bird: BirdState | null = null;
 let birdCooldown = 0;
 let birdRide: BirdRide | null = null;
+let birdTripSide: BirdTripSide = 'left';
+let birdFlybysRemaining = 0;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -318,7 +324,7 @@ function buildLevel(): void {
   candyWorld = false;
   bird = null;
   birdRide = null;
-  birdCooldown = 4 + Math.random() * 5;
+  resetBirdTrip('left');
   chain.reset(level.startX, level.startY);
 }
 
@@ -338,6 +344,10 @@ function isRightGoalPlatform(solid: Solid | null | undefined): boolean {
   return !!solid && !isBarrel(solid.ref) && solid.x <= level.goalX && solid.x + solid.w >= level.goalX;
 }
 
+function isLeftGoalPlatform(solid: Solid | null | undefined): boolean {
+  return !!solid && !isBarrel(solid.ref) && level.leftGoalX !== undefined && solid.x <= level.leftGoalX && solid.x + solid.w >= level.leftGoalX;
+}
+
 function weddingPartnerCenter(): { x: number; y: number } | null {
   if (level.partnerX === undefined) return null;
   return {
@@ -352,6 +362,15 @@ function isNearWeddingPartner(): boolean {
   const cx = body.x + body.w / 2;
   const cy = body.y + body.h / 2;
   return Math.hypot(cx - partner.x, cy - partner.y) <= WEDDING_INTERACT_DIST;
+}
+
+function weddingBabyBasePosition(): { x: number; y: number } {
+  const partner = weddingPartnerCenter();
+  const midX = partner ? (body.x + PLAYER_W / 2 + partner.x) / 2 : body.x + PLAYER_W / 2;
+  return {
+    x: midX - PLAYER_W / 2,
+    y: GROUND_Y - PLAYER_H,
+  };
 }
 
 function weddingInteractHint(): string {
@@ -374,6 +393,32 @@ function overlapsRect(ax: number, ay: number, aw: number, ah: number, bx: number
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
+function resetBirdTrip(side: BirdTripSide): void {
+  birdTripSide = side;
+  birdFlybysRemaining = Math.random() < 0.5 ? 1 : 2;
+  birdCooldown = 1.8 + Math.random() * 2.4;
+  if (!birdRide) bird = null;
+}
+
+function noteBirdTripSide(side: BirdTripSide): void {
+  if (!hasBuddyChain() || candyWorld || birdTripSide === side) return;
+  resetBirdTrip(side);
+}
+
+function updateBirdTripSide(cx: number): void {
+  if (!hasBuddyChain() || candyWorld || level.leftGoalX === undefined) return;
+  if (cx <= level.leftGoalX) noteBirdTripSide('left');
+  else if (cx >= level.goalX) noteBirdTripSide('right');
+}
+
+function birdTripHasStarted(): boolean {
+  if (level.leftGoalX === undefined) return true;
+  const cx = body.x + body.w / 2;
+  return birdTripSide === 'left'
+    ? cx > level.leftGoalX + BIRD_TRIP_START_BUFFER
+    : cx < level.goalX - BIRD_TRIP_START_BUFFER;
+}
+
 function canSpawnBird(): boolean {
   return hasBuddyChain() && !candyWorld && !birdRide && !weddingEvent && phase === 'playing';
 }
@@ -386,6 +431,7 @@ function spawnBird(): void {
     dir,
     wingT: Math.random() * Math.PI * 2,
   };
+  birdFlybysRemaining = Math.max(0, birdFlybysRemaining - 1);
 }
 
 function startBirdRide(): void {
@@ -413,12 +459,15 @@ function surfaceTopAtCenter(cx: number): number | null {
 }
 
 function updateBird(dt: number): void {
+  updateBirdTripSide(body.x + body.w / 2);
+
   if (!canSpawnBird()) {
     if (!birdRide) bird = null;
     return;
   }
 
   if (!bird) {
+    if (birdFlybysRemaining <= 0 || !birdTripHasStarted()) return;
     birdCooldown -= dt;
     if (birdCooldown <= 0) spawnBird();
     return;
@@ -430,7 +479,7 @@ function updateBird(dt: number): void {
   const farRight = body.x + 900;
   if (bird.x < farLeft || bird.x > farRight) {
     bird = null;
-    birdCooldown = 8 + Math.random() * 9;
+    birdCooldown = birdFlybysRemaining > 0 ? 5 + Math.random() * 4 : Number.POSITIVE_INFINITY;
     return;
   }
 
@@ -523,15 +572,18 @@ function updateWeddingEvent(dt: number): void {
     return;
   }
 
-  if (weddingEvent.phase === 'baby' && weddingEvent.t >= WEDDING_BABY_POP_DUR) {
+  if (weddingEvent.phase === 'baby' && weddingEvent.t >= WEDDING_BABY_CRADLE_DUR) {
     const colorIndex = weddingEvent.colorIndex;
+    const joinFrom = weddingBabyBasePosition();
     weddingEvent = null;
     chain.add(colorIndex, facing, performance.now(), body.x, body.y, {
       startScale: WEDDING_BABY_START_SCALE,
       duration: WEDDING_BABY_GROW_DUR,
+      joinFrom,
+      joinDuration: WEDDING_BABY_JOIN_DUR,
     });
     sfx.score();
-    spawnSparks(body.x + PLAYER_W / 2, body.y, 14);
+    spawnSparks(joinFrom.x + PLAYER_W / 2, joinFrom.y, 14);
     setStatus('Return to the left flag to get ready again.');
     updateHud();
   }
@@ -614,6 +666,19 @@ function loseHeart(): void {
   }
   respawnTo(target);
   updateHud();
+}
+
+function leaveCandyWorld(): void {
+  candyWorld = false;
+  bird = null;
+  birdRide = null;
+  const cx = body.x + body.w / 2;
+  const midpoint = level.leftGoalX === undefined ? level.width / 2 : (level.leftGoalX + level.goalX) / 2;
+  resetBirdTrip(cx <= midpoint ? 'left' : 'right');
+  respawnTo(lastSafe);
+  spawnDust(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 10);
+  showToast('Back down!');
+  setStatus(isWeddingMode() ? 'Back on the ground. Find another bird when you are ready.' : 'Back on the ground. Find another bird to return to candy clouds.');
 }
 
 function addScore(points: number, x: number, y: number): void {
@@ -727,6 +792,8 @@ function update(dt: number): void {
   // Remember the last safe ground-ledge stance (for follower-mode respawns).
   if (body.grounded && res.landedOn && !isBarrel(res.landedOn.ref)) {
     lastSafe = { x: body.x, y: body.y };
+    if (isLeftGoalPlatform(res.landedOn)) noteBirdTripSide('left');
+    else if (isRightGoalPlatform(res.landedOn)) noteBirdTripSide('right');
   }
   if (
     isBuddyChallenge()
@@ -768,7 +835,8 @@ function update(dt: number): void {
 
   // Falling into a pit.
   if (body.y > level.killY) {
-    loseHeart();
+    if (candyWorld) leaveCandyWorld();
+    else loseHeart();
   }
 
   // Advance checkpoints.

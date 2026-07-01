@@ -87,6 +87,34 @@ describe('BuddyChain', () => {
     expect(chain.renders(60_000)[0].scale).toBeCloseTo(1, 5);
   });
 
+  it('can add a buddy by hopping in from a birth position', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    for (let x = 0; x <= 600; x += 120) chain.record(true, x, GROUND);
+    chain.add(0, -1, 0, 600, GROUND, {
+      startScale: 0.38,
+      duration: 60,
+      joinFrom: { x: 650, y: GROUND },
+      joinDuration: 1.2,
+    });
+
+    const start = chain.renders(0)[0];
+    expect(start.x).toBeCloseTo(650, 5);
+    expect(start.grounded).toBe(false);
+    expect(start.alpha).toBe(1);
+
+    steps(chain, 36, 600, GROUND);
+    const mid = chain.renders(600)[0];
+    expect(mid.grounded).toBe(false);
+    expect(mid.y).toBeLessThan(GROUND);
+
+    steps(chain, 60, 600, GROUND);
+    const end = chain.renders(1_600)[0];
+    expect(end.grounded).toBe(true);
+    expect(end.x).toBeLessThan(650);
+    expect(end.y).toBeCloseTo(GROUND, 5);
+  });
+
   it('assigns varied buddy looks beyond color swaps', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);

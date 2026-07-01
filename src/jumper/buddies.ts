@@ -15,12 +15,21 @@ const BUDDY_FOOTHOLD_STEP = 1; // footholds of separation between buddies
 const HOP_DUR = 0.3; // seconds per buddy hop
 const FADE = 0.45; // seconds for a new buddy to fade in
 
+export interface BuddyGrowth {
+  startScale: number;
+  duration: number;
+  joinFrom?: { x: number; y: number };
+  joinDuration?: number;
+  fadeDuration?: number;
+}
+
 export interface Buddy {
   colorIndex: number;
   variantIndex: number;
   bornAt: number;
   startScale: number;
   growDuration: number;
+  fadeDuration: number;
   idx: number; // foothold it's resting on / hopping to
   x: number;
   y: number;
@@ -31,6 +40,7 @@ export interface Buddy {
   toX: number;
   toY: number;
   peak: number;
+  hopDur: number;
 }
 
 export class BuddyChain {
@@ -68,26 +78,31 @@ export class BuddyChain {
     now: number,
     px: number,
     py: number,
-    growth: { startScale: number; duration: number } | null = null,
+    growth: BuddyGrowth | null = null,
   ): void {
     const idx = Math.max(0, this.footholds.length - 1 - (this.list.length + 1) * BUDDY_FOOTHOLD_STEP);
     const f = this.footholds[idx] ?? { x: px, y: py };
+    const from = growth?.joinFrom ?? f;
+    const joinDuration = growth?.joinDuration ?? HOP_DUR;
+    const joinDist = Math.hypot(f.x - from.x, f.y - from.y);
     this.list.push({
       colorIndex,
       variantIndex: buddyVariantIndex(this.list.length),
       bornAt: now,
       startScale: growth?.startScale ?? 1,
       growDuration: growth?.duration ?? 0,
+      fadeDuration: growth?.fadeDuration ?? (growth?.joinFrom ? 0 : FADE),
       idx,
-      x: f.x,
-      y: f.y,
+      x: from.x,
+      y: from.y,
       facing: dir,
-      hopT: 1,
-      fromX: f.x,
-      fromY: f.y,
+      hopT: growth?.joinFrom ? 0 : 1,
+      fromX: from.x,
+      fromY: from.y,
       toX: f.x,
       toY: f.y,
-      peak: 0,
+      peak: growth?.joinFrom ? clamp(joinDist * 0.45, 36, 170) : 0,
+      hopDur: joinDuration,
     });
   }
 
@@ -98,10 +113,11 @@ export class BuddyChain {
       const bd = this.list[i];
 
       if (bd.hopT < 1) {
-        bd.hopT += dt / HOP_DUR;
+        bd.hopT += dt / bd.hopDur;
         if (bd.hopT >= 1) {
           bd.x = bd.toX;
           bd.y = bd.toY;
+          bd.hopDur = HOP_DUR;
         } else {
           const t = bd.hopT;
           bd.x = bd.fromX + (bd.toX - bd.fromX) * t;
@@ -127,6 +143,7 @@ export class BuddyChain {
         bd.toY = f.y;
         const dist = Math.hypot(f.x - bd.fromX, f.y - bd.fromY);
         bd.peak = clamp(dist * 0.45, 22, 150);
+        bd.hopDur = HOP_DUR;
         if (Math.abs(f.x - bd.fromX) > 1) bd.facing = f.x >= bd.fromX ? 1 : -1;
         bd.hopT = 0;
       }
@@ -136,7 +153,7 @@ export class BuddyChain {
   renders(now: number): BuddyRender[] {
     return this.list.map((bd) => {
       const grounded = bd.hopT >= 1;
-      const vy = grounded ? 0 : (-Math.cos(Math.PI * bd.hopT) * bd.peak * Math.PI) / HOP_DUR;
+      const vy = grounded ? 0 : (-Math.cos(Math.PI * bd.hopT) * bd.peak * Math.PI) / bd.hopDur;
       const age = (now - bd.bornAt) / 1000;
       const growT = bd.growDuration > 0 ? clamp(age / bd.growDuration, 0, 1) : 1;
       return {
@@ -147,7 +164,7 @@ export class BuddyChain {
         grounded,
         colorIndex: bd.colorIndex,
         variantIndex: bd.variantIndex,
-        alpha: clamp((now - bd.bornAt) / 1000 / FADE, 0, 1),
+        alpha: bd.fadeDuration > 0 ? clamp((now - bd.bornAt) / 1000 / bd.fadeDuration, 0, 1) : 1,
         scale: bd.startScale + (1 - bd.startScale) * growT,
       };
     });

@@ -92,6 +92,7 @@ const PLAYER_STYLE: CharStyle = { body: FIXED.body, bodyDark: FIXED.bodyDark, be
 const PARTNER_STYLE: CharStyle = { body: '#ff8fc4', bodyDark: '#d65f9b', belly: '#ffd9ec' };
 const WEDDING_KISS_DUR = 0.9;
 const WEDDING_BABY_POP_DUR = 1.35;
+const WEDDING_BABY_CRY_DUR = 3.2;
 const WEDDING_BABY_START_SCALE = 0.38;
 const BIRD_RENDER_W = 72;
 const BIRD_RENDER_H = 42;
@@ -513,37 +514,66 @@ function drawFlag(ctx: CanvasRenderingContext2D, x: number, time: number, flagDo
   ctx.fill();
 }
 
-function drawLollipop(ctx: CanvasRenderingContext2D, x: number, time: number, dir: number): void {
-  const stickTop = GROUND_Y - 116;
+function drawLollipop(ctx: CanvasRenderingContext2D, x: number, _time: number, dir: number): void {
+  const stickTop = GROUND_Y - 122;
+  const candyY = stickTop - 4;
+  const stripeOffset = dir > 0 ? 0 : 10;
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.moveTo(x, GROUND_Y);
+  ctx.lineTo(x, candyY + 34);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - 8, candyY + 30, 16, GROUND_Y - candyY - 30);
+  ctx.clip();
+  ctx.strokeStyle = '#ff8fc4';
+  ctx.lineWidth = 3;
+  for (let y = candyY + 22 - stripeOffset; y < GROUND_Y + 24; y += 18) {
+    ctx.beginPath();
+    ctx.moveTo(x - 11, y + 11);
+    ctx.lineTo(x + 11, y - 11);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  const cx = x;
+  const cy = candyY;
+  ctx.fillStyle = '#ff8fc4';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 38, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.lineCap = 'round';
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.moveTo(x, GROUND_Y);
-  ctx.lineTo(x, stickTop + 26);
-  ctx.stroke();
-  ctx.strokeStyle = '#ffb6d5';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  const cx = x + dir * 20;
-  const cy = stickTop + Math.sin(time * 3) * 2;
-  ctx.fillStyle = '#ff8fc4';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 34, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 23, 0.15 * Math.PI, 1.45 * Math.PI);
+  ctx.arc(cx, cy, 27, -0.05 * Math.PI, 1.25 * Math.PI);
   ctx.stroke();
   ctx.strokeStyle = '#ffd23f';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 15, 0.1 * Math.PI, 1.7 * Math.PI);
+  ctx.stroke();
+  ctx.strokeStyle = '#7fdcff';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 6, -0.3 * Math.PI, 1.35 * Math.PI);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.arc(cx, cy, 12, 0.1 * Math.PI, 1.85 * Math.PI);
+  ctx.arc(cx, cy, 40, 0, Math.PI * 2);
   ctx.stroke();
+
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(cx - 10, cy - 12, 5, 0, Math.PI * 2);
+  ctx.arc(cx - 13, cy - 14, 6, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -759,13 +789,52 @@ function drawGrowingBaby(
   const pop = smoothstep(clampNum(wedding.phaseT / WEDDING_BABY_POP_DUR, 0, 1));
   const scale = 0.32 + (WEDDING_BABY_START_SCALE - 0.32) * pop;
   const midX = (playerX + PLAYER_W / 2 + wedding.partnerX + PLAYER_W / 2) / 2;
-  const hop = Math.max(0, Math.sin(time * 9)) * (16 - 4 * pop);
+  const popHop = Math.max(0, Math.sin(time * 9)) * (16 - 4 * pop);
+  const cradleHop = Math.max(0, Math.sin(time * 7)) * 3;
+  const hop = wedding.phaseT < WEDDING_BABY_POP_DUR ? popHop : cradleHop;
   const topX = midX - (PLAYER_W * scale) / 2;
   const topY = GROUND_Y - PLAYER_H * scale - hop;
   const style = BUDDY_STYLES[wedding.colorIndex % BUDDY_STYLES.length];
+  const crying = wedding.phaseT < WEDDING_BABY_CRY_DUR;
 
-  drawHeart(ctx, midX, topY - 20, 8 + 5 * Math.sin(time * 6) ** 2, '#ff5a9a');
+  if (!crying) drawHeart(ctx, midX, topY - 20, 8 + 5 * Math.sin(time * 6) ** 2, '#ff5a9a');
   drawCharacter(ctx, level, topX, topY, hop > 1 ? -180 : 0, hop <= 1, 1, time, style, 1, false, scale);
+  if (crying) drawCryingBabyOverlay(ctx, topX, topY, scale, time);
+}
+
+function drawCryingBabyOverlay(ctx: CanvasRenderingContext2D, topX: number, topY: number, scale: number, time: number): void {
+  const w = PLAYER_W * scale;
+  const h = PLAYER_H * scale;
+  const cx = topX + w / 2;
+  const eyeY = topY + h * 0.26;
+  const mouthY = topY + h * 0.49;
+  const bob = Math.sin(time * 18) * scale;
+
+  ctx.save();
+  ctx.fillStyle = '#4da7ff';
+  for (const side of [-1, 1]) {
+    const tx = cx + side * w * 0.18;
+    ctx.beginPath();
+    ctx.ellipse(tx, eyeY + h * 0.18 + bob, w * 0.055, h * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#23351f';
+  ctx.beginPath();
+  ctx.ellipse(cx, mouthY, w * 0.16, h * 0.14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ff8ca8';
+  ctx.beginPath();
+  ctx.ellipse(cx, mouthY + h * 0.05, w * 0.08, h * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#23351f';
+  ctx.lineWidth = 1.6 * scale;
+  ctx.beginPath();
+  ctx.arc(cx - w * 0.22, eyeY - h * 0.03, w * 0.1, 1.15 * Math.PI, 1.85 * Math.PI);
+  ctx.arc(cx + w * 0.22, eyeY - h * 0.03, w * 0.1, 1.15 * Math.PI, 1.85 * Math.PI);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function kissBounce(t: number): number {
