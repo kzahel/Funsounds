@@ -50,6 +50,13 @@ export interface BirdRender {
   carrying: boolean;
 }
 
+export interface SnakeRender {
+  x: number;
+  y: number;
+  kind: 'snake' | 'trampoline';
+  t: number;
+}
+
 export interface Scene {
   level: Level;
   theme: Theme;
@@ -66,7 +73,10 @@ export interface Scene {
   wedding?: WeddingRender;
   candyWorld: boolean;
   skyRideT: number;
+  undergroundWorld: boolean;
+  undergroundLiftT: number;
   bird?: BirdRender;
+  snake?: SnakeRender;
   particles: Particle[];
 }
 
@@ -109,23 +119,26 @@ export const BUDDY_STYLES: CharStyle[] = [
 export function render(view: View, scene: Scene): void {
   const { ctx, dpr } = view;
   const theme = scene.theme;
-  drawBackground(view, theme, scene.candyWorld, scene.skyRideT);
+  drawBackground(view, theme, scene.candyWorld, scene.skyRideT, scene.undergroundWorld, scene.undergroundLiftT);
 
   // World space transform (scale + camera), folded with device pixel ratio.
   const s = view.scale * dpr;
   ctx.setTransform(s, 0, 0, s, -view.cameraX * s, 0);
 
-  drawPlatforms(ctx, scene.level.platforms, theme, scene.candyWorld);
+  drawPlatforms(ctx, scene.level.platforms, theme, scene.candyWorld, scene.undergroundWorld);
   if (scene.level.leftGoalX !== undefined) {
     drawEndpoint(ctx, scene.level.leftGoalX, view.time, 0, -1, scene.candyWorld);
   }
   drawGoal(ctx, scene.level, view.time, scene.flagDown, scene.candyWorld);
   if (scene.wedding) drawWeddingDecor(ctx, scene.level, scene.wedding, view.time);
+  if (scene.undergroundWorld) drawUndergroundDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
-    if (scene.candyWorld) drawCandyObstacle(ctx, b);
+    if (scene.undergroundWorld) drawCaveObstacle(ctx, b);
+    else if (scene.candyWorld) drawCandyObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
   if (scene.candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
+  if (scene.snake) drawSnake(ctx, scene.snake);
   drawParticles(ctx, scene.particles);
   if (scene.bird) drawBird(ctx, scene.bird);
 
@@ -168,12 +181,23 @@ export function render(view: View, scene: Scene): void {
   drawWeather(view, theme);
 }
 
-function drawBackground(view: View, theme: Theme, candyWorld: boolean, skyRideT: number): void {
+function drawBackground(
+  view: View,
+  theme: Theme,
+  candyWorld: boolean,
+  skyRideT: number,
+  undergroundWorld: boolean,
+  undergroundLiftT: number,
+): void {
   const { ctx, dpr, cssW, cssH } = view;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (candyWorld) {
+  if (undergroundWorld) {
+    sky.addColorStop(0, '#10131f');
+    sky.addColorStop(0.5, '#1c1a27');
+    sky.addColorStop(1, '#31273a');
+  } else if (candyWorld) {
     sky.addColorStop(0, '#bdefff');
     sky.addColorStop(0.55, '#f5ecff');
     sky.addColorStop(1, '#fff8cf');
@@ -184,23 +208,31 @@ function drawBackground(view: View, theme: Theme, candyWorld: boolean, skyRideT:
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (!candyWorld && theme.stars) drawStars(view);
-  if (!candyWorld) drawCelestial(view, theme);
-  else drawCandySky(view);
+  if (undergroundWorld) drawCaveBackground(view);
+  if (!candyWorld && !undergroundWorld && theme.stars) drawStars(view);
+  if (!undergroundWorld) {
+    if (!candyWorld) drawCelestial(view, theme);
+    else drawCandySky(view);
+  }
 
   // Drifting clouds (slow parallax).
-  const cloudShift = (view.cameraX * 0.15 + view.time * 8) % (cssW + 240);
-  ctx.fillStyle = candyWorld ? 'rgba(255,255,255,0.96)' : theme.cloud;
-  const cloudCount = candyWorld ? 7 : 4;
-  for (let i = 0; i < cloudCount; i++) {
-    const cx = ((i * (cssW / 3) - cloudShift + cssW + 240) % (cssW + 240)) - 120;
-    const cy = candyWorld ? 58 + (i % 3) * 64 : 70 + (i % 2) * 60;
-    cloud(ctx, cx, cy, candyWorld ? 42 + (i % 4) * 10 : 50 + (i % 3) * 12);
+  if (!undergroundWorld) {
+    const cloudShift = (view.cameraX * 0.15 + view.time * 8) % (cssW + 240);
+    ctx.fillStyle = candyWorld ? 'rgba(255,255,255,0.96)' : theme.cloud;
+    const cloudCount = candyWorld ? 7 : 4;
+    for (let i = 0; i < cloudCount; i++) {
+      const cx = ((i * (cssW / 3) - cloudShift + cssW + 240) % (cssW + 240)) - 120;
+      const cy = candyWorld ? 58 + (i % 3) * 64 : 70 + (i % 2) * 60;
+      cloud(ctx, cx, cy, candyWorld ? 42 + (i % 4) * 10 : 50 + (i % 3) * 12);
+    }
   }
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (candyWorld) {
+  if (undergroundWorld) {
+    hills(ctx, view, '#211f2d', 0.2, groundScreenY + 18, 88, 260);
+    hills(ctx, view, '#302843', 0.42, groundScreenY + 28, 66, 210);
+  } else if (candyWorld) {
     hills(ctx, view, '#f7d7ff', 0.22, groundScreenY + 24, 90, 280);
     hills(ctx, view, '#d7f7ff', 0.4, groundScreenY + 30, 70, 220);
   } else {
@@ -208,6 +240,7 @@ function drawBackground(view: View, theme: Theme, candyWorld: boolean, skyRideT:
     hills(ctx, view, theme.hillNear, 0.5, groundScreenY + 14, 90, 240);
   }
   if (skyRideT > 0) drawLiftClouds(view, skyRideT);
+  if (undergroundLiftT > 0) drawCaveLift(view, undergroundLiftT);
 }
 
 function drawStars(view: View): void {
@@ -275,6 +308,71 @@ function drawCandySky(view: View): void {
   ctx.beginPath();
   ctx.arc(cx, cy, 13, Math.PI * 0.2, Math.PI * 1.8);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawCaveBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+
+  for (let i = 0; i < 7; i++) {
+    const cx = ((i * 211 - view.cameraX * 0.08) % (cssW + 280)) - 120;
+    const cy = 72 + (i % 3) * 86;
+    ctx.fillStyle = i % 2 === 0 ? '#070a12' : '#14111d';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 78 + (i % 2) * 24, 34 + (i % 4) * 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#292535';
+  for (let x = -80 - ((view.cameraX * 0.18) % 160); x < cssW + 160; x += 160) {
+    const h = 46 + ((Math.floor(x) % 5 + 5) % 5) * 13;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + 42, h);
+    ctx.lineTo(x + 86, 0);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const gx = ((i * 197 - view.cameraX * 0.12) % (cssW + 240)) - 80;
+    const gy = cssH * (0.22 + (i % 3) * 0.14);
+    const grad = ctx.createRadialGradient(gx, gy, 4, gx, gy, 95);
+    grad.addColorStop(0, 'rgba(255,216,132,0.26)');
+    grad.addColorStop(1, 'rgba(255,216,132,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(gx, gy, 95, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawCaveLift(view: View, t: number): void {
+  const { ctx, cssW, cssH } = view;
+  const a = Math.sin(Math.PI * clampNum(t, 0, 1));
+  ctx.save();
+  const shaft = ctx.createLinearGradient(cssW * 0.5, cssH, cssW * 0.5, 0);
+  shaft.addColorStop(0, `rgba(150,220,255,${0.3 * a})`);
+  shaft.addColorStop(0.55, `rgba(255,245,180,${0.18 * a})`);
+  shaft.addColorStop(1, `rgba(255,255,255,${0.02 * a})`);
+  ctx.fillStyle = shaft;
+  ctx.beginPath();
+  ctx.moveTo(cssW * 0.38, cssH);
+  ctx.lineTo(cssW * 0.46, 0);
+  ctx.lineTo(cssW * 0.58, 0);
+  ctx.lineTo(cssW * 0.68, cssH);
+  ctx.closePath();
+  ctx.fill();
+  for (let i = 0; i < 12; i++) {
+    ctx.globalAlpha = a * (0.18 + (i % 4) * 0.04);
+    ctx.fillStyle = i % 2 ? '#9de7ff' : '#fff0a8';
+    ctx.beginPath();
+    ctx.arc((i * 73) % cssW, cssH - ((t * 720 + i * 61) % (cssH + 80)), 3 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -351,8 +449,12 @@ function hills(
   ctx.fill();
 }
 
-function drawPlatforms(ctx: CanvasRenderingContext2D, platforms: Platform[], theme: Theme, candyWorld: boolean): void {
+function drawPlatforms(ctx: CanvasRenderingContext2D, platforms: Platform[], theme: Theme, candyWorld: boolean, undergroundWorld: boolean): void {
   for (const p of platforms) {
+    if (undergroundWorld) {
+      drawCavePlatform(ctx, p);
+      continue;
+    }
     if (candyWorld) {
       drawCloudPlatform(ctx, p);
       continue;
@@ -374,6 +476,38 @@ function drawPlatforms(ctx: CanvasRenderingContext2D, platforms: Platform[], the
       ctx.fillStyle = theme.grass;
       ctx.fill();
     }
+  }
+}
+
+function drawCavePlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#3b3446';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#211c2b';
+    ctx.fillRect(p.x, p.y + p.h - 12, p.w, 12);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 8, 8);
+    ctx.fillStyle = '#3b3446';
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#5c536a';
+  ctx.fillRect(p.x, p.y, p.w, 12);
+  ctx.fillStyle = '#272233';
+  for (let x = p.x + 18; x < p.x + p.w; x += 42) {
+    ctx.beginPath();
+    ctx.arc(x, p.y + 16 + (x % 3) * 4, 7 + (x % 2) * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#7ff0ff';
+  for (let x = p.x + 36; x < p.x + p.w - 18; x += 180) {
+    ctx.beginPath();
+    ctx.moveTo(x, p.y + 2);
+    ctx.lineTo(x + 10, p.y - 16);
+    ctx.lineTo(x + 19, p.y + 2);
+    ctx.closePath();
+    ctx.fill();
   }
 }
 
@@ -411,6 +545,43 @@ function drawCandyObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
     drawChocolateBar(ctx, b);
   } else {
     drawMarshmallow(ctx, b);
+  }
+}
+
+function drawCaveObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  if (b.id % 3 === 0) {
+    ctx.fillStyle = '#5b5268';
+    roundRect(ctx, b.x + 2, b.y + 7, b.w - 4, b.h - 7, 7);
+    ctx.fill();
+    ctx.fillStyle = '#30293a';
+    ctx.beginPath();
+    ctx.moveTo(b.x + 8, b.y + b.h);
+    ctx.lineTo(b.x + 18, b.y + 15);
+    ctx.lineTo(b.x + 30, b.y + b.h);
+    ctx.lineTo(b.x + 40, b.y + 13);
+    ctx.lineTo(b.x + b.w - 4, b.y + b.h);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    const colors = b.id % 2 === 0 ? ['#8ef7ff', '#35b8ff'] : ['#ffd86f', '#ff9f4a'];
+    ctx.fillStyle = '#342c3f';
+    roundRect(ctx, b.x + 2, b.y + b.h * 0.36, b.w - 4, b.h * 0.64, 8);
+    ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const cx = b.x + 10 + i * 14;
+      const top = b.y + 6 + (i % 2) * 8;
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.beginPath();
+      ctx.moveTo(cx, top);
+      ctx.lineTo(cx + 9, top + 16);
+      ctx.lineTo(cx + 4, b.y + b.h - 5);
+      ctx.lineTo(cx - 8, top + 18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }
 }
 
@@ -638,6 +809,195 @@ function drawBunny(ctx: CanvasRenderingContext2D, x: number, footY: number, colo
   ctx.beginPath();
   ctx.arc(x + dir * 17, footY - 27, 4, 0.1 * Math.PI, 0.75 * Math.PI);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawUndergroundDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  let torches = 0;
+  let dwarves = 0;
+  for (let i = 0; i < level.platforms.length; i++) {
+    const p = level.platforms[i];
+    if (p.w < 120) continue;
+    if (torches < 10) {
+      const x = p.x + 42 + ((i * 149) % Math.max(1, p.w - 84));
+      drawTorch(ctx, x, p.y, time + i * 0.7);
+      torches++;
+    }
+    if (i % 2 === 0 && dwarves < 5 && p.w >= 180) {
+      const x = p.x + 88 + ((i * 211) % Math.max(1, p.w - 140));
+      drawDwarf(ctx, x, p.y, time + i);
+      dwarves++;
+    }
+    for (let d = 0; d < Math.min(3, Math.floor(p.w / 220)); d++) {
+      const x = p.x + 70 + ((i * 97 + d * 131) % Math.max(1, p.w - 120));
+      drawDiamond(ctx, x, p.y + 28 + (d % 2) * 18, d);
+    }
+  }
+}
+
+function drawTorch(ctx: CanvasRenderingContext2D, x: number, groundY: number, time: number): void {
+  const flameY = groundY - 34;
+  ctx.save();
+  const glow = ctx.createRadialGradient(x, flameY, 2, x, flameY, 58);
+  glow.addColorStop(0, 'rgba(255,190,84,0.42)');
+  glow.addColorStop(1, 'rgba(255,120,40,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, flameY, 58, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#704527';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(x, groundY - 2);
+  ctx.lineTo(x, groundY - 30);
+  ctx.stroke();
+
+  const flicker = 1 + Math.sin(time * 9) * 0.12;
+  ctx.fillStyle = '#ff8f2f';
+  ctx.beginPath();
+  ctx.ellipse(x, flameY, 8 * flicker, 15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffe277';
+  ctx.beginPath();
+  ctx.ellipse(x, flameY + 3, 4.5, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDiamond(ctx: CanvasRenderingContext2D, x: number, y: number, colorIndex: number): void {
+  const fill = colorIndex % 2 === 0 ? '#7ff0ff' : '#ffd86f';
+  ctx.save();
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 12);
+  ctx.lineTo(x + 12, y);
+  ctx.lineTo(x, y + 18);
+  ctx.lineTo(x - 12, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(x - 3, y - 8);
+  ctx.lineTo(x + 4, y);
+  ctx.lineTo(x - 1, y + 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDwarf(ctx: CanvasRenderingContext2D, x: number, groundY: number, time: number): void {
+  const swing = Math.sin(time * 5) * 0.55;
+  ctx.save();
+  ctx.translate(x, groundY - 5);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 18, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#3a7fd0';
+  roundRect(ctx, -12, -34, 24, 24, 7);
+  ctx.fill();
+  ctx.fillStyle = '#f1b070';
+  ctx.beginPath();
+  ctx.arc(0, -43, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d66d2f';
+  ctx.beginPath();
+  ctx.moveTo(-13, -48);
+  ctx.lineTo(0, -68);
+  ctx.lineTo(14, -48);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffcb7a';
+  ctx.beginPath();
+  ctx.ellipse(0, -34, 10, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(14, -39);
+  ctx.rotate(-0.9 + swing);
+  ctx.strokeStyle = '#5c321d';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(26, -12);
+  ctx.stroke();
+  ctx.strokeStyle = '#cdd2d9';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(18, -19);
+  ctx.lineTo(32, -6);
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawSnake(ctx: CanvasRenderingContext2D, snake: SnakeRender): void {
+  if (snake.kind === 'trampoline') {
+    drawTrampoline(ctx, snake);
+    return;
+  }
+
+  const wave = Math.sin(snake.t * 5) * 3;
+  ctx.save();
+  ctx.fillStyle = '#5bd66c';
+  ctx.strokeStyle = '#2f8a3b';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(snake.x + 36, snake.y + 18 + wave, 34, 12, 0, 0, Math.PI * 2);
+  ctx.ellipse(snake.x + 66, snake.y + 13 - wave * 0.4, 18, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#ffe277';
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(snake.x + 15 + i * 12, snake.y + 14 + Math.sin(snake.t * 4 + i) * 2, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(snake.x + 72, snake.y + 8, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#23351f';
+  ctx.beginPath();
+  ctx.arc(snake.x + 73, snake.y + 8, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#ff6b8a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(snake.x + 83, snake.y + 14);
+  ctx.lineTo(snake.x + 94, snake.y + 12);
+  ctx.moveTo(snake.x + 90, snake.y + 12);
+  ctx.lineTo(snake.x + 96, snake.y + 8);
+  ctx.moveTo(snake.x + 90, snake.y + 12);
+  ctx.lineTo(snake.x + 97, snake.y + 16);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTrampoline(ctx: CanvasRenderingContext2D, snake: SnakeRender): void {
+  const bounce = Math.sin(snake.t * 8) * 2;
+  ctx.save();
+  ctx.strokeStyle = '#cdd2d9';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(snake.x + 12, snake.y + 22);
+  ctx.lineTo(snake.x + 2, snake.y + 42);
+  ctx.moveTo(snake.x + 70, snake.y + 22);
+  ctx.lineTo(snake.x + 82, snake.y + 42);
+  ctx.stroke();
+  roundRect(ctx, snake.x, snake.y + bounce, 82, 18, 8);
+  ctx.fillStyle = '#35b8ff';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.fillStyle = '#7ff0ff';
+  ctx.fillRect(snake.x + 12, snake.y + 7 + bounce, 58, 4);
   ctx.restore();
 }
 

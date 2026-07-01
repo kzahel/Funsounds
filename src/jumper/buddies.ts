@@ -43,9 +43,18 @@ export interface Buddy {
   hopDur: number;
 }
 
+interface BuddyCarryOverride {
+  index: number;
+  x: number;
+  y: number;
+  facing: number;
+  vy: number;
+}
+
 export class BuddyChain {
   footholds: Array<{ x: number; y: number }> = [{ x: 0, y: 0 }];
   list: Buddy[] = [];
+  private carry: BuddyCarryOverride | null = null;
 
   get count(): number {
     return this.list.length;
@@ -55,11 +64,13 @@ export class BuddyChain {
   reset(x: number, y: number): void {
     this.footholds = [{ x, y }];
     this.list = [];
+    this.carry = null;
   }
 
   /** Respawn: drop a fresh foothold; buddies regroup onto it in step(). */
   regroup(x: number, y: number): void {
     this.footholds = [{ x, y }];
+    this.carry = null;
   }
 
   /** Record a ground spot whenever the player is grounded and has moved on. */
@@ -106,11 +117,21 @@ export class BuddyChain {
     });
   }
 
+  carryBuddy(index: number, x: number, y: number, facing: number, vy: number): void {
+    if (index < 0 || index >= this.list.length) return;
+    this.carry = { index, x, y, facing, vy };
+  }
+
+  releaseCarriedBuddy(): void {
+    this.carry = null;
+  }
+
   /** Advance each buddy toward its target foothold, hopping (never floating). */
   step(dt: number, px: number, py: number): void {
     const lastIdx = this.footholds.length - 1;
     for (let i = 0; i < this.list.length; i++) {
       const bd = this.list[i];
+      if (this.carry?.index === i) continue;
 
       if (bd.hopT < 1) {
         bd.hopT += dt / bd.hopDur;
@@ -151,17 +172,18 @@ export class BuddyChain {
   }
 
   renders(now: number): BuddyRender[] {
-    return this.list.map((bd) => {
+    return this.list.map((bd, index) => {
       const grounded = bd.hopT >= 1;
       const vy = grounded ? 0 : (-Math.cos(Math.PI * bd.hopT) * bd.peak * Math.PI) / bd.hopDur;
       const age = (now - bd.bornAt) / 1000;
       const growT = bd.growDuration > 0 ? clamp(age / bd.growDuration, 0, 1) : 1;
+      const carry = this.carry?.index === index ? this.carry : null;
       return {
-        x: bd.x,
-        y: bd.y,
-        vy,
-        facing: bd.facing,
-        grounded,
+        x: carry?.x ?? bd.x,
+        y: carry?.y ?? bd.y,
+        vy: carry?.vy ?? vy,
+        facing: carry?.facing ?? bd.facing,
+        grounded: carry ? false : grounded,
         colorIndex: bd.colorIndex,
         variantIndex: bd.variantIndex,
         alpha: bd.fadeDuration > 0 ? clamp((now - bd.bornAt) / 1000 / bd.fadeDuration, 0, 1) : 1,

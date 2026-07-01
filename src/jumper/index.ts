@@ -28,7 +28,7 @@ import {
   type Tuning,
 } from './core';
 import { MODES, MODE_ORDER, GROUND_Y, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
-import { render, type Scene, type View } from './render';
+import { render, type BuddyRender, type Scene, type View } from './render';
 import { BuddyChain } from './buddies';
 import { themeForLevel, type Theme } from './themes';
 import type { Barrel, Checkpoint, Level, ModeConfig, Particle } from './types';
@@ -54,11 +54,17 @@ const BIRD_W = 72;
 const BIRD_H = 42;
 const BIRD_RIDE_DUR = 3.2;
 const BIRD_TRIP_START_BUFFER = 150;
+const SNAKE_W = 86;
+const SNAKE_H = 28;
+const TRAMPOLINE_W = 82;
+const TRAMPOLINE_H = 24;
+const UNDERGROUND_RETURN_DUR = 2.15;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
 type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
 type BirdTripSide = 'left' | 'right';
+type SnakeKind = 'snake' | 'trampoline';
 interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
@@ -75,6 +81,19 @@ interface BirdRide {
   startX: number;
   startY: number;
   dir: number;
+  target: 'player' | 'buddy';
+  buddyIndex?: number;
+}
+interface SnakeState {
+  x: number;
+  y: number;
+  kind: SnakeKind;
+  t: number;
+}
+interface UndergroundReturn {
+  t: number;
+  startX: number;
+  startY: number;
 }
 
 let gameActive = false;
@@ -114,6 +133,10 @@ let birdCooldown = 0;
 let birdRide: BirdRide | null = null;
 let birdTripSide: BirdTripSide = 'left';
 let birdFlybysRemaining = 0;
+let undergroundWorld = false;
+let snake: SnakeState | null = null;
+let snakeCooldown = 0;
+let undergroundReturn: UndergroundReturn | null = null;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -325,6 +348,10 @@ function buildLevel(): void {
   bird = null;
   birdRide = null;
   resetBirdTrip('left');
+  undergroundWorld = false;
+  snake = null;
+  snakeCooldown = 0;
+  undergroundReturn = null;
   chain.reset(level.startX, level.startY);
 }
 
@@ -401,12 +428,12 @@ function resetBirdTrip(side: BirdTripSide): void {
 }
 
 function noteBirdTripSide(side: BirdTripSide): void {
-  if (!hasBuddyChain() || candyWorld || birdTripSide === side) return;
+  if (!hasBuddyChain() || candyWorld || undergroundWorld || birdTripSide === side) return;
   resetBirdTrip(side);
 }
 
 function updateBirdTripSide(cx: number): void {
-  if (!hasBuddyChain() || candyWorld || level.leftGoalX === undefined) return;
+  if (!hasBuddyChain() || candyWorld || undergroundWorld || level.leftGoalX === undefined) return;
   if (cx <= level.leftGoalX) noteBirdTripSide('left');
   else if (cx >= level.goalX) noteBirdTripSide('right');
 }
@@ -420,7 +447,7 @@ function birdTripHasStarted(): boolean {
 }
 
 function canSpawnBird(): boolean {
-  return hasBuddyChain() && !candyWorld && !birdRide && !weddingEvent && phase === 'playing';
+  return hasBuddyChain() && !candyWorld && !undergroundWorld && !birdRide && !weddingEvent && phase === 'playing';
 }
 
 function spawnBird(): void {
@@ -436,7 +463,7 @@ function spawnBird(): void {
 
 function startBirdRide(): void {
   if (!bird) return;
-  birdRide = { t: 0, startX: body.x, startY: body.y, dir: bird.dir };
+  birdRide = { t: 0, startX: body.x, startY: body.y, dir: bird.dir, target: 'player' };
   body.vx = 0;
   body.vy = 0;
   body.jumping = false;
@@ -448,6 +475,28 @@ function startBirdRide(): void {
   setStatus('Hold on! Up to the candy clouds.');
 }
 
+function startBirdBuddyRide(buddyIndex: number, buddyRender: BuddyRender): void {
+  if (!bird) return;
+  birdRide = {
+    t: 0,
+    startX: buddyRender.x,
+    startY: buddyRender.y,
+    dir: bird.dir,
+    target: 'buddy',
+    buddyIndex,
+  };
+  body.vx = 0;
+  body.vy = 0;
+  body.jumping = false;
+  const buddyScale = buddyRender.scale ?? 1;
+  bird.x = buddyRender.x + (PLAYER_W * buddyScale) / 2 - BIRD_W / 2;
+  bird.y = buddyRender.y - BIRD_H + 8;
+  chain.carryBuddy(buddyIndex, buddyRender.x, buddyRender.y, bird.dir, -180);
+  showToast('Buddy bird ride!');
+  speakText('Buddy bird ride!', { rate: 1.05, pitch: 1.35 });
+  setStatus('The bird has your buddy! Up to the candy clouds.');
+}
+
 function surfaceTopAtCenter(cx: number): number | null {
   let best: number | null = null;
   const consider = (s: { x: number; y: number; w: number }) => {
@@ -456,6 +505,155 @@ function surfaceTopAtCenter(cx: number): number | null {
   for (const p of level.platforms) consider(p);
   for (const b of level.barrels) consider(b);
   return best;
+}
+
+function platformTopAtCenter(cx: number): number | null {
+  let best: number | null = null;
+  for (const p of level.platforms) {
+    if (p.x <= cx && p.x + p.w >= cx && (best === null || p.y < best)) best = p.y;
+  }
+  return best;
+}
+
+function snakeSize(kind: SnakeKind): { w: number; h: number } {
+  return kind === 'trampoline'
+    ? { w: TRAMPOLINE_W, h: TRAMPOLINE_H }
+    : { w: SNAKE_W, h: SNAKE_H };
+}
+
+function spawnSnake(): void {
+  const dir = facing || 1;
+  const offsets = [dir * 230, -dir * 230, dir * 390, -dir * 390, 0];
+  for (const offset of offsets) {
+    const cx = clamp(body.x + PLAYER_W / 2 + offset, 40 + SNAKE_W / 2, level.width - 40 - SNAKE_W / 2);
+    const top = platformTopAtCenter(cx);
+    if (top === null) continue;
+    snake = { x: cx - SNAKE_W / 2, y: top - SNAKE_H, kind: 'snake', t: 0 };
+    return;
+  }
+  snakeCooldown = 2.5;
+}
+
+function touchedSnakeTop(s: SnakeState): boolean {
+  const size = snakeSize(s.kind);
+  const feet = body.y + body.h;
+  const prevFeet = body.prevY + body.h;
+  return body.vy >= 0
+    && body.x + body.w > s.x + 8
+    && body.x < s.x + size.w - 8
+    && prevFeet <= s.y + 12
+    && feet >= s.y
+    && feet <= s.y + size.h + 12;
+}
+
+function startUndergroundReturn(): void {
+  if (!undergroundWorld || undergroundReturn) return;
+  undergroundReturn = { t: 0, startX: body.x, startY: body.y };
+  body.vx = 0;
+  body.vy = 0;
+  body.jumping = false;
+  body.grounded = false;
+  snake = null;
+  spawnSparks(body.x + PLAYER_W / 2, body.y + PLAYER_H, 18);
+  showToast('Back up!');
+  speakText('Back up!', { rate: 1.05, pitch: 1.25 });
+  setStatus('The trampoline is sending you back up.');
+}
+
+function updateUndergroundReturn(dt: number): boolean {
+  if (!undergroundReturn) return false;
+
+  undergroundReturn.t += dt;
+  const p = clamp(undergroundReturn.t / UNDERGROUND_RETURN_DUR, 0, 1);
+  const lift = smoothstep(p);
+  body.prevX = body.x;
+  body.prevY = body.y;
+  body.x = undergroundReturn.startX + Math.sin(p * Math.PI * 3) * 10;
+  body.y = undergroundReturn.startY - lift * 340;
+  body.vx = 0;
+  body.vy = -520 * (1 - p);
+  body.grounded = false;
+  body.jumping = false;
+
+  if (p >= 1) {
+    const landingCx = undergroundReturn.startX + PLAYER_W / 2;
+    const top = platformTopAtCenter(landingCx);
+    const landingX = undergroundReturn.startX;
+    undergroundWorld = false;
+    undergroundReturn = null;
+    snake = null;
+    snakeCooldown = 0;
+    body.x = top !== null ? landingX : lastSafe.x;
+    body.y = top !== null ? top - PLAYER_H : lastSafe.y;
+    body.prevX = body.x;
+    body.prevY = body.y;
+    body.vx = 0;
+    body.vy = 0;
+    body.grounded = false;
+    lastSafe = { x: body.x, y: body.y };
+    resetBirdTrip(body.x + PLAYER_W / 2 <= (level.leftGoalX ?? level.startX) ? 'left' : 'right');
+    spawnSparks(body.x + PLAYER_W / 2, body.y + 8, 18);
+    showToast('Back on the surface!');
+    speakText('Back on the surface!', { rate: 1, pitch: 1.2 });
+    setStatus(startStatus());
+  }
+
+  updateParticles(dt);
+  return true;
+}
+
+function updateSnake(dt: number): void {
+  if (!undergroundWorld || undergroundReturn) return;
+
+  if (!snake) {
+    snakeCooldown -= dt;
+    if (snakeCooldown <= 0) spawnSnake();
+    return;
+  }
+
+  snake.t += dt;
+  if (snake.x + SNAKE_W < body.x - 820 || snake.x > body.x + 900) {
+    snake = null;
+    snakeCooldown = 3 + Math.random() * 3;
+    return;
+  }
+
+  if (!touchedSnakeTop(snake)) return;
+
+  body.y = snake.y - body.h;
+  body.prevY = body.y;
+  body.grounded = false;
+  body.jumping = false;
+  if (snake.kind === 'snake') {
+    snake.kind = 'trampoline';
+    snake.x += (SNAKE_W - TRAMPOLINE_W) / 2;
+    snake.y += SNAKE_H - TRAMPOLINE_H;
+    body.vy = -520;
+    sfx.score();
+    spawnSparks(snake.x + TRAMPOLINE_W / 2, snake.y, 14);
+    showToast('Snake trampoline!');
+    speakText('Snake trampoline!', { rate: 1.05, pitch: 1.3 });
+    setStatus('Jump on the trampoline to get back up.');
+  } else {
+    startUndergroundReturn();
+  }
+}
+
+function findBirdBuddyCollision(): { index: number; render: BuddyRender } | null {
+  if (!bird || chain.count === 0) return null;
+  const buddies = chain.renders(performance.now());
+  const bx = bird.x + 10;
+  const by = bird.y + 4;
+  const bw = BIRD_W - 20;
+  const bh = BIRD_H - 8;
+  for (let i = 0; i < buddies.length; i++) {
+    const bd = buddies[i];
+    const scale = bd.scale ?? 1;
+    if (overlapsRect(bd.x, bd.y, PLAYER_W * scale, PLAYER_H * scale, bx, by, bw, bh)) {
+      return { index: i, render: bd };
+    }
+  }
+  return null;
 }
 
 function updateBird(dt: number): void {
@@ -485,6 +683,12 @@ function updateBird(dt: number): void {
 
   if (overlapsRect(body.x, body.y, body.w, body.h, bird.x + 10, bird.y + 4, BIRD_W - 20, BIRD_H - 8)) {
     startBirdRide();
+    return;
+  }
+
+  const buddyHit = findBirdBuddyCollision();
+  if (buddyHit) {
+    startBirdBuddyRide(buddyHit.index, buddyHit.render);
   }
 }
 
@@ -496,38 +700,58 @@ function updateBirdRide(dt: number): boolean {
   const lift = smoothstep(p);
   body.prevX = body.x;
   body.prevY = body.y;
-  body.x = birdRide.startX + Math.sin(p * Math.PI * 2) * 12;
-  body.y = birdRide.startY - lift * 260;
   body.vx = 0;
   body.vy = 0;
-  body.grounded = false;
   body.jumping = false;
-  facing = birdRide.dir;
+  if (birdRide.target === 'player') {
+    body.x = birdRide.startX + Math.sin(p * Math.PI * 2) * 12;
+    body.y = birdRide.startY - lift * 260;
+    body.grounded = false;
+    facing = birdRide.dir;
+  } else if (birdRide.buddyIndex !== undefined) {
+    const flutterX = Math.sin(p * Math.PI * 7) * 18;
+    const flutterY = Math.sin(p * Math.PI * 10) * 8;
+    const carriedX = birdRide.startX + flutterX;
+    const carriedY = birdRide.startY - lift * 330 - flutterY;
+    chain.carryBuddy(birdRide.buddyIndex, carriedX, carriedY, birdRide.dir, -260);
+  }
 
   if (bird) {
     bird.dir = birdRide.dir;
     bird.wingT += dt * 11;
-    bird.x = body.x + PLAYER_W / 2 - BIRD_W / 2;
-    bird.y = body.y - BIRD_H + 8;
+    if (birdRide.target === 'player') {
+      bird.x = body.x + PLAYER_W / 2 - BIRD_W / 2;
+      bird.y = body.y - BIRD_H + 8;
+    } else {
+      const carriedScale = birdRide.buddyIndex !== undefined ? (chain.renders(performance.now())[birdRide.buddyIndex]?.scale ?? 1) : 1;
+      const carryX = birdRide.buddyIndex !== undefined ? (chain.renders(performance.now())[birdRide.buddyIndex]?.x ?? birdRide.startX) : birdRide.startX;
+      const carryY = birdRide.buddyIndex !== undefined ? (chain.renders(performance.now())[birdRide.buddyIndex]?.y ?? birdRide.startY) : birdRide.startY;
+      bird.x = carryX + (PLAYER_W * carriedScale) / 2 - BIRD_W / 2;
+      bird.y = carryY - BIRD_H + 8;
+    }
   }
 
   if (p >= 1) {
     const landingX = birdRide.startX;
     const landingCx = landingX + PLAYER_W / 2;
-    const landingTop = surfaceTopAtCenter(landingCx);
+    const landingTop = birdRide.target === 'player' ? surfaceTopAtCenter(landingCx) : null;
+    const rideTarget = birdRide.target;
     candyWorld = true;
     birdRide = null;
     bird = null;
     birdCooldown = Number.POSITIVE_INFINITY;
-    body.x = landingTop !== null ? landingX : lastSafe.x;
-    body.y = landingTop !== null ? landingTop - PLAYER_H : lastSafe.y;
-    body.prevX = body.x;
-    body.prevY = body.y;
-    body.grounded = false;
-    lastSafe = { x: body.x, y: body.y };
+    chain.releaseCarriedBuddy();
+    if (rideTarget === 'player') {
+      body.x = landingTop !== null ? landingX : lastSafe.x;
+      body.y = landingTop !== null ? landingTop - PLAYER_H : lastSafe.y;
+      body.prevX = body.x;
+      body.prevY = body.y;
+      body.grounded = false;
+      lastSafe = { x: body.x, y: body.y };
+    }
     spawnSparks(body.x + PLAYER_W / 2, body.y + 10, 18);
-    showToast('Candy cloud world!');
-    speakText('Candy cloud world!', { rate: 1, pitch: 1.35 });
+    showToast(rideTarget === 'buddy' ? 'Buddy found candy clouds!' : 'Candy cloud world!');
+    speakText(rideTarget === 'buddy' ? 'Buddy found candy clouds!' : 'Candy cloud world!', { rate: 1, pitch: 1.35 });
     setStatus(isWeddingMode() ? 'Cloud candy world! Find your partner.' : 'Cloud candy world! Run between lollipops.');
   }
 
@@ -668,17 +892,30 @@ function loseHeart(): void {
   updateHud();
 }
 
-function leaveCandyWorld(): void {
+function enterUndergroundWorld(): void {
   candyWorld = false;
+  undergroundWorld = true;
   bird = null;
   birdRide = null;
-  const cx = body.x + body.w / 2;
-  const midpoint = level.leftGoalX === undefined ? level.width / 2 : (level.leftGoalX + level.goalX) / 2;
-  resetBirdTrip(cx <= midpoint ? 'left' : 'right');
+  chain.releaseCarriedBuddy();
+  snake = null;
+  snakeCooldown = 0.8 + Math.random() * 1.2;
   respawnTo(lastSafe);
   spawnDust(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 10);
-  showToast('Back down!');
-  setStatus(isWeddingMode() ? 'Back on the ground. Find another bird when you are ready.' : 'Back on the ground. Find another bird to return to candy clouds.');
+  showToast('Underground cave!');
+  speakText('Underground cave!', { rate: 1, pitch: 0.9 });
+  setStatus('Underground cave! Find a snake trampoline to get back up.');
+}
+
+function handlePitFall(): void {
+  if (undergroundWorld) {
+    respawnTo(lastSafe);
+    snakeCooldown = Math.min(snakeCooldown, 1);
+    showToast('Back to the cave ledge.');
+    setStatus('Find a snake trampoline to return to the surface.');
+    return;
+  }
+  enterUndergroundWorld();
 }
 
 function addScore(points: number, x: number, y: number): void {
@@ -747,6 +984,11 @@ function update(dt: number): void {
   }
 
   if (updateBirdRide(dt)) {
+    jumpEdge = false;
+    interactEdge = false;
+    return;
+  }
+  if (updateUndergroundReturn(dt)) {
     jumpEdge = false;
     interactEdge = false;
     return;
@@ -833,10 +1075,11 @@ function update(dt: number): void {
     loseHeart();
   }
 
+  updateSnake(dt);
+
   // Falling into a pit.
   if (body.y > level.killY) {
-    if (candyWorld) leaveCandyWorld();
-    else loseHeart();
+    handlePitFall();
   }
 
   // Advance checkpoints.
@@ -924,12 +1167,20 @@ function renderFrame(alpha: number): void {
     } : undefined,
     candyWorld,
     skyRideT: birdRide ? clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1) : 0,
+    undergroundWorld,
+    undergroundLiftT: undergroundReturn ? clamp(undergroundReturn.t / UNDERGROUND_RETURN_DUR, 0, 1) : 0,
     bird: bird ? {
       x: bird.x,
       y: bird.y,
       dir: bird.dir,
       wingT: bird.wingT,
       carrying: birdRide !== null,
+    } : undefined,
+    snake: snake ? {
+      x: snake.x,
+      y: snake.y,
+      kind: snake.kind,
+      t: snake.t,
     } : undefined,
     particles,
   };

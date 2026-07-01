@@ -115,6 +115,29 @@ describe('BuddyChain', () => {
     expect(end.y).toBeCloseTo(GROUND, 5);
   });
 
+  it('can temporarily render one buddy as bird-carried', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    chain.add(0, 1, 0, 0, GROUND);
+
+    chain.carryBuddy(0, 180, 120, -1, -260);
+    const carried = chain.renders(1_000)[0];
+    expect(carried.x).toBe(180);
+    expect(carried.y).toBe(120);
+    expect(carried.facing).toBe(-1);
+    expect(carried.vy).toBe(-260);
+    expect(carried.grounded).toBe(false);
+
+    steps(chain, 10, 0, GROUND);
+    expect(chain.renders(1_200)[0].x).toBe(180);
+
+    chain.releaseCarriedBuddy();
+    const released = chain.renders(1_300)[0];
+    expect(released.x).toBe(0);
+    expect(released.y).toBe(GROUND);
+    expect(released.grounded).toBe(true);
+  });
+
   it('assigns varied buddy looks beyond color swaps', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);
