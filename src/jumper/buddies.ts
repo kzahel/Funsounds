@@ -126,6 +126,15 @@ export class BuddyChain {
     this.carry = null;
   }
 
+  removeBuddy(index: number): Buddy | null {
+    if (index < 0 || index >= this.list.length) return null;
+    const [removed] = this.list.splice(index, 1);
+    if (!removed) return null;
+    if (this.carry?.index === index) this.carry = null;
+    else if (this.carry && this.carry.index > index) this.carry.index--;
+    return removed;
+  }
+
   /** Advance each buddy toward its target foothold, hopping (never floating). */
   step(dt: number, px: number, py: number): void {
     const lastIdx = this.footholds.length - 1;

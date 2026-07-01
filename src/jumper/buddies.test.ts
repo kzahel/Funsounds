@@ -138,6 +138,29 @@ describe('BuddyChain', () => {
     expect(released.grounded).toBe(true);
   });
 
+  it('removes a carried buddy and lets later buddies fill the trail slots', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    for (let x = 0; x <= 900; x += 120) chain.record(true, x, GROUND);
+    chain.add(0, 1, 0, 900, GROUND);
+    chain.add(1, 1, 0, 900, GROUND);
+    chain.add(2, 1, 0, 900, GROUND);
+    steps(chain, 120, 900, GROUND);
+
+    const before = chain.renders(1_000);
+    chain.carryBuddy(1, 500, 120, 1, -240);
+    const removed = chain.removeBuddy(1);
+
+    expect(removed?.colorIndex).toBe(1);
+    expect(chain.count).toBe(2);
+    expect(chain.renders(1_100).map((r) => r.colorIndex)).toEqual([0, 2]);
+
+    steps(chain, 90, 900, GROUND);
+    const after = chain.renders(2_600);
+    expect(after[1].x).toBeGreaterThan(before[2].x);
+    expect(after[1].grounded).toBe(true);
+  });
+
   it('assigns varied buddy looks beyond color swaps', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);

@@ -114,6 +114,8 @@ interface UnderwaterReturn {
   startX: number;
   startY: number;
   fishDir: number;
+  target: 'player' | 'buddy';
+  buddyIndex?: number;
 }
 
 let gameActive = false;
@@ -520,9 +522,9 @@ function startBirdBuddyRide(buddyIndex: number, buddyRender: BuddyRender): void 
   bird.x = buddyRender.x + (PLAYER_W * buddyScale) / 2 - BIRD_W / 2;
   bird.y = buddyRender.y - BIRD_H + 8;
   chain.carryBuddy(buddyIndex, buddyRender.x, buddyRender.y, bird.dir, -180);
-  showToast('Buddy bird ride!');
-  speakText('Buddy bird ride!', { rate: 1.05, pitch: 1.35 });
-  setStatus('The bird has your buddy! Up to the candy clouds.');
+  showToast('Bird got a buddy!');
+  speakText('Bird got a buddy!', { rate: 1.05, pitch: 1.35 });
+  setStatus('The bird is carrying that buddy away.');
 }
 
 function surfaceTopAtCenter(cx: number): number | null {
@@ -700,7 +702,7 @@ function spawnFish(): void {
 
 function startFishRide(): void {
   if (!fish || underwaterReturn) return;
-  underwaterReturn = { t: 0, startX: body.x, startY: body.y, fishDir: fish.dir };
+  underwaterReturn = { t: 0, startX: body.x, startY: body.y, fishDir: fish.dir, target: 'player' };
   body.vx = 0;
   body.vy = 0;
   body.grounded = false;
@@ -713,54 +715,103 @@ function startFishRide(): void {
   setStatus('The fish is swimming you back up to the cave.');
 }
 
+function startFishBuddyRide(buddyIndex: number, buddyRender: BuddyRender): void {
+  if (!fish || underwaterReturn) return;
+  underwaterReturn = {
+    t: 0,
+    startX: buddyRender.x,
+    startY: buddyRender.y,
+    fishDir: fish.dir,
+    target: 'buddy',
+    buddyIndex,
+  };
+  const buddyScale = buddyRender.scale ?? 1;
+  fish.x = buddyRender.x + (PLAYER_W * buddyScale) / 2 - FISH_W / 2;
+  fish.y = buddyRender.y - FISH_H + 18;
+  chain.carryBuddy(buddyIndex, buddyRender.x, buddyRender.y, fish.dir, -180);
+  spawnSparks(buddyRender.x + PLAYER_W * buddyScale / 2, buddyRender.y + PLAYER_H * buddyScale * 0.45, 12);
+  showToast('Buddy fish ride!');
+  speakText('Buddy fish ride!', { rate: 1.05, pitch: 1.25 });
+  setStatus('The fish is swimming your buddy away.');
+}
+
 function updateUnderwaterReturn(dt: number): boolean {
   if (!underwaterReturn) return false;
 
   underwaterReturn.t += dt;
+  const exclusivePlayerRide = underwaterReturn.target === 'player';
   const p = clamp(underwaterReturn.t / UNDERWATER_RETURN_DUR, 0, 1);
   const lift = smoothstep(p);
-  body.prevX = body.x;
-  body.prevY = body.y;
-  body.x = underwaterReturn.startX + Math.sin(p * Math.PI * 4) * 16;
-  body.y = underwaterReturn.startY - lift * 320;
-  body.vx = 0;
-  body.vy = -420 * (1 - p);
-  body.grounded = false;
-  body.jumping = false;
+  if (underwaterReturn.target === 'buddy') {
+    const swimX = underwaterReturn.startX + Math.sin(p * Math.PI * 5) * 20;
+    const swimY = underwaterReturn.startY - lift * 330 + Math.sin(p * Math.PI * 9) * 8;
+    if (underwaterReturn.buddyIndex !== undefined) {
+      chain.carryBuddy(underwaterReturn.buddyIndex, swimX, swimY, underwaterReturn.fishDir, -240);
+    }
+  } else {
+    body.prevX = body.x;
+    body.prevY = body.y;
+    body.x = underwaterReturn.startX + Math.sin(p * Math.PI * 4) * 16;
+    body.y = underwaterReturn.startY - lift * 320;
+    body.vx = 0;
+    body.vy = -420 * (1 - p);
+    body.grounded = false;
+    body.jumping = false;
+  }
 
   if (fish) {
     fish.dir = underwaterReturn.fishDir;
     fish.t += dt * 8;
-    fish.x = body.x + PLAYER_W / 2 - FISH_W / 2;
-    fish.y = body.y - FISH_H + 18;
+    if (underwaterReturn.target === 'buddy' && underwaterReturn.buddyIndex !== undefined) {
+      const carried = chain.renders(performance.now())[underwaterReturn.buddyIndex];
+      const carriedScale = carried?.scale ?? 1;
+      fish.x = (carried?.x ?? underwaterReturn.startX) + (PLAYER_W * carriedScale) / 2 - FISH_W / 2;
+      fish.y = (carried?.y ?? underwaterReturn.startY) - FISH_H + 18;
+    } else {
+      fish.x = body.x + PLAYER_W / 2 - FISH_W / 2;
+      fish.y = body.y - FISH_H + 18;
+    }
   }
 
   if (p >= 1) {
+    const rideTarget = underwaterReturn.target;
+    const buddyIndex = underwaterReturn.buddyIndex;
     const landingX = underwaterReturn.startX;
     const top = platformTopAtCenter(landingX + PLAYER_W / 2);
-    underwaterWorld = false;
-    undergroundWorld = true;
     underwaterReturn = null;
     fish = null;
-    fishCooldown = 0;
-    snake = null;
-    snakeCooldown = 1.2;
-    body.x = top !== null ? landingX : lastSafe.x;
-    body.y = top !== null ? top - PLAYER_H : lastSafe.y;
-    body.prevX = body.x;
-    body.prevY = body.y;
-    body.vx = 0;
-    body.vy = 0;
-    body.grounded = false;
-    lastSafe = { x: body.x, y: body.y };
-    spawnSparks(body.x + PLAYER_W / 2, body.y + 8, 18);
-    showToast('Back in the cave!');
-    speakText('Back in the cave!', { rate: 1, pitch: 1.05 });
-    setStatus('Back in the cave. Find the snake trampoline to reach the surface.');
+    if (rideTarget === 'buddy' && buddyIndex !== undefined) {
+      fishCooldown = 3 + Math.random() * 3;
+      const carried = chain.renders(performance.now())[buddyIndex];
+      chain.removeBuddy(buddyIndex);
+      spawnSparks((carried?.x ?? landingX) + PLAYER_W / 2, carried?.y ?? body.y, 14);
+      showToast('A buddy swam away!');
+      speakText('A buddy swam away!', { rate: 1, pitch: 1.2 });
+      setStatus('The other buddies hop forward to fill the trail.');
+      updateHud();
+    } else {
+      fishCooldown = 0;
+      underwaterWorld = false;
+      undergroundWorld = true;
+      snake = null;
+      snakeCooldown = 1.2;
+      body.x = top !== null ? landingX : lastSafe.x;
+      body.y = top !== null ? top - PLAYER_H : lastSafe.y;
+      body.prevX = body.x;
+      body.prevY = body.y;
+      body.vx = 0;
+      body.vy = 0;
+      body.grounded = false;
+      lastSafe = { x: body.x, y: body.y };
+      spawnSparks(body.x + PLAYER_W / 2, body.y + 8, 18);
+      showToast('Back in the cave!');
+      speakText('Back in the cave!', { rate: 1, pitch: 1.05 });
+      setStatus('Back in the cave. Find the snake trampoline to reach the surface.');
+    }
   }
 
-  updateParticles(dt);
-  return true;
+  if (exclusivePlayerRide) updateParticles(dt);
+  return exclusivePlayerRide;
 }
 
 function updateFish(dt: number): void {
@@ -782,26 +833,33 @@ function updateFish(dt: number): void {
     return;
   }
 
+  const buddyHit = findBuddyCollision(fish.x + 8, fish.y + 4, FISH_W - 16, FISH_H - 8);
+  if (buddyHit) {
+    startFishBuddyRide(buddyHit.index, buddyHit.render);
+    return;
+  }
+
   if (overlapsRect(body.x, body.y, body.w, body.h, fish.x + 8, fish.y + 4, FISH_W - 16, FISH_H - 8)) {
     startFishRide();
   }
 }
 
-function findBirdBuddyCollision(): { index: number; render: BuddyRender } | null {
-  if (!bird || chain.count === 0) return null;
+function findBuddyCollision(x: number, y: number, w: number, h: number): { index: number; render: BuddyRender } | null {
+  if (chain.count === 0) return null;
   const buddies = chain.renders(performance.now());
-  const bx = bird.x + 10;
-  const by = bird.y + 4;
-  const bw = BIRD_W - 20;
-  const bh = BIRD_H - 8;
   for (let i = 0; i < buddies.length; i++) {
     const bd = buddies[i];
     const scale = bd.scale ?? 1;
-    if (overlapsRect(bd.x, bd.y, PLAYER_W * scale, PLAYER_H * scale, bx, by, bw, bh)) {
+    if (overlapsRect(bd.x, bd.y, PLAYER_W * scale, PLAYER_H * scale, x, y, w, h)) {
       return { index: i, render: bd };
     }
   }
   return null;
+}
+
+function findBirdBuddyCollision(): { index: number; render: BuddyRender } | null {
+  if (!bird) return null;
+  return findBuddyCollision(bird.x + 10, bird.y + 4, BIRD_W - 20, BIRD_H - 8);
 }
 
 function updateBird(dt: number): void {
@@ -844,14 +902,15 @@ function updateBirdRide(dt: number): boolean {
   if (!birdRide) return false;
 
   birdRide.t += dt;
+  const exclusivePlayerRide = birdRide.target === 'player';
   const p = clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1);
   const lift = smoothstep(p);
-  body.prevX = body.x;
-  body.prevY = body.y;
-  body.vx = 0;
-  body.vy = 0;
-  body.jumping = false;
   if (birdRide.target === 'player') {
+    body.prevX = body.x;
+    body.prevY = body.y;
+    body.vx = 0;
+    body.vy = 0;
+    body.jumping = false;
     body.x = birdRide.startX + Math.sin(p * Math.PI * 2) * 12;
     body.y = birdRide.startY - lift * 260;
     body.grounded = false;
@@ -884,27 +943,37 @@ function updateBirdRide(dt: number): boolean {
     const landingCx = landingX + PLAYER_W / 2;
     const landingTop = birdRide.target === 'player' ? surfaceTopAtCenter(landingCx) : null;
     const rideTarget = birdRide.target;
-    candyWorld = true;
+    const buddyIndex = birdRide.buddyIndex;
     birdRide = null;
     bird = null;
-    birdCooldown = Number.POSITIVE_INFINITY;
-    chain.releaseCarriedBuddy();
     if (rideTarget === 'player') {
+      candyWorld = true;
+      birdCooldown = Number.POSITIVE_INFINITY;
       body.x = landingTop !== null ? landingX : lastSafe.x;
       body.y = landingTop !== null ? landingTop - PLAYER_H : lastSafe.y;
       body.prevX = body.x;
       body.prevY = body.y;
       body.grounded = false;
       lastSafe = { x: body.x, y: body.y };
+      chain.releaseCarriedBuddy();
+      spawnSparks(body.x + PLAYER_W / 2, body.y + 10, 18);
+      showToast('Candy cloud world!');
+      speakText('Candy cloud world!', { rate: 1, pitch: 1.35 });
+      setStatus(isWeddingMode() ? 'Cloud candy world! Find your partner.' : 'Cloud candy world! Run between lollipops.');
+    } else if (buddyIndex !== undefined) {
+      const carried = chain.renders(performance.now())[buddyIndex];
+      chain.removeBuddy(buddyIndex);
+      birdCooldown = 5 + Math.random() * 5;
+      spawnSparks((carried?.x ?? landingX) + PLAYER_W / 2, carried?.y ?? body.y, 14);
+      showToast('A buddy flew away!');
+      speakText('A buddy flew away!', { rate: 1, pitch: 1.25 });
+      setStatus('The other buddies hop forward to fill the trail.');
+      updateHud();
     }
-    spawnSparks(body.x + PLAYER_W / 2, body.y + 10, 18);
-    showToast(rideTarget === 'buddy' ? 'Buddy found candy clouds!' : 'Candy cloud world!');
-    speakText(rideTarget === 'buddy' ? 'Buddy found candy clouds!' : 'Candy cloud world!', { rate: 1, pitch: 1.35 });
-    setStatus(isWeddingMode() ? 'Cloud candy world! Find your partner.' : 'Cloud candy world! Run between lollipops.');
   }
 
-  updateParticles(dt);
-  return true;
+  if (exclusivePlayerRide) updateParticles(dt);
+  return exclusivePlayerRide;
 }
 
 function startWeddingSmooch(): boolean {
