@@ -76,6 +76,8 @@ const SWIM_ACCEL = 920;
 const SWIM_DRAG = 5.4;
 const SWIM_MAX_X = 230;
 const SWIM_MAX_Y = 210;
+const SWIM_SINK_ACCEL = 260;
+const SWIM_SINK_MAX_Y = 72;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
@@ -1179,7 +1181,7 @@ function stepSwimBody(
   if (xDir !== 0) body.vx = clamp(body.vx + xDir * SWIM_ACCEL * dt, -SWIM_MAX_X, SWIM_MAX_X);
   else body.vx = applyDragVelocity(body.vx, SWIM_DRAG * SWIM_MAX_X * dt);
   if (yDir !== 0) body.vy = clamp(body.vy + yDir * SWIM_ACCEL * dt, -SWIM_MAX_Y, SWIM_MAX_Y);
-  else body.vy = applyDragVelocity(body.vy, SWIM_DRAG * SWIM_MAX_Y * dt);
+  else body.vy = approach(body.vy, SWIM_SINK_MAX_Y, SWIM_SINK_ACCEL * dt);
 
   body.x += body.vx * dt;
   for (const s of solids) {

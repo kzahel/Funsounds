@@ -80,3 +80,29 @@ test('Barrel Hop smoke test — modes start, render and score without errors', a
 
   expect(errors).toEqual([]);
 });
+
+test('Barrel Hop deep links open Buddy and Wedding modes', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
+
+  await page.goto('/Funsounds/?game=buddy');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('#jumper-screen')).toBeVisible();
+  await expect(page.locator('#start-screen')).toBeHidden();
+  await expect(page.locator('#jp-mode')).toContainText('Buddies');
+  await expect(page.locator('#jp-buddies-pill')).toBeVisible();
+  await expect(page.locator('#jp-buddies')).toHaveText('0/5');
+
+  await page.goto('/Funsounds/?game=wedding');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('#jumper-screen')).toBeVisible();
+  await expect(page.locator('#start-screen')).toBeHidden();
+  await expect(page.locator('#jp-mode')).toContainText('Wedding');
+  await expect(page.locator('#jp-buddies-pill')).toBeVisible();
+  await expect(page.locator('#jp-buddies-label')).toHaveText('Mini buddies');
+
+  expect(errors).toEqual([]);
+});
