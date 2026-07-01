@@ -47,6 +47,10 @@ const WEDDING_BABY_WAIT = 0.9;
 const WEDDING_BABY_POP_DUR = 1.35;
 const WEDDING_BABY_START_SCALE = 0.38;
 const WEDDING_BABY_GROW_DUR = 60;
+const BIRD_SPEED = 58;
+const BIRD_W = 72;
+const BIRD_H = 42;
+const BIRD_RIDE_DUR = 3.2;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
@@ -55,6 +59,18 @@ interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
   colorIndex: number;
+}
+interface BirdState {
+  x: number;
+  y: number;
+  dir: number;
+  wingT: number;
+}
+interface BirdRide {
+  t: number;
+  startX: number;
+  startY: number;
+  dir: number;
 }
 
 let gameActive = false;
@@ -88,6 +104,10 @@ let lastSafe = { x: 0, y: 0 }; // last ground-ledge stance, for respawns
 let buddyReachedRightPlatform = false; // unlocks first-buddy collection at the start flag
 let weddingReadyForSmooch = true;
 let weddingEvent: WeddingEvent | null = null;
+let candyWorld = false;
+let bird: BirdState | null = null;
+let birdCooldown = 0;
+let birdRide: BirdRide | null = null;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -214,6 +234,11 @@ function approach(current: number, target: number, maxDelta: number): number {
   return target;
 }
 
+function smoothstep(t: number): number {
+  const c = clamp(t, 0, 1);
+  return c * c * (3 - 2 * c);
+}
+
 function updateParticles(dt: number): void {
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -261,7 +286,9 @@ function showToast(text: string): void {
 }
 
 function startStatus(): string {
-  return isWeddingMode() ? 'Reach the flag, then meet your partner.' : 'Arrows move • hold Up to jump higher';
+  if (isWeddingMode()) return 'Reach the flag, then meet your partner.';
+  if (isBuddyChallenge()) return 'Watch for a friendly bird!';
+  return 'Arrows move • hold Up to jump higher';
 }
 
 // --- level / run setup ------------------------------------------------------
@@ -288,6 +315,10 @@ function buildLevel(): void {
   buddyReachedRightPlatform = false;
   weddingReadyForSmooch = true;
   weddingEvent = null;
+  candyWorld = false;
+  bird = null;
+  birdRide = null;
+  birdCooldown = 4 + Math.random() * 5;
   chain.reset(level.startX, level.startY);
 }
 
@@ -336,6 +367,122 @@ function maybeReadyWeddingSmooch(cx: number): boolean {
   showToast('Ready for another smoochie!');
   speakText('Ready for another smoochie!', { rate: 1.05, pitch: 1.3 });
   setStatus('Ready for another smoochie! Run to your partner.');
+  return true;
+}
+
+function overlapsRect(ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number): boolean {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function canSpawnBird(): boolean {
+  return hasBuddyChain() && !candyWorld && !birdRide && !weddingEvent && phase === 'playing';
+}
+
+function spawnBird(): void {
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  bird = {
+    x: body.x + (dir > 0 ? -520 : 620),
+    y: GROUND_Y - 150 - Math.random() * 38,
+    dir,
+    wingT: Math.random() * Math.PI * 2,
+  };
+}
+
+function startBirdRide(): void {
+  if (!bird) return;
+  birdRide = { t: 0, startX: body.x, startY: body.y, dir: bird.dir };
+  body.vx = 0;
+  body.vy = 0;
+  body.jumping = false;
+  body.grounded = false;
+  bird.x = body.x + PLAYER_W / 2 - BIRD_W / 2;
+  bird.y = body.y - BIRD_H + 8;
+  showToast('Bird ride!');
+  speakText('Bird ride!', { rate: 1.05, pitch: 1.35 });
+  setStatus('Hold on! Up to the candy clouds.');
+}
+
+function surfaceTopAtCenter(cx: number): number | null {
+  let best: number | null = null;
+  const consider = (s: { x: number; y: number; w: number }) => {
+    if (s.x <= cx && s.x + s.w >= cx && (best === null || s.y < best)) best = s.y;
+  };
+  for (const p of level.platforms) consider(p);
+  for (const b of level.barrels) consider(b);
+  return best;
+}
+
+function updateBird(dt: number): void {
+  if (!canSpawnBird()) {
+    if (!birdRide) bird = null;
+    return;
+  }
+
+  if (!bird) {
+    birdCooldown -= dt;
+    if (birdCooldown <= 0) spawnBird();
+    return;
+  }
+
+  bird.wingT += dt * 9;
+  bird.x += bird.dir * BIRD_SPEED * dt;
+  const farLeft = body.x - 760;
+  const farRight = body.x + 900;
+  if (bird.x < farLeft || bird.x > farRight) {
+    bird = null;
+    birdCooldown = 8 + Math.random() * 9;
+    return;
+  }
+
+  if (overlapsRect(body.x, body.y, body.w, body.h, bird.x + 10, bird.y + 4, BIRD_W - 20, BIRD_H - 8)) {
+    startBirdRide();
+  }
+}
+
+function updateBirdRide(dt: number): boolean {
+  if (!birdRide) return false;
+
+  birdRide.t += dt;
+  const p = clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1);
+  const lift = smoothstep(p);
+  body.prevX = body.x;
+  body.prevY = body.y;
+  body.x = birdRide.startX + Math.sin(p * Math.PI * 2) * 12;
+  body.y = birdRide.startY - lift * 260;
+  body.vx = 0;
+  body.vy = 0;
+  body.grounded = false;
+  body.jumping = false;
+  facing = birdRide.dir;
+
+  if (bird) {
+    bird.dir = birdRide.dir;
+    bird.wingT += dt * 11;
+    bird.x = body.x + PLAYER_W / 2 - BIRD_W / 2;
+    bird.y = body.y - BIRD_H + 8;
+  }
+
+  if (p >= 1) {
+    const landingX = birdRide.startX;
+    const landingCx = landingX + PLAYER_W / 2;
+    const landingTop = surfaceTopAtCenter(landingCx);
+    candyWorld = true;
+    birdRide = null;
+    bird = null;
+    birdCooldown = Number.POSITIVE_INFINITY;
+    body.x = landingTop !== null ? landingX : lastSafe.x;
+    body.y = landingTop !== null ? landingTop - PLAYER_H : lastSafe.y;
+    body.prevX = body.x;
+    body.prevY = body.y;
+    body.grounded = false;
+    lastSafe = { x: body.x, y: body.y };
+    spawnSparks(body.x + PLAYER_W / 2, body.y + 10, 18);
+    showToast('Candy cloud world!');
+    speakText('Candy cloud world!', { rate: 1, pitch: 1.35 });
+    setStatus(isWeddingMode() ? 'Cloud candy world! Find your partner.' : 'Cloud candy world! Run between lollipops.');
+  }
+
+  updateParticles(dt);
   return true;
 }
 
@@ -534,6 +681,12 @@ function update(dt: number): void {
     return;
   }
 
+  if (updateBirdRide(dt)) {
+    jumpEdge = false;
+    interactEdge = false;
+    return;
+  }
+
   const left = moveCodes.has('ArrowLeft') || moveCodes.has('KeyA');
   const right = moveCodes.has('ArrowRight') || moveCodes.has('KeyD');
   const pressedInteract = interactEdge;
@@ -653,6 +806,7 @@ function update(dt: number): void {
     }
   }
 
+  updateBird(dt);
   updateParticles(dt);
 }
 
@@ -699,6 +853,15 @@ function renderFrame(alpha: number): void {
       phase: weddingEvent?.phase ?? 'idle',
       phaseT: weddingEvent?.t ?? 0,
       colorIndex: weddingEvent?.colorIndex ?? chain.count % 5,
+    } : undefined,
+    candyWorld,
+    skyRideT: birdRide ? clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1) : 0,
+    bird: bird ? {
+      x: bird.x,
+      y: bird.y,
+      dir: bird.dir,
+      wingT: bird.wingT,
+      carrying: birdRide !== null,
     } : undefined,
     particles,
   };
