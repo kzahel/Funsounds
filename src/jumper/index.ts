@@ -71,6 +71,7 @@ const FISH_W = 82;
 const FISH_H = 34;
 const FISH_SPEED = 76;
 const UNDERWATER_RETURN_DUR = 2.4;
+const LANTERN_FISH_SPEED = 62;
 const SWIM_ACCEL = 920;
 const SWIM_DRAG = 5.4;
 const SWIM_MAX_X = 230;
@@ -140,6 +141,7 @@ interface UnderwaterReturn {
   startY: number;
   fishDir: number;
   target: 'player' | 'buddy';
+  returnTo: 'cave' | 'underwater';
   buddyIndex?: number;
 }
 
@@ -187,6 +189,7 @@ let undergroundReturn: UndergroundReturn | null = null;
 let tarantulas: TarantulaState[] = [];
 let tarantulaCooldown = 0;
 let underwaterWorld = false;
+let deepSeaWorld = false;
 let fish: FishState | null = null;
 let fishCooldown = 0;
 let underwaterReturn: UnderwaterReturn | null = null;
@@ -409,6 +412,7 @@ function buildLevel(): void {
   tarantulas = [];
   tarantulaCooldown = 0;
   underwaterWorld = false;
+  deepSeaWorld = false;
   fish = null;
   fishCooldown = 0;
   underwaterReturn = null;
@@ -428,7 +432,7 @@ function hasBuddyChain(): boolean {
 }
 
 function weddingPartnerKind(): WeddingPartnerKind {
-  return undergroundWorld || underwaterWorld ? 'fish' : 'buddy';
+  return undergroundWorld || underwaterWorld || deepSeaWorld ? 'fish' : 'buddy';
 }
 
 function weddingBabySpecies(kind: WeddingPartnerKind): BuddySpecies {
@@ -502,12 +506,12 @@ function resetBirdTrip(side: BirdTripSide): void {
 }
 
 function noteBirdTripSide(side: BirdTripSide): void {
-  if (!hasBuddyChain() || candyWorld || undergroundWorld || underwaterWorld || birdTripSide === side) return;
+  if (!hasBuddyChain() || candyWorld || undergroundWorld || underwaterWorld || deepSeaWorld || birdTripSide === side) return;
   resetBirdTrip(side);
 }
 
 function updateBirdTripSide(cx: number): void {
-  if (!hasBuddyChain() || candyWorld || undergroundWorld || underwaterWorld || level.leftGoalX === undefined) return;
+  if (!hasBuddyChain() || candyWorld || undergroundWorld || underwaterWorld || deepSeaWorld || level.leftGoalX === undefined) return;
   if (cx <= level.leftGoalX) noteBirdTripSide('left');
   else if (cx >= level.goalX) noteBirdTripSide('right');
 }
@@ -521,7 +525,7 @@ function birdTripHasStarted(): boolean {
 }
 
 function canSpawnBird(): boolean {
-  return hasBuddyChain() && !candyWorld && !undergroundWorld && !underwaterWorld && !birdRide && !weddingEvent && phase === 'playing';
+  return hasBuddyChain() && !candyWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && !birdRide && !weddingEvent && phase === 'playing';
 }
 
 function spawnBird(): void {
@@ -807,7 +811,7 @@ function spawnFish(): void {
   const dir = Math.random() < 0.5 ? 1 : -1;
   fish = {
     x: body.x + (dir > 0 ? -430 : 520),
-    y: GROUND_Y - 130 - Math.random() * 60,
+    y: deepSeaWorld ? GROUND_Y - 170 - Math.random() * 110 : GROUND_Y - 130 - Math.random() * 60,
     dir,
     t: Math.random() * Math.PI * 2,
   };
@@ -815,7 +819,8 @@ function spawnFish(): void {
 
 function startFishRide(): void {
   if (!fish || underwaterReturn) return;
-  underwaterReturn = { t: 0, startX: body.x, startY: body.y, fishDir: fish.dir, target: 'player' };
+  const returnTo = deepSeaWorld ? 'underwater' : 'cave';
+  underwaterReturn = { t: 0, startX: body.x, startY: body.y, fishDir: fish.dir, target: 'player', returnTo };
   body.vx = 0;
   body.vy = 0;
   body.grounded = false;
@@ -823,9 +828,9 @@ function startFishRide(): void {
   fish.x = body.x + PLAYER_W / 2 - FISH_W / 2;
   fish.y = body.y - FISH_H + 18;
   spawnSparks(body.x + PLAYER_W / 2, body.y + PLAYER_H * 0.4, 14);
-  showToast('Fish ride!');
-  speakText('Fish ride!', { rate: 1.05, pitch: 1.25 });
-  setStatus('The fish is swimming you back up to the cave.');
+  showToast(deepSeaWorld ? 'Lantern fish!' : 'Fish ride!');
+  speakText(deepSeaWorld ? 'Lantern fish!' : 'Fish ride!', { rate: 1.05, pitch: 1.25 });
+  setStatus(deepSeaWorld ? 'The lantern fish is swimming you back to the reef.' : 'The fish is swimming you back up to the cave.');
 }
 
 function startFishBuddyRide(buddyIndex: number, buddyRender: BuddyRender): void {
@@ -836,6 +841,7 @@ function startFishBuddyRide(buddyIndex: number, buddyRender: BuddyRender): void 
     startY: buddyRender.y,
     fishDir: fish.dir,
     target: 'buddy',
+    returnTo: deepSeaWorld ? 'underwater' : 'cave',
     buddyIndex,
   };
   const buddyScale = buddyRender.scale ?? 1;
@@ -843,9 +849,9 @@ function startFishBuddyRide(buddyIndex: number, buddyRender: BuddyRender): void 
   fish.y = buddyRender.y - FISH_H + 18;
   chain.carryBuddy(buddyIndex, buddyRender.x, buddyRender.y, fish.dir, -180);
   spawnSparks(buddyRender.x + PLAYER_W * buddyScale / 2, buddyRender.y + PLAYER_H * buddyScale * 0.45, 12);
-  showToast('Buddy fish ride!');
-  speakText('Buddy fish ride!', { rate: 1.05, pitch: 1.25 });
-  setStatus('The fish is swimming your buddy away.');
+  showToast(deepSeaWorld ? 'Lantern fish got a buddy!' : 'Buddy fish ride!');
+  speakText(deepSeaWorld ? 'Lantern fish got a buddy!' : 'Buddy fish ride!', { rate: 1.05, pitch: 1.25 });
+  setStatus(deepSeaWorld ? 'The lantern fish is swimming your buddy away.' : 'The fish is swimming your buddy away.');
 }
 
 function updateUnderwaterReturn(dt: number): boolean {
@@ -890,6 +896,7 @@ function updateUnderwaterReturn(dt: number): boolean {
     const rideTarget = underwaterReturn.target;
     const buddyIndex = underwaterReturn.buddyIndex;
     const landingX = underwaterReturn.startX;
+    const returnTo = underwaterReturn.returnTo;
     const top = platformTopAtCenter(landingX + PLAYER_W / 2);
     underwaterReturn = null;
     fish = null;
@@ -902,9 +909,27 @@ function updateUnderwaterReturn(dt: number): boolean {
       speakText('A buddy swam away!', { rate: 1, pitch: 1.2 });
       setStatus('The other buddies hop forward to fill the trail.');
       updateHud();
+    } else if (returnTo === 'underwater') {
+      fishCooldown = 0.8 + Math.random() * 1.2;
+      deepSeaWorld = false;
+      underwaterWorld = true;
+      undergroundWorld = false;
+      body.x = top !== null ? landingX : lastSafe.x;
+      body.y = top !== null ? top - PLAYER_H : lastSafe.y;
+      body.prevX = body.x;
+      body.prevY = body.y;
+      body.vx = 0;
+      body.vy = 0;
+      body.grounded = false;
+      lastSafe = { x: body.x, y: body.y };
+      spawnSparks(body.x + PLAYER_W / 2, body.y + 8, 18);
+      showToast('Back to the reef!');
+      speakText('Back to the reef!', { rate: 1, pitch: 1.15 });
+      setStatus('Back underwater. Touch a fish to swim up to the cave.');
     } else {
       fishCooldown = 0;
       underwaterWorld = false;
+      deepSeaWorld = false;
       undergroundWorld = true;
       snake = null;
       snakeCooldown = 1.2;
@@ -930,7 +955,7 @@ function updateUnderwaterReturn(dt: number): boolean {
 }
 
 function updateFish(dt: number): void {
-  if (!underwaterWorld || underwaterReturn) return;
+  if ((!underwaterWorld && !deepSeaWorld) || underwaterReturn) return;
 
   if (!fish) {
     fishCooldown -= dt;
@@ -939,8 +964,8 @@ function updateFish(dt: number): void {
   }
 
   fish.t += dt * 6;
-  fish.x += fish.dir * FISH_SPEED * dt;
-  fish.y += Math.sin(fish.t) * 12 * dt;
+  fish.x += fish.dir * (deepSeaWorld ? LANTERN_FISH_SPEED : FISH_SPEED) * dt;
+  fish.y += Math.sin(fish.t) * (deepSeaWorld ? 18 : 12) * dt;
 
   if (fish.x < body.x - 760 || fish.x > body.x + 900) {
     fish = null;
@@ -1311,6 +1336,7 @@ function enterUndergroundWorld(): void {
   candyWorld = false;
   undergroundWorld = true;
   underwaterWorld = false;
+  deepSeaWorld = false;
   bird = null;
   birdRide = null;
   fish = null;
@@ -1331,6 +1357,7 @@ function leaveCandyWorld(): void {
   candyWorld = false;
   undergroundWorld = false;
   underwaterWorld = false;
+  deepSeaWorld = false;
   bird = null;
   birdRide = null;
   snake = null;
@@ -1351,6 +1378,7 @@ function enterUnderwaterWorld(): void {
   candyWorld = false;
   undergroundWorld = false;
   underwaterWorld = true;
+  deepSeaWorld = false;
   snake = null;
   undergroundReturn = null;
   tarantulas = [];
@@ -1364,16 +1392,38 @@ function enterUnderwaterWorld(): void {
   setStatus('Underwater world! Touch a fish to swim back up to the cave.');
 }
 
+function enterDeepSeaWorld(): void {
+  candyWorld = false;
+  undergroundWorld = false;
+  underwaterWorld = false;
+  deepSeaWorld = true;
+  snake = null;
+  undergroundReturn = null;
+  tarantulas = [];
+  tarantulaCooldown = 0;
+  fish = null;
+  fishCooldown = 0.9 + Math.random() * 1.4;
+  respawnTo(lastSafe);
+  spawnDust(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 8);
+  showToast('Deep sea!');
+  speakText('Deep sea!', { rate: 0.95, pitch: 0.85 });
+  setStatus('Deep sea! Find a glowing lantern fish to swim back up.');
+}
+
 function handlePitFall(): void {
   if (candyWorld) {
     leaveCandyWorld();
     return;
   }
-  if (underwaterWorld) {
+  if (deepSeaWorld) {
     respawnTo(lastSafe);
     fishCooldown = Math.min(fishCooldown, 1);
-    showToast('Back to the reef ledge.');
-    setStatus('Touch a fish to swim back up to the cave.');
+    showToast('Back to the deep ledge.');
+    setStatus('Find a lantern fish to swim back up.');
+    return;
+  }
+  if (underwaterWorld) {
+    enterDeepSeaWorld();
     return;
   }
   if (undergroundWorld) {
@@ -1491,7 +1541,7 @@ function update(dt: number): void {
     LOOK_FRAC_SHIFT_PER_SEC * dt,
   );
 
-  const res = underwaterWorld
+  const res = underwaterWorld || deepSeaWorld
     ? stepSwimBody(body, solids, { ...input, downHeld: lockForWeddingEvent ? false : downHeld }, dt)
     : stepBody(body, solids, input, tuning, dt);
 
@@ -1650,6 +1700,7 @@ function renderFrame(alpha: number): void {
     undergroundLiftT: undergroundReturn ? clamp(undergroundReturn.t / UNDERGROUND_RETURN_DUR, 0, 1) : 0,
     underwaterWorld,
     underwaterLiftT: underwaterReturn ? clamp(underwaterReturn.t / UNDERWATER_RETURN_DUR, 0, 1) : 0,
+    deepSeaWorld,
     bird: bird ? {
       x: bird.x,
       y: bird.y,
@@ -1678,6 +1729,7 @@ function renderFrame(alpha: number): void {
       dir: fish.dir,
       t: fish.t,
       carrying: underwaterReturn !== null,
+      kind: deepSeaWorld ? 'lantern' : 'fish',
     } : undefined,
     particles,
   };

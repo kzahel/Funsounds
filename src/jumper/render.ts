@@ -79,6 +79,7 @@ export interface FishRender {
   dir: number;
   t: number;
   carrying: boolean;
+  kind: 'fish' | 'lantern';
 }
 
 export interface Scene {
@@ -101,6 +102,7 @@ export interface Scene {
   undergroundLiftT: number;
   underwaterWorld: boolean;
   underwaterLiftT: number;
+  deepSeaWorld: boolean;
   bird?: BirdRender;
   snake?: SnakeRender;
   tarantulas: TarantulaRender[];
@@ -157,13 +159,14 @@ export function render(view: View, scene: Scene): void {
     scene.undergroundLiftT,
     scene.underwaterWorld,
     scene.underwaterLiftT,
+    scene.deepSeaWorld,
   );
 
   // World space transform (scale + camera), folded with device pixel ratio.
   const s = view.scale * dpr;
   ctx.setTransform(s, 0, 0, s, -view.cameraX * s, 0);
 
-  drawPlatforms(ctx, scene.level.platforms, theme, scene.candyWorld, scene.undergroundWorld, scene.underwaterWorld);
+  drawPlatforms(ctx, scene.level.platforms, theme, scene.candyWorld, scene.undergroundWorld, scene.underwaterWorld, scene.deepSeaWorld);
   if (scene.level.leftGoalX !== undefined) {
     drawEndpoint(ctx, scene.level.leftGoalX, view.time, 0, -1, scene.candyWorld);
   }
@@ -171,8 +174,10 @@ export function render(view: View, scene: Scene): void {
   if (scene.wedding) drawWeddingDecor(ctx, scene.level, scene.wedding, view.time);
   if (scene.undergroundWorld) drawUndergroundDecor(ctx, scene.level, view.time);
   if (scene.underwaterWorld) drawUnderwaterDecor(ctx, scene.level, view.time);
+  if (scene.deepSeaWorld) drawDeepSeaDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
-    if (scene.underwaterWorld) drawUnderwaterObstacle(ctx, b);
+    if (scene.deepSeaWorld) drawDeepSeaObstacle(ctx, b);
+    else if (scene.underwaterWorld) drawUnderwaterObstacle(ctx, b);
     else if (scene.undergroundWorld) drawCaveObstacle(ctx, b);
     else if (scene.candyWorld) drawCandyObstacle(ctx, b);
     else drawBarrel(ctx, b);
@@ -249,12 +254,17 @@ function drawBackground(
   undergroundLiftT: number,
   underwaterWorld: boolean,
   underwaterLiftT: number,
+  deepSeaWorld: boolean,
 ): void {
   const { ctx, dpr, cssW, cssH } = view;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (underwaterWorld) {
+  if (deepSeaWorld) {
+    sky.addColorStop(0, '#010717');
+    sky.addColorStop(0.55, '#021224');
+    sky.addColorStop(1, '#00030a');
+  } else if (underwaterWorld) {
     sky.addColorStop(0, '#063b5b');
     sky.addColorStop(0.48, '#075c78');
     sky.addColorStop(1, '#0b263f');
@@ -273,16 +283,17 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (underwaterWorld) drawUnderwaterBackground(view);
+  if (deepSeaWorld) drawDeepSeaBackground(view);
+  else if (underwaterWorld) drawUnderwaterBackground(view);
   else if (undergroundWorld) drawCaveBackground(view);
-  if (!candyWorld && !undergroundWorld && !underwaterWorld && theme.stars) drawStars(view);
-  if (!undergroundWorld && !underwaterWorld) {
+  if (!candyWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && theme.stars) drawStars(view);
+  if (!undergroundWorld && !underwaterWorld && !deepSeaWorld) {
     if (!candyWorld) drawCelestial(view, theme);
     else drawCandySky(view);
   }
 
   // Drifting clouds (slow parallax).
-  if (!undergroundWorld && !underwaterWorld) {
+  if (!undergroundWorld && !underwaterWorld && !deepSeaWorld) {
     const cloudShift = (view.cameraX * 0.15 + view.time * 8) % (cssW + 240);
     ctx.fillStyle = candyWorld ? 'rgba(255,255,255,0.96)' : theme.cloud;
     const cloudCount = candyWorld ? 7 : 4;
@@ -295,7 +306,10 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (underwaterWorld) {
+  if (deepSeaWorld) {
+    hills(ctx, view, '#020815', 0.18, groundScreenY + 18, 92, 260);
+    hills(ctx, view, '#01040b', 0.38, groundScreenY + 32, 68, 210);
+  } else if (underwaterWorld) {
     hills(ctx, view, '#0a3650', 0.2, groundScreenY + 18, 72, 250);
     hills(ctx, view, '#063045', 0.42, groundScreenY + 30, 54, 190);
   } else if (undergroundWorld) {
@@ -481,6 +495,46 @@ function drawUnderwaterBackground(view: View): void {
   ctx.restore();
 }
 
+function drawDeepSeaBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+
+  for (let i = 0; i < 36; i++) {
+    const x = ((i * 109 - view.cameraX * 0.07) % (cssW + 160)) - 60;
+    const y = ((i * 71 + view.time * (5 + (i % 4))) % (cssH + 120)) - 60;
+    const glow = 0.25 + 0.25 * Math.sin(view.time * 2.4 + i * 1.8);
+    ctx.fillStyle = `rgba(100,230,255,${glow})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.2 + (i % 3) * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const x = ((i * 251 - view.cameraX * 0.04) % (cssW + 300)) - 120;
+    const y = cssH * (0.2 + (i % 4) * 0.16);
+    const grad = ctx.createRadialGradient(x, y, 6, x, y, 140);
+    grad.addColorStop(0, 'rgba(80,220,255,0.12)');
+    grad.addColorStop(1, 'rgba(80,220,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, 140, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let x = -80 - ((view.cameraX * 0.2) % 120); x < cssW + 120; x += 120) {
+    const h = 50 + ((Math.floor(x) % 5 + 5) % 5) * 18;
+    ctx.beginPath();
+    ctx.moveTo(x, cssH);
+    ctx.quadraticCurveTo(x + 22, cssH - h * 0.7, x + 9, cssH - h);
+    ctx.quadraticCurveTo(x + 46, cssH - h * 0.35, x + 38, cssH);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawCaveLift(view: View, t: number): void {
   const { ctx, cssW, cssH } = view;
   const a = Math.sin(Math.PI * clampNum(t, 0, 1));
@@ -607,8 +661,13 @@ function drawPlatforms(
   candyWorld: boolean,
   undergroundWorld: boolean,
   underwaterWorld: boolean,
+  deepSeaWorld: boolean,
 ): void {
   for (const p of platforms) {
+    if (deepSeaWorld) {
+      drawDeepSeaPlatform(ctx, p);
+      continue;
+    }
     if (underwaterWorld) {
       drawUnderwaterPlatform(ctx, p);
       continue;
@@ -639,6 +698,31 @@ function drawPlatforms(
       ctx.fill();
     }
   }
+}
+
+function drawDeepSeaPlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#061223';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#020711';
+    ctx.fillRect(p.x, p.y + p.h - 12, p.w, 12);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 8, 9);
+    ctx.fillStyle = '#061223';
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#143044';
+  ctx.fillRect(p.x, p.y, p.w, 12);
+  ctx.fillStyle = '#76fff0';
+  for (let x = p.x + 28; x < p.x + p.w; x += 86) {
+    const glow = 0.55 + ((Math.floor(x) % 3 + 3) % 3) * 0.13;
+    ctx.globalAlpha = glow;
+    ctx.beginPath();
+    ctx.arc(x, p.y + 6, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawUnderwaterPlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
@@ -804,6 +888,40 @@ function drawUnderwaterObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void 
     ctx.fillStyle = '#fff6d4';
     ctx.beginPath();
     ctx.arc(b.x + b.w / 2, b.y + b.h * 0.56, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawDeepSeaObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  if (b.id % 2 === 0) {
+    ctx.fillStyle = '#10233a';
+    roundRect(ctx, b.x + 2, b.y + 8, b.w - 4, b.h - 8, 9);
+    ctx.fill();
+    ctx.strokeStyle = '#2ef3e6';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const y = b.y + 14 + i * Math.max(8, b.h / 5);
+      ctx.globalAlpha = 0.35 + i * 0.12;
+      ctx.beginPath();
+      ctx.moveTo(b.x + 9, y);
+      ctx.quadraticCurveTo(b.x + b.w / 2, y - 8, b.x + b.w - 9, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = '#090d18';
+    ctx.beginPath();
+    ctx.moveTo(b.x + b.w * 0.12, b.y + b.h);
+    ctx.lineTo(b.x + b.w * 0.3, b.y + b.h * 0.28);
+    ctx.lineTo(b.x + b.w * 0.46, b.y + b.h);
+    ctx.lineTo(b.x + b.w * 0.62, b.y + b.h * 0.18);
+    ctx.lineTo(b.x + b.w * 0.86, b.y + b.h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7dffdc';
+    ctx.beginPath();
+    ctx.arc(b.x + b.w * 0.48, b.y + b.h * 0.48, 4, 0, Math.PI * 2);
+    ctx.arc(b.x + b.w * 0.64, b.y + b.h * 0.36, 3, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -1074,6 +1192,112 @@ function drawUnderwaterDecor(ctx: CanvasRenderingContext2D, level: Level, time: 
       drawTinyFish(ctx, x, p.y - 54 - (i % 3) * 18, time + i);
     }
   }
+}
+
+function drawDeepSeaDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  let jelly = 0;
+  let spiders = 0;
+  for (let i = 0; i < level.platforms.length; i++) {
+    const p = level.platforms[i];
+    if (p.w < 120) continue;
+
+    if (jelly < 9) {
+      const slots = Math.min(2, Math.max(1, Math.floor(p.w / 320)));
+      for (let s = 0; s < slots && jelly < 9; s++) {
+        const x = p.x + 62 + ((i * 127 + s * 173) % Math.max(1, p.w - 124));
+        const y = p.y - 118 - ((i + s) % 3) * 34 + Math.sin(time * 1.4 + i + s) * 9;
+        drawJellyfish(ctx, x, y, time + i * 0.6 + s, jelly);
+        jelly++;
+      }
+    }
+
+    if (i % 2 === 0 && spiders < 4 && p.w >= 180) {
+      const span = Math.max(1, p.w - 110);
+      const crawl = (time * 23 + i * 61) % span;
+      const x = p.x + 56 + crawl;
+      drawDeepSeaSpider(ctx, x, p.y, time + i);
+      spiders++;
+    }
+  }
+}
+
+function drawJellyfish(ctx: CanvasRenderingContext2D, x: number, y: number, time: number, colorIndex: number): void {
+  const colors = ['#7dffdc', '#8fd6ff', '#ff8fc4'];
+  const color = colors[colorIndex % colors.length];
+  const pulse = 1 + Math.sin(time * 3.2) * 0.08;
+
+  ctx.save();
+  const glow = ctx.createRadialGradient(x, y, 4, x, y, 46);
+  glow.addColorStop(0, color);
+  glow.addColorStop(1, 'rgba(80,220,255,0)');
+  ctx.globalAlpha = 0.24;
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, 46, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.86;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 20 * pulse, 14 * pulse, 0, Math.PI, 0);
+  ctx.lineTo(x + 20 * pulse, y + 8);
+  ctx.quadraticCurveTo(x, y + 18, x - 20 * pulse, y + 8);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  for (let i = -2; i <= 2; i++) {
+    const sway = Math.sin(time * 2.4 + i) * 8;
+    ctx.beginPath();
+    ctx.moveTo(x + i * 7, y + 9);
+    ctx.quadraticCurveTo(x + i * 7 + sway, y + 28, x + i * 4 - sway * 0.4, y + 49);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDeepSeaSpider(ctx: CanvasRenderingContext2D, x: number, groundY: number, time: number): void {
+  const step = Math.sin(time * 8);
+  ctx.save();
+  ctx.translate(x, groundY - 5);
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath();
+  ctx.ellipse(0, 4, 28, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#24364a';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const y = -18 + i * 7;
+      const reach = 24 + i * 5;
+      const lift = step * (i % 2 === 0 ? 3 : -3);
+      ctx.beginPath();
+      ctx.moveTo(side * 8, y);
+      ctx.quadraticCurveTo(side * 26, y - 16 + lift, side * reach, y + 7);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = '#111b2d';
+  ctx.strokeStyle = '#52f4ff';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(0, -14, 18, 12, 0, 0, Math.PI * 2);
+  ctx.ellipse(12, -23, 9, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#b8fff4';
+  for (const eye of [8, 14]) {
+    ctx.beginPath();
+    ctx.arc(eye, -26, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawSeaweed(ctx: CanvasRenderingContext2D, x: number, groundY: number, time: number): void {
@@ -1351,6 +1575,11 @@ function drawTrampoline(ctx: CanvasRenderingContext2D, snake: SnakeRender): void
 
 function drawFish(ctx: CanvasRenderingContext2D, fish: FishRender): void {
   const swim = Math.sin(fish.t);
+  if (fish.kind === 'lantern') {
+    drawLanternFish(ctx, fish, swim);
+    return;
+  }
+
   ctx.save();
   ctx.translate(fish.x + 41, fish.y + 17);
   ctx.scale(fish.dir, 1);
@@ -1391,6 +1620,80 @@ function drawFish(ctx: CanvasRenderingContext2D, fish: FishRender): void {
 
   if (fish.carrying) {
     ctx.strokeStyle = 'rgba(210,250,255,0.82)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 5, 33, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawLanternFish(ctx: CanvasRenderingContext2D, fish: FishRender, swim: number): void {
+  ctx.save();
+
+  const glowX = fish.x + (fish.dir > 0 ? 78 : 4);
+  const glowY = fish.y + 6 + swim * 2;
+  const glow = ctx.createRadialGradient(glowX, glowY, 2, glowX, glowY, 70);
+  glow.addColorStop(0, 'rgba(190,255,180,0.85)');
+  glow.addColorStop(0.35, 'rgba(125,255,220,0.25)');
+  glow.addColorStop(1, 'rgba(125,255,220,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(glowX, glowY, 70, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(fish.x + 41, fish.y + 17);
+  ctx.scale(fish.dir, 1);
+
+  ctx.fillStyle = '#111b32';
+  ctx.strokeStyle = '#55f6ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 35, 17, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#24364f';
+  ctx.beginPath();
+  ctx.moveTo(-30, 0);
+  ctx.lineTo(-54, -18 + swim * 5);
+  ctx.lineTo(-46, 0);
+  ctx.lineTo(-54, 18 - swim * 5);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#7dffdc';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(16, -13);
+  ctx.quadraticCurveTo(30, -34 + swim * 2, 43, -23 + swim * 3);
+  ctx.stroke();
+  ctx.fillStyle = '#d7ff8a';
+  ctx.beginPath();
+  ctx.arc(46, -23 + swim * 3, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(19, -4, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#0a0d12';
+  ctx.beginPath();
+  ctx.arc(21, -4, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#7dffdc';
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-8 + i * 6, -12);
+    ctx.lineTo(-16 + i * 5, 11);
+    ctx.stroke();
+  }
+
+  if (fish.carrying) {
+    ctx.strokeStyle = 'rgba(125,255,220,0.82)';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(0, 5, 33, 0.1 * Math.PI, 0.9 * Math.PI);
@@ -1582,6 +1885,7 @@ function drawWeddingFishPartner(
     dir: partnerFacing,
     t: time * 3.4,
     carrying: false,
+    kind: 'fish',
   });
 
   ctx.save();
