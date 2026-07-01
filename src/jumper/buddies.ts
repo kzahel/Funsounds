@@ -17,6 +17,8 @@ const FADE = 0.45; // seconds for a new buddy to fade in
 export interface Buddy {
   colorIndex: number;
   bornAt: number;
+  startScale: number;
+  growDuration: number;
   idx: number; // foothold it's resting on / hopping to
   x: number;
   y: number;
@@ -58,12 +60,21 @@ export class BuddyChain {
   }
 
   /** Add a buddy at the back of the chain. */
-  add(colorIndex: number, dir: number, now: number, px: number, py: number): void {
+  add(
+    colorIndex: number,
+    dir: number,
+    now: number,
+    px: number,
+    py: number,
+    growth: { startScale: number; duration: number } | null = null,
+  ): void {
     const idx = Math.max(0, this.footholds.length - 1 - (this.list.length + 1) * BUDDY_FOOTHOLD_STEP);
     const f = this.footholds[idx] ?? { x: px, y: py };
     this.list.push({
       colorIndex,
       bornAt: now,
+      startScale: growth?.startScale ?? 1,
+      growDuration: growth?.duration ?? 0,
       idx,
       x: f.x,
       y: f.y,
@@ -123,6 +134,8 @@ export class BuddyChain {
     return this.list.map((bd) => {
       const grounded = bd.hopT >= 1;
       const vy = grounded ? 0 : (-Math.cos(Math.PI * bd.hopT) * bd.peak * Math.PI) / HOP_DUR;
+      const age = (now - bd.bornAt) / 1000;
+      const growT = bd.growDuration > 0 ? clamp(age / bd.growDuration, 0, 1) : 1;
       return {
         x: bd.x,
         y: bd.y,
@@ -131,6 +144,7 @@ export class BuddyChain {
         grounded,
         colorIndex: bd.colorIndex,
         alpha: clamp((now - bd.bornAt) / 1000 / FADE, 0, 1),
+        scale: bd.startScale + (1 - bd.startScale) * growT,
       };
     });
   }

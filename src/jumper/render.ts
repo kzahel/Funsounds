@@ -26,6 +26,7 @@ export interface BuddyRender {
   grounded: boolean;
   colorIndex: number;
   alpha: number;
+  scale?: number;
 }
 
 export type WeddingPhase = 'idle' | 'kiss' | 'sparkle' | 'baby';
@@ -77,7 +78,8 @@ const FIXED = {
 const PLAYER_STYLE: CharStyle = { body: FIXED.body, bodyDark: FIXED.bodyDark, belly: FIXED.belly };
 const PARTNER_STYLE: CharStyle = { body: '#ff8fc4', bodyDark: '#d65f9b', belly: '#ffd9ec' };
 const WEDDING_KISS_DUR = 0.9;
-const WEDDING_BABY_GROW_DUR = 2.25;
+const WEDDING_BABY_POP_DUR = 1.35;
+const WEDDING_BABY_START_SCALE = 0.38;
 
 // Distinct, friendly colors for the trailing buddies.
 export const BUDDY_STYLES: CharStyle[] = [
@@ -111,7 +113,10 @@ export function render(view: View, scene: Scene): void {
   for (let i = scene.buddies.length - 1; i >= 0; i--) {
     const bd = scene.buddies[i];
     const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
-    drawCharacter(ctx, scene.level, bd.x, bd.y, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false);
+    const buddyScale = bd.scale ?? 1;
+    const bx = bd.x + (PLAYER_W * (1 - buddyScale)) / 2;
+    const by = bd.y + PLAYER_H * (1 - buddyScale);
+    drawCharacter(ctx, scene.level, bx, by, bd.vy, bd.grounded, bd.facing, view.time, style, bd.alpha, false, buddyScale);
   }
   if (scene.wedding) {
     drawWeddingPartnerAndEffects(ctx, scene.level, scene.wedding, scene.px, scene.py, view.time);
@@ -482,10 +487,10 @@ function drawGrowingBaby(
   playerX: number,
   time: number,
 ): void {
-  const grow = smoothstep(clampNum(wedding.phaseT / WEDDING_BABY_GROW_DUR, 0, 1));
-  const scale = 0.34 + 0.66 * grow;
+  const pop = smoothstep(clampNum(wedding.phaseT / WEDDING_BABY_POP_DUR, 0, 1));
+  const scale = 0.32 + (WEDDING_BABY_START_SCALE - 0.32) * pop;
   const midX = (playerX + PLAYER_W / 2 + wedding.partnerX + PLAYER_W / 2) / 2;
-  const hop = Math.max(0, Math.sin(time * 9)) * (16 - 7 * grow);
+  const hop = Math.max(0, Math.sin(time * 9)) * (16 - 4 * pop);
   const topX = midX - (PLAYER_W * scale) / 2;
   const topY = GROUND_Y - PLAYER_H * scale - hop;
   const style = BUDDY_STYLES[wedding.colorIndex % BUDDY_STYLES.length];

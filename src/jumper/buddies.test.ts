@@ -76,6 +76,16 @@ describe('BuddyChain', () => {
     expect(xs[2] - xs[1]).toBeGreaterThan(40);
   });
 
+  it('can grow a tiny buddy over a full minute while following', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    chain.add(0, 1, 0, 0, GROUND, { startScale: 0.38, duration: 60 });
+
+    expect(chain.renders(0)[0].scale).toBeCloseTo(0.38, 5);
+    expect(chain.renders(30_000)[0].scale).toBeCloseTo(0.69, 5);
+    expect(chain.renders(60_000)[0].scale).toBeCloseTo(1, 5);
+  });
+
   it('regroups buddies onto the ground after a respawn', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);

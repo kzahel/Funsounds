@@ -44,7 +44,9 @@ const LOOK_FRAC_SHIFT_PER_SEC = 0.7; // full left/right bias change in ~0.3s
 const WEDDING_INTERACT_DIST = 82;
 const WEDDING_KISS_DUR = 0.9;
 const WEDDING_BABY_WAIT = 0.9;
-const WEDDING_BABY_GROW_DUR = 2.25;
+const WEDDING_BABY_POP_DUR = 1.35;
+const WEDDING_BABY_START_SCALE = 0.38;
+const WEDDING_BABY_GROW_DUR = 60;
 const tuning: Tuning = DEFAULT_TUNING;
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
@@ -83,6 +85,8 @@ let celebrateT = 0;
 let buddyDir = 1; // +1 heading to the right flag, -1 to the left flag
 const chain = new BuddyChain();
 let lastSafe = { x: 0, y: 0 }; // last ground-ledge stance, for respawns
+let buddyReachedRightPlatform = false; // unlocks first-buddy collection at the start flag
+let weddingReadyForSmooch = true;
 let weddingEvent: WeddingEvent | null = null;
 
 // Input.
@@ -281,6 +285,8 @@ function buildLevel(): void {
   celebrateT = 0;
   buddyDir = 1;
   lastSafe = { x: level.startX, y: level.startY };
+  buddyReachedRightPlatform = false;
+  weddingReadyForSmooch = true;
   weddingEvent = null;
   chain.reset(level.startX, level.startY);
 }
@@ -295,6 +301,10 @@ function isWeddingMode(): boolean {
 
 function hasBuddyChain(): boolean {
   return isBuddyChallenge() || isWeddingMode();
+}
+
+function isRightGoalPlatform(solid: Solid | null | undefined): boolean {
+  return !!solid && !isBarrel(solid.ref) && solid.x <= level.goalX && solid.x + solid.w >= level.goalX;
 }
 
 function weddingPartnerCenter(): { x: number; y: number } | null {
@@ -313,8 +323,24 @@ function isNearWeddingPartner(): boolean {
   return Math.hypot(cx - partner.x, cy - partner.y) <= WEDDING_INTERACT_DIST;
 }
 
+function weddingInteractHint(): string {
+  if (!weddingReadyForSmooch) return 'Return to the left flag first.';
+  return isNearWeddingPartner() ? 'Press Down by your partner.' : 'Stand next to your partner after the flag.';
+}
+
+function maybeReadyWeddingSmooch(cx: number): boolean {
+  if (!isWeddingMode() || weddingReadyForSmooch || weddingEvent || level.leftGoalX === undefined || cx >= level.leftGoalX) {
+    return false;
+  }
+  weddingReadyForSmooch = true;
+  showToast('Ready for another smoochie!');
+  speakText('Ready for another smoochie!', { rate: 1.05, pitch: 1.3 });
+  setStatus('Ready for another smoochie! Run to your partner.');
+  return true;
+}
+
 function startWeddingSmooch(): boolean {
-  if (!isWeddingMode() || weddingEvent || !isNearWeddingPartner()) return false;
+  if (!isWeddingMode() || weddingEvent || !weddingReadyForSmooch || !isNearWeddingPartner()) return false;
   const partner = weddingPartnerCenter();
   if (!partner) return false;
 
@@ -322,6 +348,7 @@ function startWeddingSmooch(): boolean {
   body.vy = 0;
   body.jumping = false;
   facing = body.x + body.w / 2 <= partner.x ? 1 : -1;
+  weddingReadyForSmooch = false;
   weddingEvent = { phase: 'kiss', t: 0, colorIndex: chain.count % 5 };
   sfx.smooch();
   spawnSparks((body.x + body.w / 2 + partner.x) / 2, body.y + 14, 10);
@@ -349,21 +376,25 @@ function updateWeddingEvent(dt: number): void {
     return;
   }
 
-  if (weddingEvent.phase === 'baby' && weddingEvent.t >= WEDDING_BABY_GROW_DUR) {
+  if (weddingEvent.phase === 'baby' && weddingEvent.t >= WEDDING_BABY_POP_DUR) {
     const colorIndex = weddingEvent.colorIndex;
     weddingEvent = null;
-    chain.add(colorIndex, facing, performance.now(), body.x, body.y);
+    chain.add(colorIndex, facing, performance.now(), body.x, body.y, {
+      startScale: WEDDING_BABY_START_SCALE,
+      duration: WEDDING_BABY_GROW_DUR,
+    });
     sfx.score();
     spawnSparks(body.x + PLAYER_W / 2, body.y, 14);
-    setStatus('Another smooch? Press Down by your partner.');
+    setStatus('Return to the left flag to get ready again.');
     updateHud();
   }
 }
 
-function collectBuddy(): void {
-  chain.add(chain.count % 5, buddyDir, performance.now(), body.x, body.y);
+function collectBuddy(flagDir: number): void {
+  chain.add(chain.count % 5, flagDir, performance.now(), body.x, body.y);
   sfx.score();
   spawnSparks(body.x + PLAYER_W / 2, body.y, 14);
+  buddyReachedRightPlatform = false;
   if (score > best) {
     best = score;
     saveBest(mode.id, best);
@@ -372,7 +403,7 @@ function collectBuddy(): void {
   if (chain.count >= target) {
     finalizeBuddies();
   } else {
-    buddyDir *= -1;
+    buddyDir = flagDir > 0 ? -1 : 1;
     const word = chain.count === 1 ? 'buddy' : 'buddies';
     showToast(`${chain.count} ${word}! 👫`);
     speakText(`${chain.count} ${word}`, { rate: 1, pitch: 1.25 });
@@ -508,7 +539,7 @@ function update(dt: number): void {
   const pressedInteract = interactEdge;
   interactEdge = false;
   if (pressedInteract && isWeddingMode() && !startWeddingSmooch()) {
-    setStatus('Stand next to your partner after the flag.');
+    setStatus(weddingInteractHint());
   }
 
   const lockForWeddingEvent = weddingEvent !== null;
@@ -543,6 +574,17 @@ function update(dt: number): void {
   // Remember the last safe ground-ledge stance (for follower-mode respawns).
   if (body.grounded && res.landedOn && !isBarrel(res.landedOn.ref)) {
     lastSafe = { x: body.x, y: body.y };
+  }
+  if (
+    isBuddyChallenge()
+    && chain.count === 0
+    && buddyDir > 0
+    && !buddyReachedRightPlatform
+    && body.grounded
+    && isRightGoalPlatform(res.landedOn)
+  ) {
+    buddyReachedRightPlatform = true;
+    setStatus('Return to the left flag, or touch the right flag.');
   }
   if (hasBuddyChain()) {
     chain.record(body.grounded, body.x, body.y);
@@ -584,8 +626,17 @@ function update(dt: number): void {
   // Endpoints.
   if (isBuddyChallenge()) {
     const cx = body.x + body.w / 2;
-    if (buddyDir > 0 && cx > level.goalX) collectBuddy();
-    else if (buddyDir < 0 && level.leftGoalX !== undefined && cx < level.leftGoalX) collectBuddy();
+    if (buddyDir > 0 && cx > level.goalX) collectBuddy(1);
+    else if (buddyDir < 0 && level.leftGoalX !== undefined && cx < level.leftGoalX) collectBuddy(-1);
+    else if (
+      chain.count === 0
+      && buddyDir > 0
+      && buddyReachedRightPlatform
+      && level.leftGoalX !== undefined
+      && cx < level.leftGoalX
+    ) {
+      collectBuddy(-1);
+    }
   } else if (!isWeddingMode() && body.x + body.w / 2 > level.goalX) {
     reachGoal();
   }
@@ -593,8 +644,12 @@ function update(dt: number): void {
   if (isWeddingMode()) {
     updateWeddingEvent(dt);
     if (!weddingEvent) {
-      if (isNearWeddingPartner()) setStatus('Press Down by your partner.');
-      else if (body.x + body.w / 2 > level.goalX) setStatus('Find your partner after the flag.');
+      const cx = body.x + body.w / 2;
+      if (!maybeReadyWeddingSmooch(cx)) {
+        if (!weddingReadyForSmooch) setStatus('Return to the left flag to get ready again.');
+        else if (isNearWeddingPartner()) setStatus('Press Down by your partner.');
+        else if (cx > level.goalX) setStatus('Find your partner after the flag.');
+      }
     }
   }
 

@@ -208,7 +208,6 @@ function buildBuddyCourse(levelNum: number, wedding: boolean): Level {
     level.width = x + partyGroundW;
     level.partnerX = goalX + 112;
     level.partnerY = SPAWN_Y;
-    delete level.leftGoalX;
   }
 
   return level;
