@@ -95,6 +95,14 @@ describe('BuddyChain', () => {
     expect(chain.renders(0)[0].species).toBe('fishBuddy');
   });
 
+  it('can preserve a buddy look variant when re-adding it', () => {
+    const chain = new BuddyChain();
+    chain.reset(0, GROUND);
+    chain.add(0, 1, 0, 0, GROUND, { startScale: 1, duration: 0, variantIndex: 8 });
+
+    expect(chain.renders(0)[0].variantIndex).toBe(8);
+  });
+
   it('can add a buddy by hopping in from a birth position', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);

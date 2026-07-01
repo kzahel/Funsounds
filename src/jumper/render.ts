@@ -95,6 +95,7 @@ export interface Scene {
   /** 0 = flag up, 1 = flag fully lowered (level-clear celebration). */
   flagDown: number;
   buddies: BuddyRender[];
+  worldBuddies: BuddyRender[];
   wedding?: WeddingRender;
   candyWorld: boolean;
   skyRideT: number;
@@ -191,33 +192,15 @@ export function render(view: View, scene: Scene): void {
   drawParticles(ctx, scene.particles);
   if (scene.bird) drawBird(ctx, scene.bird);
 
-  // Buddies trail behind; draw farthest-first so nearer ones overlap on top,
-  // then the player on top of all.
+  // Waiting buddies live in the current world; follower buddies trail behind.
+  for (const bd of scene.worldBuddies) {
+    drawBuddy(ctx, scene.level, bd, view.time);
+  }
+
+  // Draw the trail farthest-first so nearer ones overlap on top, then the
+  // player on top of all.
   for (let i = scene.buddies.length - 1; i >= 0; i--) {
-    const bd = scene.buddies[i];
-    const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
-    const look = BUDDY_LOOKS[bd.variantIndex % BUDDY_LOOKS.length];
-    const buddyScale = (bd.scale ?? 1) * look.size;
-    const buddyW = PLAYER_W * buddyScale * look.width;
-    const buddyH = PLAYER_H * buddyScale * look.height;
-    const bx = bd.x + (PLAYER_W - buddyW) / 2;
-    const by = bd.y + PLAYER_H - buddyH;
-    drawCharacter(
-      ctx,
-      scene.level,
-      bx,
-      by,
-      bd.vy,
-      bd.grounded,
-      bd.facing,
-      view.time,
-      style,
-      bd.alpha,
-      false,
-      buddyScale,
-      look,
-      bd.species,
-    );
+    drawBuddy(ctx, scene.level, scene.buddies[i], view.time);
   }
   if (scene.wedding) {
     drawWeddingPartnerAndEffects(ctx, scene.level, scene.wedding, scene.px, scene.py, view.time);
@@ -243,6 +226,32 @@ export function render(view: View, scene: Scene): void {
 
   // Ambient weather overlays the whole scene (screen space).
   drawWeather(view, theme);
+}
+
+function drawBuddy(ctx: CanvasRenderingContext2D, level: Level, bd: BuddyRender, time: number): void {
+  const style = BUDDY_STYLES[bd.colorIndex % BUDDY_STYLES.length];
+  const look = BUDDY_LOOKS[bd.variantIndex % BUDDY_LOOKS.length];
+  const buddyScale = (bd.scale ?? 1) * look.size;
+  const buddyW = PLAYER_W * buddyScale * look.width;
+  const buddyH = PLAYER_H * buddyScale * look.height;
+  const bx = bd.x + (PLAYER_W - buddyW) / 2;
+  const by = bd.y + PLAYER_H - buddyH;
+  drawCharacter(
+    ctx,
+    level,
+    bx,
+    by,
+    bd.vy,
+    bd.grounded,
+    bd.facing,
+    time,
+    style,
+    bd.alpha,
+    false,
+    buddyScale,
+    look,
+    bd.species,
+  );
 }
 
 function drawBackground(

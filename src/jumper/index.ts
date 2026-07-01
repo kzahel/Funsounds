@@ -30,7 +30,7 @@ import {
 } from './core';
 import { MODES, MODE_ORDER, GROUND_Y, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
 import { render, type BuddyRender, type Scene, type View, type WeddingPartnerKind } from './render';
-import { BuddyChain } from './buddies';
+import { BuddyChain, type Buddy } from './buddies';
 import type { BuddySpecies } from './buddy-looks';
 import { themeForLevel, type Theme } from './themes';
 import type { Barrel, Checkpoint, Level, ModeConfig, Particle } from './types';
@@ -82,6 +82,7 @@ const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, j
 type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
 type BirdTripSide = 'left' | 'right';
 type SnakeKind = 'snake' | 'trampoline';
+type WorldLayer = 'surface' | 'candy' | 'cave' | 'underwater' | 'deepSea';
 interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
@@ -144,6 +145,19 @@ interface UnderwaterReturn {
   returnTo: 'cave' | 'underwater';
   buddyIndex?: number;
 }
+interface StrandedBuddy {
+  id: number;
+  world: WorldLayer;
+  x: number;
+  y: number;
+  facing: number;
+  colorIndex: number;
+  variantIndex: number;
+  species: BuddySpecies;
+  bornAt: number;
+  startScale: number;
+  growDuration: number;
+}
 
 let gameActive = false;
 let mode: ModeConfig = MODES.easy;
@@ -193,6 +207,8 @@ let deepSeaWorld = false;
 let fish: FishState | null = null;
 let fishCooldown = 0;
 let underwaterReturn: UnderwaterReturn | null = null;
+let strandedBuddies: StrandedBuddy[] = [];
+let strandedBuddySeq = 0;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -416,6 +432,8 @@ function buildLevel(): void {
   fish = null;
   fishCooldown = 0;
   underwaterReturn = null;
+  strandedBuddies = [];
+  strandedBuddySeq = 0;
   chain.reset(level.startX, level.startY);
 }
 
@@ -496,6 +514,148 @@ function maybeReadyWeddingSmooch(cx: number): boolean {
 
 function overlapsRect(ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number): boolean {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function currentWorldLayer(): WorldLayer {
+  if (deepSeaWorld) return 'deepSea';
+  if (underwaterWorld) return 'underwater';
+  if (undergroundWorld) return 'cave';
+  if (candyWorld) return 'candy';
+  return 'surface';
+}
+
+function worldDisplayName(world: WorldLayer): string {
+  switch (world) {
+    case 'candy': return 'candy clouds';
+    case 'cave': return 'the cave';
+    case 'underwater': return 'the reef';
+    case 'deepSea': return 'the deep sea';
+    default: return 'the surface';
+  }
+}
+
+function strandedBuddyScale(buddy: StrandedBuddy, now: number): number {
+  if (buddy.growDuration <= 0) return 1;
+  const age = (now - buddy.bornAt) / 1000;
+  const growT = clamp(age / buddy.growDuration, 0, 1);
+  return buddy.startScale + (1 - buddy.startScale) * growT;
+}
+
+function strandedBuddyRemainingGrowth(buddy: StrandedBuddy, now: number): number {
+  if (buddy.growDuration <= 0) return 0;
+  return Math.max(0, buddy.growDuration - (now - buddy.bornAt) / 1000);
+}
+
+function platformLandingForBuddy(x: number): { x: number; y: number } {
+  const maxX = Math.max(0, level.width - PLAYER_W);
+  const minCx = PLAYER_W / 2;
+  const maxCx = Math.max(minCx, level.width - PLAYER_W / 2);
+  const desiredCx = clamp(x + PLAYER_W / 2, minCx, maxCx);
+  const exactTop = platformTopAtCenter(desiredCx);
+  if (exactTop !== null) return { x: clamp(desiredCx - PLAYER_W / 2, 0, maxX), y: exactTop - PLAYER_H };
+
+  let best: { cx: number; top: number; dist: number } | null = null;
+  for (const p of level.platforms) {
+    const left = p.x + PLAYER_W / 2;
+    const right = p.x + p.w - PLAYER_W / 2;
+    const cx = left <= right ? clamp(desiredCx, left, right) : p.x + p.w / 2;
+    const dist = Math.abs(cx - desiredCx);
+    if (!best || dist < best.dist) best = { cx, top: p.y, dist };
+  }
+
+  if (best) return { x: clamp(best.cx - PLAYER_W / 2, 0, maxX), y: best.top - PLAYER_H };
+  return { x: clamp(desiredCx - PLAYER_W / 2, 0, maxX), y: GROUND_Y - PLAYER_H };
+}
+
+function stashCarriedBuddy(buddy: Buddy, world: WorldLayer, carried: BuddyRender | undefined, fallbackX: number, facingDir: number): void {
+  const landing = platformLandingForBuddy(carried?.x ?? fallbackX);
+  strandedBuddies.push({
+    id: strandedBuddySeq++,
+    world,
+    x: landing.x,
+    y: landing.y,
+    facing: facingDir || 1,
+    colorIndex: buddy.colorIndex,
+    variantIndex: buddy.variantIndex,
+    species: buddy.species,
+    bornAt: buddy.bornAt,
+    startScale: buddy.startScale,
+    growDuration: buddy.growDuration,
+  });
+}
+
+function strandedBuddyRenders(now: number): BuddyRender[] {
+  const world = currentWorldLayer();
+  return strandedBuddies
+    .filter((buddy) => buddy.world === world)
+    .map((buddy) => {
+      const bob = Math.sin(now / 260 + buddy.id * 1.7) * 2;
+      const playerCx = body.x + body.w / 2;
+      const buddyCx = buddy.x + PLAYER_W / 2;
+      const lookDir = Math.abs(playerCx - buddyCx) > 1 ? (playerCx >= buddyCx ? 1 : -1) : buddy.facing;
+      return {
+        x: buddy.x,
+        y: buddy.y - bob,
+        vy: 0,
+        facing: lookDir,
+        grounded: true,
+        colorIndex: buddy.colorIndex,
+        variantIndex: buddy.variantIndex,
+        species: buddy.species,
+        alpha: 1,
+        scale: strandedBuddyScale(buddy, now),
+      };
+    });
+}
+
+function maybeCollectStrandedBuddies(): boolean {
+  if (!hasBuddyChain() || strandedBuddies.length === 0) return false;
+  const world = currentWorldLayer();
+  const now = performance.now();
+  let collected = false;
+
+  for (let i = strandedBuddies.length - 1; i >= 0; i--) {
+    const buddy = strandedBuddies[i];
+    if (buddy.world !== world) continue;
+
+    const scale = strandedBuddyScale(buddy, now);
+    const buddyW = PLAYER_W * Math.max(0.55, scale);
+    const buddyH = PLAYER_H * Math.max(0.55, scale);
+    const buddyX = buddy.x + (PLAYER_W - buddyW) / 2;
+    const buddyY = buddy.y + PLAYER_H - buddyH;
+    const playerCx = body.x + body.w / 2;
+    const playerCy = body.y + body.h / 2;
+    const buddyCx = buddy.x + PLAYER_W / 2;
+    const buddyCy = buddy.y + PLAYER_H / 2;
+    const close = Math.hypot(playerCx - buddyCx, playerCy - buddyCy) <= 66;
+    if (!close && !overlapsRect(body.x, body.y, body.w, body.h, buddyX, buddyY, buddyW, buddyH)) continue;
+
+    strandedBuddies.splice(i, 1);
+    const joinDir = playerCx >= buddyCx ? 1 : -1;
+    chain.add(buddy.colorIndex, joinDir, now, body.x, body.y, {
+      startScale: scale,
+      duration: strandedBuddyRemainingGrowth(buddy, now),
+      joinFrom: { x: buddy.x, y: buddy.y },
+      joinDuration: 0.85,
+      fadeDuration: 0,
+      species: buddy.species,
+      variantIndex: buddy.variantIndex,
+    });
+    spawnSparks(buddy.x + PLAYER_W / 2, buddy.y + 8, 14);
+    collected = true;
+  }
+
+  if (!collected) return false;
+  sfx.score();
+  showToast('Buddy found!');
+  speakText('Buddy found!', { rate: 1, pitch: 1.25 });
+  setStatus('Your buddy hopped back into the trail.');
+  updateHud();
+  if (isBuddyChallenge() && chain.count >= (mode.buddies ?? 5)) {
+    finalizeBuddies();
+    return true;
+  }
+  return false;
 }
 
 function resetBirdTrip(side: BirdTripSide): void {
@@ -897,17 +1057,19 @@ function updateUnderwaterReturn(dt: number): boolean {
     const buddyIndex = underwaterReturn.buddyIndex;
     const landingX = underwaterReturn.startX;
     const returnTo = underwaterReturn.returnTo;
+    const fishDir = underwaterReturn.fishDir;
     const top = platformTopAtCenter(landingX + PLAYER_W / 2);
     underwaterReturn = null;
     fish = null;
     if (rideTarget === 'buddy' && buddyIndex !== undefined) {
       fishCooldown = 3 + Math.random() * 3;
       const carried = chain.renders(performance.now())[buddyIndex];
-      chain.removeBuddy(buddyIndex);
+      const removed = chain.removeBuddy(buddyIndex);
+      if (removed) stashCarriedBuddy(removed, returnTo, carried, landingX, fishDir);
       spawnSparks((carried?.x ?? landingX) + PLAYER_W / 2, carried?.y ?? body.y, 14);
-      showToast('A buddy swam away!');
-      speakText('A buddy swam away!', { rate: 1, pitch: 1.2 });
-      setStatus('The other buddies hop forward to fill the trail.');
+      showToast(`Buddy swam to ${worldDisplayName(returnTo)}!`);
+      speakText('Buddy swam up!', { rate: 1, pitch: 1.2 });
+      setStatus(`Find that buddy in ${worldDisplayName(returnTo)}.`);
       updateHud();
     } else if (returnTo === 'underwater') {
       fishCooldown = 0.8 + Math.random() * 1.2;
@@ -1154,6 +1316,7 @@ function updateBirdRide(dt: number): boolean {
     const landingTop = birdRide.target === 'player' ? surfaceTopAtCenter(landingCx) : null;
     const rideTarget = birdRide.target;
     const buddyIndex = birdRide.buddyIndex;
+    const rideDir = birdRide.dir;
     birdRide = null;
     bird = null;
     if (rideTarget === 'player') {
@@ -1172,12 +1335,13 @@ function updateBirdRide(dt: number): boolean {
       setStatus(isWeddingMode() ? 'Cloud candy world! Find your partner.' : 'Cloud candy world! Run between lollipops.');
     } else if (buddyIndex !== undefined) {
       const carried = chain.renders(performance.now())[buddyIndex];
-      chain.removeBuddy(buddyIndex);
+      const removed = chain.removeBuddy(buddyIndex);
+      if (removed) stashCarriedBuddy(removed, 'candy', carried, landingX, rideDir);
       birdCooldown = 5 + Math.random() * 5;
       spawnSparks((carried?.x ?? landingX) + PLAYER_W / 2, carried?.y ?? body.y, 14);
-      showToast('A buddy flew away!');
-      speakText('A buddy flew away!', { rate: 1, pitch: 1.25 });
-      setStatus('The other buddies hop forward to fill the trail.');
+      showToast('Buddy flew to candy!');
+      speakText('Buddy flew to candy!', { rate: 1, pitch: 1.25 });
+      setStatus('Find that buddy in candy clouds.');
       updateHud();
     }
   }
@@ -1574,6 +1738,7 @@ function update(dt: number): void {
   if (hasBuddyChain()) {
     chain.record(body.grounded, body.x, body.y);
     chain.step(dt, body.x, body.y);
+    if (maybeCollectStrandedBuddies()) return;
   }
 
   // Scoring.
@@ -1660,6 +1825,7 @@ function renderFrame(alpha: number): void {
   cameraX = clamp(px + PLAYER_W / 2 - viewW * cameraLookFrac, 0, maxCam);
 
   const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const now = performance.now();
   const view: View = {
     ctx,
     dpr,
@@ -1679,9 +1845,10 @@ function renderFrame(alpha: number): void {
     vy: body.vy,
     grounded: body.grounded,
     facing,
-    invuln: performance.now() < invulnUntil,
+    invuln: now < invulnUntil,
     flagDown: phase === 'celebrating' ? clamp(celebrateT / FLAG_DUR, 0, 1) : 0,
-    buddies: hasBuddyChain() ? chain.renders(performance.now()) : [],
+    buddies: hasBuddyChain() ? chain.renders(now) : [],
+    worldBuddies: hasBuddyChain() ? strandedBuddyRenders(now) : [],
     wedding: isWeddingMode() && level.partnerX !== undefined ? {
       partnerX: level.partnerX,
       partnerY: level.partnerY ?? GROUND_Y - PLAYER_H,

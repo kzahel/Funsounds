@@ -22,6 +22,7 @@ export interface BuddyGrowth {
   joinDuration?: number;
   fadeDuration?: number;
   species?: BuddySpecies;
+  variantIndex?: number;
 }
 
 export interface Buddy {
@@ -100,7 +101,7 @@ export class BuddyChain {
     const joinDist = Math.hypot(f.x - from.x, f.y - from.y);
     this.list.push({
       colorIndex,
-      variantIndex: buddyVariantIndex(this.list.length),
+      variantIndex: growth?.variantIndex ?? buddyVariantIndex(this.list.length),
       species: growth?.species ?? 'buddy',
       bornAt: now,
       startScale: growth?.startScale ?? 1,
