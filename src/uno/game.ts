@@ -42,9 +42,6 @@ export function showColorPicker(): Promise<CardColor> {
       finish(btn.dataset.color as CardColor);
     }
     picker.addEventListener('click', pick);
-
-    // Safety timeout: auto-pick a color if picker is stuck
-    setTimeout(() => finish(pickRandom(COLORS)), 15000);
   });
 }
 
