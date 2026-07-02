@@ -74,5 +74,7 @@ export interface Particle {
   maxLife: number;
   size: number;
   color: string;
-  kind: 'dust' | 'spark';
+  kind: 'dust' | 'spark' | 'croissant';
+  angle?: number;
+  spin?: number;
 }

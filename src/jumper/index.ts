@@ -29,7 +29,7 @@ import {
   type Tuning,
 } from './core';
 import { MODES, MODE_ORDER, GROUND_Y, PLAYER_W, PLAYER_H, VIRTUAL_H } from './modes';
-import { render, type BuddyRender, type Scene, type View, type WeddingPartnerKind } from './render';
+import { BUDDY_STYLES, render, type BuddyRender, type Scene, type View, type WeddingPartnerKind } from './render';
 import { BuddyChain, type Buddy } from './buddies';
 import type { BuddySpecies } from './buddy-looks';
 import { themeForLevel, type Theme } from './themes';
@@ -52,6 +52,9 @@ const WEDDING_BABY_CRADLE_DUR = 10;
 const WEDDING_BABY_START_SCALE = 0.38;
 const WEDDING_BABY_GROW_DUR = 60;
 const WEDDING_BABY_JOIN_DUR = 1.15;
+const BUDDY_COLOR_COUNT = BUDDY_STYLES.length;
+const WEDDING_CROISSANT_RAIN_DUR = 8;
+const WEDDING_CROISSANTS_PER_SEC = 30;
 const BIRD_SPEED = 58;
 const BIRD_W = 72;
 const BIRD_H = 42;
@@ -192,6 +195,11 @@ let lastSafe = { x: 0, y: 0 }; // last ground-ledge stance, for respawns
 let buddyReachedRightPlatform = false; // unlocks first-buddy collection at the start flag
 let weddingReadyForSmooch = true;
 let weddingEvent: WeddingEvent | null = null;
+let weddingMateColorIndex = 0;
+let weddingMateColorsMade: boolean[] = [];
+let weddingAllColorsCelebrated = false;
+let weddingCroissantRainT = 0;
+let weddingCroissantSpawnBank = 0;
 let candyWorld = false;
 let bird: BirdState | null = null;
 let birdCooldown = 0;
@@ -233,6 +241,7 @@ let heartsEl: HTMLElement;
 let buddiesPillEl: HTMLElement;
 let buddiesLabelEl: HTMLElement;
 let buddiesEl: HTMLElement;
+let mateProgressEl: HTMLElement;
 let statusEl: HTMLElement;
 let toastEl: HTMLElement;
 let touchInteractEl: HTMLElement;
@@ -343,6 +352,112 @@ function smoothstep(t: number): number {
   return c * c * (3 - 2 * c);
 }
 
+function weddingMateMadeCount(): number {
+  return weddingMateColorsMade.filter(Boolean).length;
+}
+
+function allWeddingMateColorsMade(): boolean {
+  return weddingMateMadeCount() >= BUDDY_COLOR_COUNT;
+}
+
+function chooseWeddingMateColor(previous: number | null = null): number {
+  const all = Array.from({ length: BUDDY_COLOR_COUNT }, (_, i) => i);
+  const unseen = all.filter((i) => !weddingMateColorsMade[i] && i !== previous);
+  const choices = unseen.length > 0 ? unseen : all.filter((i) => i !== previous);
+  const pool = choices.length > 0 ? choices : all;
+  return pool[Math.floor(Math.random() * pool.length)] ?? 0;
+}
+
+function resetWeddingMateProgress(): void {
+  weddingMateColorsMade = Array.from({ length: BUDDY_COLOR_COUNT }, () => false);
+  weddingMateColorIndex = chooseWeddingMateColor(null);
+  weddingAllColorsCelebrated = false;
+  weddingCroissantRainT = 0;
+  weddingCroissantSpawnBank = 0;
+}
+
+function renderWeddingMateProgress(): void {
+  if (!mateProgressEl) return;
+  if (!isWeddingMode()) {
+    mateProgressEl.style.display = 'none';
+    mateProgressEl.innerHTML = '';
+    return;
+  }
+
+  const made = weddingMateMadeCount();
+  mateProgressEl.style.display = '';
+  mateProgressEl.setAttribute('aria-label', `${made} of ${BUDDY_COLOR_COUNT} mate colors completed`);
+  mateProgressEl.innerHTML = [
+    `<span class="jp-mate-progress-label">Mates ${made}/${BUDDY_COLOR_COUNT}</span>`,
+    ...BUDDY_STYLES.map((style, i) => {
+      const classes = [
+        'jp-mate-swatch',
+        weddingMateColorsMade[i] ? 'made' : '',
+        i === weddingMateColorIndex ? 'current' : '',
+      ].filter(Boolean).join(' ');
+      const title = `Mate color ${i + 1}${weddingMateColorsMade[i] ? ' complete' : ''}${i === weddingMateColorIndex ? ' current' : ''}`;
+      return `<span class="${classes}" title="${title}" style="background:${style.body}"></span>`;
+    }),
+  ].join('');
+}
+
+function startCroissantCelebration(): void {
+  if (weddingAllColorsCelebrated) return;
+  weddingAllColorsCelebrated = true;
+  weddingCroissantRainT = WEDDING_CROISSANT_RAIN_DUR;
+  weddingCroissantSpawnBank = 0;
+  playCheer();
+  spawnConfetti(screenEl);
+  spawnCroissants(42);
+  showToast('Croissant rain!');
+  speakText('Croissant rain!', { rate: 1, pitch: 1.25 });
+  setStatus('All mate colors! Croissant rain!');
+}
+
+function markWeddingMateColor(colorIndex: number): void {
+  const normalized = ((colorIndex % BUDDY_COLOR_COUNT) + BUDDY_COLOR_COUNT) % BUDDY_COLOR_COUNT;
+  if (!weddingMateColorsMade[normalized]) {
+    weddingMateColorsMade[normalized] = true;
+    if (allWeddingMateColorsMade()) startCroissantCelebration();
+  }
+  renderWeddingMateProgress();
+}
+
+function spawnCroissants(count: number): void {
+  const cssW = canvas?.clientWidth || 960;
+  const cssH = canvas?.clientHeight || VIRTUAL_H;
+  const scale = cssH > 0 ? cssH / VIRTUAL_H : 1;
+  const viewW = cssW / scale;
+
+  for (let i = 0; i < count; i++) {
+    const life = 4.8 + Math.random() * 1.8;
+    particles.push({
+      x: cameraX + Math.random() * viewW,
+      y: -90 - Math.random() * 140,
+      vx: (Math.random() - 0.5) * 52,
+      vy: 70 + Math.random() * 90,
+      life,
+      maxLife: life,
+      size: 18 + Math.random() * 12,
+      color: '#f5bd58',
+      kind: 'croissant',
+      angle: Math.random() * Math.PI * 2,
+      spin: (Math.random() - 0.5) * 3.4,
+    });
+  }
+  capParticles();
+}
+
+function updateCroissantRain(dt: number): void {
+  if (weddingCroissantRainT <= 0) return;
+  weddingCroissantRainT = Math.max(0, weddingCroissantRainT - dt);
+  weddingCroissantSpawnBank += WEDDING_CROISSANTS_PER_SEC * dt;
+  const count = Math.floor(weddingCroissantSpawnBank);
+  if (count <= 0) return;
+  weddingCroissantSpawnBank -= count;
+  spawnCroissants(count);
+}
+
 function updateParticles(dt: number): void {
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
@@ -353,13 +468,15 @@ function updateParticles(dt: number): void {
     }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vy += 900 * dt;
+    p.vy += (p.kind === 'croissant' ? 140 : 900) * dt;
+    if (p.angle !== undefined) p.angle += (p.spin ?? 0) * dt;
   }
 }
 
 // --- HUD --------------------------------------------------------------------
 
 function updateHud(): void {
+  screenEl.classList.toggle('jp-wedding-mode', isWeddingMode());
   modeChipEl.textContent = `${mode.emoji} ${mode.name}`;
   scoreEl.textContent = String(score);
   bestEl.textContent = String(best);
@@ -375,6 +492,7 @@ function updateHud(): void {
   } else {
     buddiesPillEl.style.display = 'none';
   }
+  renderWeddingMateProgress();
   touchInteractEl.classList.toggle('visible', isWeddingMode());
 }
 
@@ -390,7 +508,7 @@ function showToast(text: string): void {
 }
 
 function startStatus(): string {
-  if (isWeddingMode()) return 'Reach the flag, then meet your partner.';
+  if (isWeddingMode()) return 'Reach the flag, then meet every mate color.';
   if (isBuddyChallenge()) return 'Watch for a friendly bird!';
   return 'Arrows move • hold Up to jump higher';
 }
@@ -419,6 +537,7 @@ function buildLevel(): void {
   buddyReachedRightPlatform = false;
   weddingReadyForSmooch = true;
   weddingEvent = null;
+  resetWeddingMateProgress();
   candyWorld = false;
   bird = null;
   birdRide = null;
@@ -1358,6 +1477,7 @@ function startWeddingSmooch(): boolean {
   if (!partner) return false;
 
   const partnerKind = weddingPartnerKind();
+  const mateColorIndex = weddingMateColorIndex;
   const babyBase = weddingBabyBasePosition();
   body.vx = 0;
   body.vy = 0;
@@ -1367,7 +1487,7 @@ function startWeddingSmooch(): boolean {
   weddingEvent = {
     phase: 'kiss',
     t: 0,
-    colorIndex: chain.count % 5,
+    colorIndex: mateColorIndex,
     partnerKind,
     babySpecies: weddingBabySpecies(partnerKind),
     babyBaseX: babyBase.x,
@@ -1378,6 +1498,7 @@ function startWeddingSmooch(): boolean {
   showToast(partnerKind === 'fish' ? 'Fish smooch!' : 'Smooch! ♥');
   speakText(partnerKind === 'fish' ? 'Fish smooch!' : 'Smooch!', { rate: 1.05, pitch: 1.3 });
   setStatus(partnerKind === 'fish' ? 'Fish smooch!' : 'Smooch!');
+  markWeddingMateColor(mateColorIndex);
   return true;
 }
 
@@ -1412,6 +1533,7 @@ function updateWeddingEvent(dt: number): void {
       joinDuration: WEDDING_BABY_JOIN_DUR,
       species,
     });
+    weddingMateColorIndex = chooseWeddingMateColor(colorIndex);
     sfx.score();
     spawnSparks(joinFrom.x + PLAYER_W / 2, joinFrom.y, 14);
     setStatus('Return to the left flag to get ready again.');
@@ -1420,7 +1542,7 @@ function updateWeddingEvent(dt: number): void {
 }
 
 function collectBuddy(flagDir: number): void {
-  chain.add(chain.count % 5, flagDir, performance.now(), body.x, body.y);
+  chain.add(chain.count % BUDDY_COLOR_COUNT, flagDir, performance.now(), body.x, body.y);
   sfx.score();
   spawnSparks(body.x + PLAYER_W / 2, body.y, 14);
   buddyReachedRightPlatform = false;
@@ -1650,6 +1772,7 @@ function advanceLevel(): void {
 
 function update(dt: number): void {
   if (!gameActive) return;
+  if (isWeddingMode()) updateCroissantRain(dt);
 
   // During the level-clear celebration the player just settles from the victory
   // hop; no input, scoring or hazards until the next level loads.
@@ -1855,10 +1978,11 @@ function renderFrame(alpha: number): void {
       partnerX: level.partnerX,
       partnerY: level.partnerY ?? GROUND_Y - PLAYER_H,
       partnerKind: weddingEvent?.partnerKind ?? weddingPartnerKind(),
+      partnerColorIndex: weddingEvent?.colorIndex ?? weddingMateColorIndex,
       near: isNearWeddingPartner(),
       phase: weddingEvent?.phase ?? 'idle',
       phaseT: weddingEvent?.t ?? 0,
-      colorIndex: weddingEvent?.colorIndex ?? chain.count % 5,
+      colorIndex: weddingEvent?.colorIndex ?? weddingMateColorIndex,
       babySpecies: weddingEvent?.babySpecies ?? weddingBabySpecies(weddingPartnerKind()),
       babyBaseX: weddingEvent?.babyBaseX ?? weddingBabyBasePosition().x,
       babyBaseY: weddingEvent?.babyBaseY ?? weddingBabyBasePosition().y,
@@ -2079,6 +2203,7 @@ export async function initJumper(): Promise<void> {
   buddiesPillEl = document.getElementById('jp-buddies-pill')!;
   buddiesLabelEl = document.getElementById('jp-buddies-label')!;
   buddiesEl = document.getElementById('jp-buddies')!;
+  mateProgressEl = document.getElementById('jp-mate-progress')!;
   statusEl = document.getElementById('jp-status')!;
   toastEl = document.getElementById('jp-toast')!;
   touchInteractEl = document.getElementById('jp-touch-interact')!;

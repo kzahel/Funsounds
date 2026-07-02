@@ -106,6 +106,11 @@ test('Barrel Hop deep links open Buddy and Wedding modes', async ({ page }) => {
   await expect(page.locator('#jp-mode')).toContainText('Wedding');
   await expect(page.locator('#jp-buddies-pill')).toBeVisible();
   await expect(page.locator('#jp-buddies-label')).toHaveText('Mini buddies');
+  await expect(page.locator('#jp-mate-progress')).toBeVisible();
+  await expect(page.locator('#jp-mate-progress .jp-mate-swatch')).toHaveCount(10);
+  const hudBox = await page.locator('#jp-hud').boundingBox();
+  const statusBox = await page.locator('#jp-status').boundingBox();
+  expect(statusBox!.y).toBeGreaterThanOrEqual(hudBox!.y + hudBox!.height + 4);
 
   expect(errors).toEqual([]);
 });

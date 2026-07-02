@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BuddyChain } from './buddies';
 import { BUDDY_LOOKS } from './buddy-looks';
+import { BUDDY_STYLES } from './render';
 
 const GROUND = 400;
 const dt = 1 / 60;
@@ -180,7 +181,8 @@ describe('BuddyChain', () => {
   it('assigns varied buddy looks beyond color swaps', () => {
     const chain = new BuddyChain();
     chain.reset(0, GROUND);
-    for (let i = 0; i < 5; i++) chain.add(i % 5, 1, 0, 0, GROUND);
+    expect(BUDDY_STYLES).toHaveLength(10);
+    for (let i = 0; i < BUDDY_STYLES.length; i++) chain.add(i % BUDDY_STYLES.length, 1, 0, 0, GROUND);
 
     const looks = chain.renders(0).map((r) => BUDDY_LOOKS[r.variantIndex]);
     expect(new Set(looks.map((l) => l.accessory)).size).toBeGreaterThan(2);

@@ -39,6 +39,7 @@ export interface WeddingRender {
   partnerX: number;
   partnerY: number;
   partnerKind: WeddingPartnerKind;
+  partnerColorIndex: number;
   near: boolean;
   phase: WeddingPhase;
   phaseT: number;
@@ -130,7 +131,6 @@ const FIXED = {
 };
 
 const PLAYER_STYLE: CharStyle = { body: FIXED.body, bodyDark: FIXED.bodyDark, belly: FIXED.belly };
-const PARTNER_STYLE: CharStyle = { body: '#ff8fc4', bodyDark: '#d65f9b', belly: '#ffd9ec' };
 const WEDDING_KISS_DUR = 0.9;
 const WEDDING_BABY_POP_DUR = 1.35;
 const WEDDING_BABY_CRY_DUR = 3.2;
@@ -146,6 +146,11 @@ export const BUDDY_STYLES: CharStyle[] = [
   { body: '#ffb24d', bodyDark: '#d98a2b', belly: '#ffe6c2' }, // orange
   { body: '#ff8fc4', bodyDark: '#d65f9b', belly: '#ffd9ec' }, // pink
   { body: '#4fd0c4', bodyDark: '#2fa79b', belly: '#cdf3ee' }, // teal
+  { body: '#ff6b6b', bodyDark: '#c94545', belly: '#ffd3d3' }, // red
+  { body: '#ffd93d', bodyDark: '#d8a819', belly: '#fff2a8' }, // yellow
+  { body: '#6c7dff', bodyDark: '#4558d1', belly: '#d9defe' }, // indigo
+  { body: '#9be564', bodyDark: '#69ad39', belly: '#e5ffd0' }, // lime
+  { body: '#ff7ad9', bodyDark: '#c64aa5', belly: '#ffd5f3' }, // magenta
 ];
 
 export function render(view: View, scene: Scene): void {
@@ -1582,7 +1587,7 @@ function drawTrampoline(ctx: CanvasRenderingContext2D, snake: SnakeRender): void
   ctx.restore();
 }
 
-function drawFish(ctx: CanvasRenderingContext2D, fish: FishRender): void {
+function drawFish(ctx: CanvasRenderingContext2D, fish: FishRender, style: CharStyle | null = null): void {
   const swim = Math.sin(fish.t);
   if (fish.kind === 'lantern') {
     drawLanternFish(ctx, fish, swim);
@@ -1593,11 +1598,11 @@ function drawFish(ctx: CanvasRenderingContext2D, fish: FishRender): void {
   ctx.translate(fish.x + 41, fish.y + 17);
   ctx.scale(fish.dir, 1);
 
-  ctx.fillStyle = '#ffb347';
+  ctx.fillStyle = style?.body ?? '#ffb347';
   ctx.beginPath();
   ctx.ellipse(0, 0, 34, 17, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#ff7ab6';
+  ctx.fillStyle = style?.bodyDark ?? '#ff7ab6';
   ctx.beginPath();
   ctx.moveTo(-30, 0);
   ctx.lineTo(-52, -16 + swim * 4);
@@ -1606,7 +1611,7 @@ function drawFish(ctx: CanvasRenderingContext2D, fish: FishRender): void {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = '#ffd86f';
+  ctx.fillStyle = style?.belly ?? '#ffd86f';
   ctx.beginPath();
   ctx.ellipse(-2, -16, 14, 8, -0.3 + swim * 0.12, 0, Math.PI * 2);
   ctx.ellipse(-5, 16, 13, 7, 0.25 - swim * 0.12, 0, Math.PI * 2);
@@ -1788,9 +1793,10 @@ function drawWeddingPartnerAndEffects(
   const playerFacingPartner = playerCx <= partnerCx ? 1 : -1;
   const partnerFacing = -playerFacingPartner;
   const partnerBounce = wedding.phase === 'kiss' ? kissBounce(wedding.phaseT) : 0;
+  const partnerStyle = BUDDY_STYLES[wedding.partnerColorIndex % BUDDY_STYLES.length];
 
   if (wedding.partnerKind === 'fish') {
-    drawWeddingFishPartner(ctx, wedding.partnerX, wedding.partnerY - partnerBounce, partnerFacing, time);
+    drawWeddingFishPartner(ctx, wedding.partnerX, wedding.partnerY - partnerBounce, partnerFacing, time, partnerStyle);
   } else {
     drawCharacter(
       ctx,
@@ -1801,7 +1807,7 @@ function drawWeddingPartnerAndEffects(
       true,
       partnerFacing,
       time,
-      PARTNER_STYLE,
+      partnerStyle,
       1,
       false,
     );
@@ -1885,6 +1891,7 @@ function drawWeddingFishPartner(
   partnerY: number,
   partnerFacing: number,
   time: number,
+  style: CharStyle,
 ): void {
   const fishX = partnerX + PLAYER_W / 2 - 41;
   const fishY = partnerY + 13 + Math.sin(time * 3.2) * 3;
@@ -1895,11 +1902,11 @@ function drawWeddingFishPartner(
     t: time * 3.4,
     carrying: false,
     kind: 'fish',
-  });
+  }, style);
 
   ctx.save();
   ctx.translate(partnerX + PLAYER_W / 2, fishY + 8);
-  ctx.fillStyle = '#ff8fc4';
+  ctx.fillStyle = style.body;
   ctx.beginPath();
   ctx.moveTo(-8, 0);
   ctx.lineTo(-24, -8);
@@ -1912,7 +1919,7 @@ function drawWeddingFishPartner(
   ctx.lineTo(9, 9);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#ffd1e6';
+  ctx.fillStyle = style.belly;
   ctx.beginPath();
   ctx.arc(0, 0, 4, 0, Math.PI * 2);
   ctx.fill();
@@ -2025,6 +2032,8 @@ function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]): vo
     ctx.fillStyle = p.color;
     if (p.kind === 'spark') {
       star(ctx, p.x, p.y, p.size, p.size * 0.45);
+    } else if (p.kind === 'croissant') {
+      drawCroissant(ctx, p.x, p.y, p.size, p.angle ?? 0);
     } else {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2);
@@ -2032,6 +2041,47 @@ function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]): vo
     }
   }
   ctx.globalAlpha = 1;
+}
+
+function drawCroissant(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, angle: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(size / 22, size / 22);
+
+  ctx.fillStyle = '#d9902f';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 20, 12, 0, 0.12 * Math.PI, 0.88 * Math.PI);
+  ctx.lineTo(-10, 5);
+  ctx.quadraticCurveTo(0, 10, 10, 5);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#f5bd58';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 15, 8, 0, 0.14 * Math.PI, 0.86 * Math.PI);
+  ctx.lineTo(-7, 4);
+  ctx.quadraticCurveTo(0, 6, 7, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(128,75,20,0.45)';
+  ctx.lineWidth = 2;
+  for (const xMark of [-8, 0, 8]) {
+    ctx.beginPath();
+    ctx.moveTo(xMark - 3, -5);
+    ctx.quadraticCurveTo(xMark, 0, xMark + 2, 6);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#8d561d';
+  for (const sx of [-6, 5, 12]) {
+    ctx.beginPath();
+    ctx.arc(sx, -3 + (sx % 2), 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 // Draws a frog character (player or buddy). `style` recolors the body; `alpha`
