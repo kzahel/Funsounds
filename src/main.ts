@@ -208,8 +208,115 @@ function applyDeepLink(link: DeepLink): void {
   }
 }
 
+function currentDifficulty(): number | undefined {
+  const slider = document.getElementById('difficulty-slider') as HTMLInputElement | null;
+  if (!slider) return undefined;
+  const parsed = Number.parseInt(slider.value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function selectedData(selector: string, dataName: string): string | undefined {
+  const el = document.querySelector<HTMLElement>(selector);
+  return el?.dataset[dataName];
+}
+
+function currentFreePlayLink(game: 'freeplay' | 'quiz'): DeepLink {
+  return {
+    game,
+    mode: selectedData('.mode-btn.selected', 'mode') ?? 'objects',
+    difficulty: currentDifficulty(),
+  };
+}
+
+function currentMemoryLink(): DeepLink {
+  return {
+    game: 'memory',
+    players: Number.parseInt(selectedData('.player-btn.selected', 'players') ?? '1', 10),
+    difficulty: currentDifficulty(),
+  };
+}
+
+function currentUnoLink(): DeepLink {
+  return {
+    game: 'uno',
+    aiCount: Number.parseInt(selectedData('[data-ai-count].selected', 'aiCount') ?? '1', 10),
+    unoTheme: selectedData('[data-uno-theme].selected', 'unoTheme') ?? 'classic',
+    unoRules: selectedData('[data-uno-rules].selected', 'unoRules') ?? 'beginner',
+  };
+}
+
+function buildDeepLinkHref(link: DeepLink): string {
+  const url = new URL(window.location.href);
+  const params = new URLSearchParams();
+
+  if (link.game === 'jumper') {
+    const mode = JUMPER_MODE_ALIASES[normalizeToken(link.mode)] ?? 'easy';
+    if (mode === 'buddy' || mode === 'wedding') {
+      params.set('game', mode);
+    } else {
+      params.set('game', 'jumper');
+      params.set('mode', mode);
+    }
+  } else {
+    params.set('game', link.game);
+  }
+
+  if ((link.game === 'freeplay' || link.game === 'quiz') && link.mode) {
+    params.set('mode', normalizeToken(link.mode));
+  }
+  if (link.difficulty !== undefined) params.set('difficulty', String(link.difficulty));
+  if (link.players !== undefined) params.set('players', String(link.players));
+  if (link.aiCount !== undefined) params.set('ai', String(link.aiCount));
+  if (link.unoTheme) params.set('theme', normalizeToken(link.unoTheme));
+  if (link.unoRules) params.set('rules', normalizeToken(link.unoRules));
+
+  url.search = params.toString();
+  url.hash = '';
+  return url.href;
+}
+
+function updateAddressToDeepLink(link: DeepLink): void {
+  window.history.replaceState(null, '', buildDeepLinkHref(link));
+}
+
+function launchLinkForElement(el: HTMLElement): DeepLink | null {
+  if (el.dataset.jpMode) return { game: 'jumper', mode: el.dataset.jpMode };
+  switch (el.id) {
+    case 'start-btn':
+      return currentFreePlayLink('freeplay');
+    case 'quiz-btn':
+      return currentFreePlayLink('quiz');
+    case 'memory-btn':
+      return currentMemoryLink();
+    case 'flying-comments-btn':
+      return { game: 'comets' };
+    case 'qbert-btn':
+      return { game: 'qbert' };
+    case 'train-btn':
+      return { game: 'train' };
+    case 'farm-btn':
+      return { game: 'farm' };
+    case 'uno-btn':
+      return currentUnoLink();
+    default:
+      return null;
+  }
+}
+
+function installLaunchUrlUpdates(): void {
+  document
+    .querySelectorAll<HTMLElement>('#start-btn, #quiz-btn, #memory-btn, #flying-comments-btn, [data-jp-mode], #qbert-btn, #train-btn, #farm-btn, #uno-btn')
+    .forEach((el) => {
+      el.addEventListener('click', () => {
+        const link = launchLinkForElement(el);
+        if (link) updateAddressToDeepLink(link);
+      });
+    });
+}
+
 async function init() {
   await Promise.all([initFreePlay(), initQuiz(), initMemory(), initFlyingComets(), initUno(), initQbert(), initTrain(), initFarm(), initJumper()]);
+  installLaunchUrlUpdates();
   const deepLink = parseDeepLink();
   if (deepLink) applyDeepLink(deepLink);
 }

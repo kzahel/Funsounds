@@ -17,6 +17,9 @@ test('Barrel Hop smoke test — modes start, render and score without errors', a
 
   const screen = page.locator('#jumper-screen');
   await expect(screen).toBeVisible();
+  const launchUrl = new URL(page.url());
+  expect(launchUrl.searchParams.get('game')).toBe('jumper');
+  expect(launchUrl.searchParams.get('mode')).toBe('easy');
 
   // Canvas should be sized to the viewport.
   const size = await page.locator('#jp-canvas').evaluate((c: HTMLCanvasElement) => ({
