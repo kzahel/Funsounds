@@ -106,4 +106,17 @@ unlocks it permanently for direct map travel.
 - [x] Sunken Castle
 - [x] Rainbow Dreamland
 - [x] Giant Toy Room
-- [ ] Final full regression and documentation audit
+- [x] Final full regression and documentation audit
+
+## Verification record
+
+- TypeScript production build: passed.
+- Unit tests: 133 passed.
+- Buddy browser tests: 14 passed, including every new world, persistent map
+  locking, Rainbow gate progression, phone layout, and the original smoke tests.
+- Full repository browser run: 36 of 38 passed. The two remaining failures are
+  outside Buddy and in unchanged areas: the Farm till-color assertion and the
+  3D wheel demo's existing missing-resource console errors. Both Buddy and
+  World Map suites remained fully green in that run.
+- Visual QA screenshots were reviewed for Moon Base, Dinosaur Jungle, Volcano
+  World, Sunken Castle, Rainbow Dreamland, Giant Toy Room, and the 12-world map.
