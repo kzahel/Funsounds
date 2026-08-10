@@ -4,7 +4,7 @@ test('Barrel Hop smoke test — modes start, render and score without errors', a
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
   page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(msg.text());
+    if (msg.type() === 'error') errors.push(`${msg.text()} (${msg.location().url})`);
   });
 
   await page.goto('/Funsounds/');
@@ -72,6 +72,16 @@ test('Barrel Hop smoke test — modes start, render and score without errors', a
   await expect(page.locator('#jp-mode')).toContainText('Buddies');
   await expect(page.locator('#jp-buddies-pill')).toBeVisible();
   await expect(page.locator('#jp-buddies')).toHaveText('0/5');
+
+  // Space has a single, discoverable job now: eat a nearby themed snack.
+  // The first Buddy-level strawberry rests on the safe starting platform.
+  await expect(page.locator('#jp-snacks')).toHaveText('0');
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(450);
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.press('Space');
+  await expect(page.locator('#jp-snacks')).toHaveText('1');
+
   await page.keyboard.down('ArrowRight');
   for (let i = 0; i < 6; i++) {
     await page.keyboard.down('ArrowUp');
@@ -88,7 +98,7 @@ test('Barrel Hop deep links open Buddy and Wedding modes', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
   page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(msg.text());
+    if (msg.type() === 'error') errors.push(`${msg.text()} (${msg.location().url})`);
   });
 
   await page.goto('/Funsounds/?game=buddy');
@@ -113,4 +123,14 @@ test('Barrel Hop deep links open Buddy and Wedding modes', async ({ page }) => {
   expect(statusBox!.y).toBeGreaterThanOrEqual(hudBox!.y + hudBox!.height + 4);
 
   expect(errors).toEqual([]);
+});
+
+test('Wedding HUD leaves room for instructions on a phone-sized screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/Funsounds/?game=wedding');
+  await page.waitForLoadState('networkidle');
+
+  const hudBox = await page.locator('#jp-hud').boundingBox();
+  const statusBox = await page.locator('#jp-status').boundingBox();
+  expect(statusBox!.y).toBeGreaterThanOrEqual(hudBox!.y + hudBox!.height + 4);
 });

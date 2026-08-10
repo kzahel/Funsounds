@@ -3,7 +3,7 @@
 // the world in scaled world space. Colors come from the level's Theme; barrels
 // and the character stay constant so they're always easy to read.
 
-import type { Barrel, Level, Particle, Platform } from './types';
+import type { Barrel, Consumable, Level, Particle, Platform } from './types';
 import type { Theme } from './themes';
 import { GROUND_Y, PLAYER_H, PLAYER_W, VIRTUAL_H } from './modes';
 import { BUDDY_LOOKS, type BuddyLook, type BuddySpecies } from './buddy-looks';
@@ -83,6 +83,13 @@ export interface FishRender {
   kind: 'fish' | 'lantern';
 }
 
+export interface UfoRender {
+  x: number;
+  platformY: number;
+  t: number;
+  active: boolean;
+}
+
 export interface Scene {
   level: Level;
   theme: Theme;
@@ -99,12 +106,16 @@ export interface Scene {
   worldBuddies: BuddyRender[];
   wedding?: WeddingRender;
   candyWorld: boolean;
+  upperAtmosphereWorld: boolean;
   skyRideT: number;
+  atmosphereLiftT: number;
   undergroundWorld: boolean;
   undergroundLiftT: number;
   underwaterWorld: boolean;
   underwaterLiftT: number;
   deepSeaWorld: boolean;
+  consumables: Consumable[];
+  ufo?: UfoRender;
   bird?: BirdRender;
   snake?: SnakeRender;
   tarantulas: TarantulaRender[];
@@ -160,7 +171,9 @@ export function render(view: View, scene: Scene): void {
     view,
     theme,
     scene.candyWorld,
+    scene.upperAtmosphereWorld,
     scene.skyRideT,
+    scene.atmosphereLiftT,
     scene.undergroundWorld,
     scene.undergroundLiftT,
     scene.underwaterWorld,
@@ -172,7 +185,17 @@ export function render(view: View, scene: Scene): void {
   const s = view.scale * dpr;
   ctx.setTransform(s, 0, 0, s, -view.cameraX * s, 0);
 
-  drawPlatforms(ctx, scene.level.platforms, theme, scene.candyWorld, scene.undergroundWorld, scene.underwaterWorld, scene.deepSeaWorld);
+  if (scene.ufo) drawUfo(ctx, scene.ufo);
+  drawPlatforms(
+    ctx,
+    scene.level.platforms,
+    theme,
+    scene.candyWorld,
+    scene.upperAtmosphereWorld,
+    scene.undergroundWorld,
+    scene.underwaterWorld,
+    scene.deepSeaWorld,
+  );
   if (scene.level.leftGoalX !== undefined) {
     drawEndpoint(ctx, scene.level.leftGoalX, view.time, 0, -1, scene.candyWorld);
   }
@@ -185,6 +208,7 @@ export function render(view: View, scene: Scene): void {
     if (scene.deepSeaWorld) drawDeepSeaObstacle(ctx, b);
     else if (scene.underwaterWorld) drawUnderwaterObstacle(ctx, b);
     else if (scene.undergroundWorld) drawCaveObstacle(ctx, b);
+    else if (scene.upperAtmosphereWorld) drawUpperAtmosphereObstacle(ctx, b);
     else if (scene.candyWorld) drawCandyObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
@@ -194,6 +218,7 @@ export function render(view: View, scene: Scene): void {
   }
   if (scene.snake) drawSnake(ctx, scene.snake);
   if (scene.fish) drawFish(ctx, scene.fish);
+  drawConsumables(ctx, scene.consumables, view.time);
   drawParticles(ctx, scene.particles);
   if (scene.bird) drawBird(ctx, scene.bird);
 
@@ -230,7 +255,9 @@ export function render(view: View, scene: Scene): void {
   );
 
   // Ambient weather overlays the whole scene (screen space).
-  drawWeather(view, theme);
+  if (!scene.candyWorld && !scene.upperAtmosphereWorld && !scene.undergroundWorld && !scene.underwaterWorld && !scene.deepSeaWorld) {
+    drawWeather(view, theme);
+  }
 }
 
 function drawBuddy(ctx: CanvasRenderingContext2D, level: Level, bd: BuddyRender, time: number): void {
@@ -263,7 +290,9 @@ function drawBackground(
   view: View,
   theme: Theme,
   candyWorld: boolean,
+  upperAtmosphereWorld: boolean,
   skyRideT: number,
+  atmosphereLiftT: number,
   undergroundWorld: boolean,
   undergroundLiftT: number,
   underwaterWorld: boolean,
@@ -274,7 +303,11 @@ function drawBackground(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (deepSeaWorld) {
+  if (upperAtmosphereWorld) {
+    sky.addColorStop(0, '#050829');
+    sky.addColorStop(0.5, '#15245f');
+    sky.addColorStop(1, '#526bc7');
+  } else if (deepSeaWorld) {
     sky.addColorStop(0, '#010717');
     sky.addColorStop(0.55, '#021224');
     sky.addColorStop(1, '#00030a');
@@ -297,17 +330,18 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (deepSeaWorld) drawDeepSeaBackground(view);
+  if (upperAtmosphereWorld) drawUpperAtmosphereBackground(view);
+  else if (deepSeaWorld) drawDeepSeaBackground(view);
   else if (underwaterWorld) drawUnderwaterBackground(view);
   else if (undergroundWorld) drawCaveBackground(view);
-  if (!candyWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && theme.stars) drawStars(view);
-  if (!undergroundWorld && !underwaterWorld && !deepSeaWorld) {
+  if (!candyWorld && !upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && theme.stars) drawStars(view);
+  if (!upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld) {
     if (!candyWorld) drawCelestial(view, theme);
     else drawCandySky(view);
   }
 
   // Drifting clouds (slow parallax).
-  if (!undergroundWorld && !underwaterWorld && !deepSeaWorld) {
+  if (!upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld) {
     const cloudShift = (view.cameraX * 0.15 + view.time * 8) % (cssW + 240);
     ctx.fillStyle = candyWorld ? 'rgba(255,255,255,0.96)' : theme.cloud;
     const cloudCount = candyWorld ? 7 : 4;
@@ -320,7 +354,9 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (deepSeaWorld) {
+  if (upperAtmosphereWorld) {
+    // The glowing atmospheric limb is drawn by drawUpperAtmosphereBackground.
+  } else if (deepSeaWorld) {
     hills(ctx, view, '#020815', 0.18, groundScreenY + 18, 92, 260);
     hills(ctx, view, '#01040b', 0.38, groundScreenY + 32, 68, 210);
   } else if (underwaterWorld) {
@@ -337,8 +373,75 @@ function drawBackground(
     hills(ctx, view, theme.hillNear, 0.5, groundScreenY + 14, 90, 240);
   }
   if (skyRideT > 0) drawLiftClouds(view, skyRideT);
+  if (atmosphereLiftT > 0) drawUfoLift(view, atmosphereLiftT);
   if (undergroundLiftT > 0) drawCaveLift(view, undergroundLiftT);
   if (underwaterLiftT > 0) drawWaterLift(view, underwaterLiftT);
+}
+
+function drawUpperAtmosphereBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+
+  // Dense twinkling stars make this feel higher than the ordinary night theme.
+  for (let i = 0; i < 105; i++) {
+    const x = (((i * 83 + 17) % 211) / 211) * cssW;
+    const y = (((i * 137 + 31) % 173) / 173) * cssH * 0.78;
+    const twinkle = 0.42 + 0.5 * Math.sin(view.time * (1.5 + (i % 4) * 0.18) + i * 1.9);
+    ctx.globalAlpha = Math.max(0.18, twinkle);
+    ctx.fillStyle = i % 11 === 0 ? '#ffe8a8' : i % 7 === 0 ? '#bcefff' : '#ffffff';
+    if (i % 13 === 0) {
+      star(ctx, x, y, 4.2, 1.7);
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, y, 0.8 + (i % 4) * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // A curved blue-white Earth limb peeks through below the playable clouds.
+  ctx.globalAlpha = 1;
+  const horizonY = cssH * 1.08;
+  const glow = ctx.createRadialGradient(cssW / 2, horizonY, cssW * 0.34, cssW / 2, horizonY, cssW * 0.68);
+  glow.addColorStop(0, 'rgba(190,240,255,0.9)');
+  glow.addColorStop(0.52, 'rgba(86,165,255,0.44)');
+  glow.addColorStop(1, 'rgba(60,100,210,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.ellipse(cssW / 2, horizonY, cssW * 0.72, cssH * 0.34, 0, Math.PI, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(218,248,255,0.34)';
+  for (let i = 0; i < 5; i++) {
+    const x = ((i * 239 - view.cameraX * 0.06 + view.time * 4) % (cssW + 260)) - 110;
+    cloud(ctx, x, cssH * (0.76 + (i % 2) * 0.08), 25 + (i % 3) * 7);
+  }
+  ctx.restore();
+}
+
+function drawUfoLift(view: View, t: number): void {
+  const { ctx, cssW, cssH } = view;
+  const strength = Math.sin(Math.PI * clampNum(t, 0, 1));
+  ctx.save();
+  const beam = ctx.createLinearGradient(cssW * 0.5, 0, cssW * 0.5, cssH);
+  beam.addColorStop(0, `rgba(190,255,245,${0.04 * strength})`);
+  beam.addColorStop(0.55, `rgba(145,255,225,${0.2 * strength})`);
+  beam.addColorStop(1, `rgba(255,248,170,${0.08 * strength})`);
+  ctx.fillStyle = beam;
+  ctx.beginPath();
+  ctx.moveTo(cssW * 0.43, 0);
+  ctx.lineTo(cssW * 0.25, cssH);
+  ctx.lineTo(cssW * 0.75, cssH);
+  ctx.lineTo(cssW * 0.57, 0);
+  ctx.closePath();
+  ctx.fill();
+  for (let i = 0; i < 18; i++) {
+    const y = cssH - ((t * 780 + i * 47) % (cssH + 80));
+    const x = cssW * 0.5 + Math.sin(i * 2.3 + t * 12) * (28 + (i % 5) * 9);
+    ctx.globalAlpha = strength * 0.75;
+    ctx.fillStyle = i % 2 ? '#b7fff0' : '#fff2a8';
+    star(ctx, x, y, 3 + (i % 3), 1.4);
+  }
+  ctx.restore();
 }
 
 function drawStars(view: View): void {
@@ -647,6 +750,37 @@ function drawCloudPlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
   ctx.fillRect(p.x, p.y + 10, p.w, 16);
 }
 
+function tinyPoof(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number): void {
+  ctx.beginPath();
+  ctx.arc(x - radius * 0.7, y + 3, radius * 0.62, 0, Math.PI * 2);
+  ctx.arc(x, y - 2, radius, 0, Math.PI * 2);
+  ctx.arc(x + radius * 0.78, y + 4, radius * 0.68, 0, Math.PI * 2);
+  ctx.rect(x - radius * 1.3, y + 3, radius * 2.6, radius * 0.7);
+  ctx.fill();
+}
+
+function drawUpperAtmospherePlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  // The playable ledge is a necklace of intentionally tiny, poofy clouds.
+  const spacing = 34;
+  const count = Math.max(2, Math.ceil(p.w / spacing));
+  ctx.save();
+  ctx.fillStyle = 'rgba(180,222,255,0.3)';
+  roundRect(ctx, p.x, p.y + 6, p.w, Math.min(16, p.h), 8);
+  ctx.fill();
+  for (let i = 0; i <= count; i++) {
+    const cx = p.x + (i / count) * p.w;
+    const radius = 10 + ((i * 7) % 4);
+    ctx.shadowColor = 'rgba(125,210,255,0.75)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = i % 4 === 0 ? '#e8f8ff' : '#ffffff';
+    tinyPoof(ctx, cx, p.y + 3 + (i % 2) * 2, radius);
+  }
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(153,215,255,0.5)';
+  ctx.fillRect(p.x, p.y + 9, p.w, 5);
+  ctx.restore();
+}
+
 function hills(
   ctx: CanvasRenderingContext2D,
   view: View,
@@ -673,11 +807,16 @@ function drawPlatforms(
   platforms: Platform[],
   theme: Theme,
   candyWorld: boolean,
+  upperAtmosphereWorld: boolean,
   undergroundWorld: boolean,
   underwaterWorld: boolean,
   deepSeaWorld: boolean,
 ): void {
   for (const p of platforms) {
+    if (upperAtmosphereWorld) {
+      drawUpperAtmospherePlatform(ctx, p);
+      continue;
+    }
     if (deepSeaWorld) {
       drawDeepSeaPlatform(ctx, p);
       continue;
@@ -837,6 +976,25 @@ function drawCandyObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
   } else {
     drawMarshmallow(ctx, b);
   }
+}
+
+function drawUpperAtmosphereObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  ctx.save();
+  const rows = Math.max(1, Math.ceil(b.h / 24));
+  for (let row = 0; row < rows; row++) {
+    const y = b.y + b.h - 10 - row * 22;
+    const offset = row % 2 === 0 ? 0 : 5;
+    ctx.shadowColor = 'rgba(112,205,255,0.72)';
+    ctx.shadowBlur = 7;
+    ctx.fillStyle = row % 3 === 0 ? '#dff5ff' : '#ffffff';
+    tinyPoof(ctx, b.x + b.w / 2 + offset, y, 12);
+  }
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(171,228,255,0.65)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, b.x + 5, b.y + 4, b.w - 10, Math.max(12, b.h - 4), 12);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCaveObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
@@ -2023,6 +2181,210 @@ function drawBird(ctx: CanvasRenderingContext2D, bird: BirdRender): void {
   }
 
   ctx.restore();
+}
+
+function drawUfo(ctx: CanvasRenderingContext2D, ufo: UfoRender): void {
+  const hover = Math.sin(ufo.t * 2.3) * 5;
+  const shipY = ufo.platformY - 132 + hover;
+  ctx.save();
+
+  const beam = ctx.createLinearGradient(ufo.x, shipY + 28, ufo.x, ufo.platformY);
+  beam.addColorStop(0, ufo.active ? 'rgba(163,255,224,0.58)' : 'rgba(163,255,224,0.28)');
+  beam.addColorStop(1, 'rgba(255,245,164,0.04)');
+  ctx.fillStyle = beam;
+  ctx.beginPath();
+  ctx.moveTo(ufo.x - 31, shipY + 20);
+  ctx.lineTo(ufo.x - 62, ufo.platformY);
+  ctx.lineTo(ufo.x + 62, ufo.platformY);
+  ctx.lineTo(ufo.x + 31, shipY + 20);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.shadowColor = '#8dffe7';
+  ctx.shadowBlur = ufo.active ? 22 : 12;
+  ctx.fillStyle = '#8e9bd8';
+  ctx.beginPath();
+  ctx.ellipse(ufo.x, shipY + 12, 58, 19, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#d9e0ff';
+  ctx.beginPath();
+  ctx.ellipse(ufo.x, shipY + 5, 44, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = 'rgba(160,244,255,0.78)';
+  ctx.beginPath();
+  ctx.arc(ufo.x, shipY - 7, 25, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // A tiny friendly alien waves from the dome.
+  ctx.fillStyle = '#8eea72';
+  ctx.beginPath();
+  ctx.ellipse(ufo.x, shipY - 6, 11, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#17203e';
+  ctx.beginPath();
+  ctx.ellipse(ufo.x - 4, shipY - 8, 2.5, 3.5, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(ufo.x + 4, shipY - 8, 2.5, 3.5, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#35542e';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(ufo.x, shipY - 3, 4, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
+
+  const lights = ['#ff78c8', '#7fffea', '#ffe66d', '#8ab7ff', '#ff78c8'];
+  for (let i = 0; i < lights.length; i++) {
+    ctx.fillStyle = lights[i];
+    ctx.beginPath();
+    ctx.arc(ufo.x - 34 + i * 17, shipY + 16, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawConsumables(ctx: CanvasRenderingContext2D, consumables: Consumable[], time: number): void {
+  for (let i = 0; i < consumables.length; i++) {
+    const food = consumables[i];
+    const x = food.x + food.w / 2;
+    const y = food.y + food.h / 2 + (food.kind === 'croissant' ? 3 : Math.sin(time * 3 + i * 1.7) * 1.5);
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,236,145,0.58)';
+    ctx.shadowBlur = 7;
+    switch (food.kind) {
+      case 'croissant':
+        drawCroissant(ctx, x, y + 1, 21, -0.14);
+        break;
+      case 'strawberry':
+        ctx.fillStyle = '#f34f62';
+        ctx.beginPath();
+        ctx.moveTo(x, y + 14);
+        ctx.bezierCurveTo(x - 19, y - 3, x - 10, y - 13, x, y - 9);
+        ctx.bezierCurveTo(x + 10, y - 13, x + 19, y - 3, x, y + 14);
+        ctx.fill();
+        ctx.fillStyle = '#69bd54';
+        for (let leaf = -1; leaf <= 1; leaf++) {
+          ctx.beginPath();
+          ctx.ellipse(x + leaf * 7, y - 10, 7, 3.5, leaf * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#fff3a5';
+        for (const [dx, dy] of [[-7, -1], [6, 1], [-3, 7], [2, -5]]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, y + dy, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 'apple':
+        ctx.fillStyle = '#ef4e55';
+        ctx.beginPath();
+        ctx.arc(x - 6, y + 3, 11, 0, Math.PI * 2);
+        ctx.arc(x + 6, y + 3, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#714428';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 7);
+        ctx.lineTo(x + 2, y - 15);
+        ctx.stroke();
+        ctx.fillStyle = '#64b957';
+        ctx.beginPath();
+        ctx.ellipse(x + 8, y - 12, 7, 3.5, -0.4, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'cookie':
+      case 'starCookie':
+        ctx.fillStyle = food.kind === 'cookie' ? '#f6e8d0' : '#ffd872';
+        if (food.kind === 'cookie') {
+          ctx.beginPath();
+          ctx.arc(x, y, 14, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#b9d9ee';
+          ctx.lineWidth = 2;
+          for (let arm = 0; arm < 6; arm++) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + Math.cos(arm * Math.PI / 3) * 10, y + Math.sin(arm * Math.PI / 3) * 10);
+            ctx.stroke();
+          }
+        } else {
+          star(ctx, x, y, 16, 7.5);
+          ctx.fillStyle = '#fff3b1';
+          ctx.beginPath();
+          ctx.arc(x - 4, y - 2, 1.5, 0, Math.PI * 2);
+          ctx.arc(x + 5, y + 3, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 'orange':
+        ctx.fillStyle = '#ff9c35';
+        ctx.beginPath();
+        ctx.arc(x, y + 2, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#60ae4f';
+        ctx.beginPath();
+        ctx.ellipse(x + 5, y - 12, 8, 3.5, -0.25, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'gumdrop':
+        ctx.fillStyle = i % 2 === 0 ? '#ff75bf' : '#8a78ff';
+        ctx.beginPath();
+        ctx.moveTo(x - 15, y + 12);
+        ctx.quadraticCurveTo(x - 12, y - 13, x, y - 13);
+        ctx.quadraticCurveTo(x + 12, y - 13, x + 15, y + 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        for (const [dx, dy] of [[-7, 3], [2, -5], [7, 5], [-3, 8]]) {
+          ctx.fillRect(x + dx, y + dy, 2, 2);
+        }
+        break;
+      case 'cheese':
+        ctx.fillStyle = '#ffd65a';
+        ctx.beginPath();
+        ctx.moveTo(x - 17, y + 12);
+        ctx.lineTo(x + 17, y + 12);
+        ctx.lineTo(x + 10, y - 12);
+        ctx.lineTo(x - 14, y - 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#d9a52d';
+        for (const [dx, dy, r] of [[-7, 3, 3], [7, 5, 2.5], [4, -4, 2]]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 'kelp':
+        ctx.strokeStyle = '#6fe08c';
+        ctx.lineWidth = 7;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x, y + 16);
+        ctx.bezierCurveTo(x - 13, y + 5, x + 14, y - 4, x, y - 17);
+        ctx.stroke();
+        ctx.strokeStyle = '#c2f58e';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - 7, y + 12);
+        ctx.quadraticCurveTo(x + 11, y + 2, x - 3, y - 12);
+        ctx.stroke();
+        break;
+      case 'starfruit':
+        ctx.fillStyle = '#b9ff73';
+        star(ctx, x, y, 17, 8);
+        ctx.fillStyle = '#f2ffaf';
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+    }
+    ctx.restore();
+  }
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]): void {

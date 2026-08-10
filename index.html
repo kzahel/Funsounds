@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
     <title>Fun Sounds for Toddlers</title>
     <style>
         * {
@@ -1386,9 +1387,6 @@
             pointer-events: none;
             white-space: nowrap;
         }
-        #jumper-screen.jp-wedding-mode #jp-status {
-            top: 116px;
-        }
         #jp-toast {
             position: absolute;
             top: 38%;
@@ -1442,6 +1440,11 @@
             background: linear-gradient(135deg, #6bcb77 0%, #43a233 100%);
             font-size: 1.2rem;
         }
+        .jp-touch-eat {
+            border-radius: 999px;
+            background: linear-gradient(135deg, #ffb45f 0%, #ef7d42 100%);
+            font-size: 0.9rem;
+        }
         .jp-touch-interact {
             display: none;
             border-radius: 999px;
@@ -1454,6 +1457,10 @@
         @media (max-width: 768px) {
             #jp-status { top: 116px; font-size: 0.85rem; }
             .jp-pill { font-size: 0.9rem; padding: 0.5rem 0.8rem; }
+            #jp-touch { left: 12px; right: 12px; }
+            .jp-touch-move, .jp-touch-actions { gap: 8px; }
+            .jp-touch-btn { width: 58px; height: 58px; }
+            .jp-touch-jump { width: 92px; }
             #jp-mate-progress {
                 gap: 0.28rem;
             }
@@ -2581,7 +2588,7 @@
 
         <div class="game-card">
             <h2>Barrel Hop</h2>
-            <p class="jp-card-hint">Jump over and onto barrels!</p>
+            <p class="jp-card-hint">Up jumps • Space eats nearby snacks!</p>
             <div class="jp-mode-buttons">
                 <button class="jp-mode-btn" data-jp-mode="practice"><span>🌳</span>Practice</button>
                 <button class="jp-mode-btn" data-jp-mode="easy"><span>🛢️</span>Jump Over</button>
@@ -2716,11 +2723,12 @@
             <button class="jp-pill jp-pill-mode" id="jp-mode">🛢️ Jump Over</button>
             <div class="jp-pill">Points <strong id="jp-score">0</strong></div>
             <div class="jp-pill">Best <strong id="jp-best">0</strong></div>
+            <div class="jp-pill">Snacks <strong id="jp-snacks">0</strong></div>
             <div class="jp-pill">Lives <strong id="jp-hearts">❤️❤️❤️</strong></div>
             <div class="jp-pill" id="jp-buddies-pill" style="display:none"><span id="jp-buddies-label">Buddies</span> <strong id="jp-buddies">0/5</strong></div>
             <div class="jp-pill" id="jp-mate-progress" style="display:none"></div>
         </div>
-        <div id="jp-status">Arrows move • hold Up to jump higher</div>
+        <div id="jp-status">Arrows move • Up jumps • Space eats nearby snacks</div>
         <div id="jp-toast"></div>
         <div id="jp-touch">
             <div class="jp-touch-move">
@@ -2729,6 +2737,7 @@
             </div>
             <div class="jp-touch-actions">
                 <button class="jp-touch-btn jp-touch-interact" id="jp-touch-interact" data-jp-interact="true">♥</button>
+                <button class="jp-touch-btn jp-touch-eat" data-jp-eat="true">EAT</button>
                 <button class="jp-touch-btn jp-touch-jump" data-jp-jump="true">JUMP</button>
             </div>
         </div>
