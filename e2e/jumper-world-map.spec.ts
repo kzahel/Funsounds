@@ -6,6 +6,11 @@ test('Buddy world map pauses play and revisits every layer without resetting sna
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`${message.text()} (${message.location().url})`);
   });
+  await page.addInitScript(() => {
+    localStorage.setItem('barrelhop.worlds.explored', JSON.stringify([
+      'surface', 'candy', 'upperAtmosphere', 'cave', 'underwater', 'deepSea',
+    ]));
+  });
 
   await page.goto('/Funsounds/?game=buddy');
   await page.waitForLoadState('networkidle');
@@ -49,6 +54,33 @@ test('Buddy world map pauses play and revisits every layer without resetting sna
   await expect(page.locator('#jp-mode')).toContainText('Jump Over');
   await expect(mapButton).toBeHidden();
   expect(errors).toEqual([]);
+});
+
+test('unexplored worlds stay locked until Buddy discovers them', async ({ page }) => {
+  await page.goto('/Funsounds/?game=buddy');
+  const map = page.locator('#jp-world-map');
+  await page.locator('#jp-world-map-button').click();
+
+  await expect(map.locator('[data-jp-world="surface"]')).toBeEnabled();
+  await expect(map.locator('[data-jp-world="surface"]')).toHaveClass(/current/);
+  await expect(map.locator('[data-jp-world]:disabled')).toHaveCount(5);
+  await expect(map.locator('[data-jp-world="cave"]')).toHaveClass(/locked/);
+  await map.screenshot({ path: '/tmp/jumper-world-map-locked.png' });
+
+  // Return to play and run into the first pit: that naturally discovers the cave.
+  await page.keyboard.press('Escape');
+  await page.keyboard.down('ArrowRight');
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-world', 'cave', { timeout: 5000 });
+  await page.keyboard.up('ArrowRight');
+
+  await page.locator('#jp-world-map-button').click();
+  await expect(map.locator('[data-jp-world="cave"]')).toBeEnabled();
+
+  // Discoveries survive a new run/page load.
+  await page.reload();
+  await page.locator('#jp-world-map-button').click();
+  await expect(map.locator('[data-jp-world="cave"]')).toBeEnabled();
+  await expect(map.locator('[data-jp-world="upperAtmosphere"]')).toBeDisabled();
 });
 
 test('world map route fits on a phone-sized screen', async ({ page }) => {

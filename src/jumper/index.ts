@@ -56,6 +56,8 @@ const WEDDING_BABY_JOIN_DUR = 1.15;
 const BUDDY_COLOR_COUNT = BUDDY_STYLES.length;
 const WEDDING_CROISSANT_RAIN_DUR = 8;
 const WEDDING_CROISSANTS_PER_SEC = 30;
+const EXPLORED_WORLDS_KEY = 'barrelhop.worlds.explored';
+const WORLD_LAYERS: readonly WorldLayer[] = ['surface', 'candy', 'upperAtmosphere', 'cave', 'underwater', 'deepSea'];
 const EAT_DISTANCE = 76;
 const UFO_RIDE_DUR = 2.4;
 const UFO_USE_DISTANCE = 74;
@@ -243,6 +245,7 @@ let consumables: Record<WorldLayer, Consumable[]> = {
 };
 let snacksEaten = 0;
 let worldMapOpen = false;
+let exploredWorlds = new Set<WorldLayer>(['surface']);
 
 // Input.
 const moveCodes = new Set<string>();
@@ -329,6 +332,37 @@ function loadBest(id: string): number {
 function saveBest(id: string, value: number): void {
   try {
     localStorage.setItem(bestKey(id), String(value));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function isWorldLayer(value: unknown): value is WorldLayer {
+  return typeof value === 'string' && WORLD_LAYERS.includes(value as WorldLayer);
+}
+
+function loadExploredWorlds(): Set<WorldLayer> {
+  const result = new Set<WorldLayer>(['surface']);
+  try {
+    const saved = localStorage.getItem(EXPLORED_WORLDS_KEY);
+    if (!saved) return result;
+    const parsed: unknown = JSON.parse(saved);
+    if (Array.isArray(parsed)) {
+      for (const value of parsed) {
+        if (isWorldLayer(value)) result.add(value);
+      }
+    }
+  } catch {
+    // A private browser session or malformed old value should not block play.
+  }
+  return result;
+}
+
+function rememberExploredWorld(world: WorldLayer): void {
+  if (exploredWorlds.has(world)) return;
+  exploredWorlds.add(world);
+  try {
+    localStorage.setItem(EXPLORED_WORLDS_KEY, JSON.stringify([...exploredWorlds]));
   } catch {
     /* ignore quota / private mode */
   }
@@ -511,6 +545,7 @@ function updateParticles(dt: number): void {
 
 function updateHud(): void {
   screenEl.classList.toggle('jp-wedding-mode', isWeddingMode());
+  if (hasBuddyChain()) rememberExploredWorld(currentWorldLayer());
   screenEl.dataset.world = currentWorldLayer();
   modeChipEl.textContent = `${mode.emoji} ${mode.name}`;
   scoreEl.textContent = String(score);
@@ -541,10 +576,19 @@ function syncWorldMapUi(): void {
   worldMapButtonEl.setAttribute('aria-expanded', String(worldMapOpen));
   const current = currentWorldLayer();
   worldMapEl.querySelectorAll<HTMLElement>('[data-jp-world]').forEach((button) => {
-    const here = button.dataset.jpWorld === current;
+    const world = button.dataset.jpWorld as WorldLayer;
+    const here = world === current;
+    const explored = exploredWorlds.has(world);
     button.classList.toggle('current', here);
+    button.classList.toggle('locked', !explored);
+    if (button instanceof HTMLButtonElement) button.disabled = !explored;
     if (here) button.setAttribute('aria-current', 'location');
     else button.removeAttribute('aria-current');
+    const marker = button.querySelector<HTMLElement>('.jp-world-card-here');
+    if (marker) marker.textContent = here ? '★' : explored ? '' : '🔒';
+    button.setAttribute('aria-label', explored
+      ? `${WORLD_MAP_NAMES[world]}${here ? ', current location' : ''}`
+      : `${WORLD_MAP_NAMES[world]}, locked until explored`);
   });
 }
 
@@ -783,6 +827,11 @@ function closeWorldMap(restoreStatus = true): void {
 
 function travelToWorld(world: WorldLayer): void {
   if (!hasBuddyChain()) return;
+  if (!exploredWorlds.has(world)) {
+    showToast('World still locked! 🔒');
+    setStatus('Explore that world during the adventure to unlock it here.');
+    return;
+  }
   if (world === currentWorldLayer()) {
     closeWorldMap(false);
     showToast(`Already in ${WORLD_MAP_NAMES[world]}!`);
@@ -2418,6 +2467,7 @@ async function startGame(modeId: string): Promise<void> {
   hearts = HEART_MAX;
   combo = 0;
   best = loadBest(mode.id);
+  exploredWorlds = loadExploredWorlds();
 
   document.getElementById('start-screen')!.style.display = 'none';
   screenEl.style.display = 'block';

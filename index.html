@@ -1509,6 +1509,13 @@
             border-color: #fff29a;
             box-shadow: 0 0 0 4px rgba(255,226,93,0.25), 0 7px 0 rgba(0,0,0,0.19);
         }
+        .jp-world-card.locked {
+            filter: saturate(0.18);
+            opacity: 0.58;
+            cursor: not-allowed;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.1);
+        }
+        .jp-world-card.locked:active { transform: none; }
         .jp-world-card-icon { font-size: 1.8rem; text-align: center; }
         .jp-world-card-name { font-size: 1rem; }
         .jp-world-card-here {
@@ -1517,6 +1524,7 @@
             text-align: center;
         }
         .jp-world-card.current .jp-world-card-here { opacity: 1; }
+        .jp-world-card.locked .jp-world-card-here { opacity: 1; }
         .jp-world-card[data-jp-world="upperAtmosphere"] { --jp-world-color: linear-gradient(135deg, #293b86, #7052a4); }
         .jp-world-card[data-jp-world="candy"] { --jp-world-color: linear-gradient(135deg, #de78bd, #7abde5); }
         .jp-world-card[data-jp-world="surface"] { --jp-world-color: linear-gradient(135deg, #4ba957, #83be4d); }
@@ -2857,7 +2865,7 @@
             <div class="jp-world-map-panel" role="dialog" aria-modal="true" aria-labelledby="jp-world-map-title">
                 <button class="jp-world-map-close" id="jp-world-map-close" type="button" aria-label="Close world map">×</button>
                 <h2 class="jp-world-map-title" id="jp-world-map-title">🗺️ Buddy’s World Map</h2>
-                <p class="jp-world-map-hint">Pick a favorite place!</p>
+                <p class="jp-world-map-hint">Explore new worlds to unlock them here!</p>
                 <div class="jp-world-route">
                     <button class="jp-world-card" type="button" data-jp-world="upperAtmosphere"><span class="jp-world-card-icon">🥐</span><span class="jp-world-card-name">Starry Sky</span><span class="jp-world-card-here">★</span></button>
                     <button class="jp-world-card" type="button" data-jp-world="candy"><span class="jp-world-card-icon">🍬</span><span class="jp-world-card-name">Candy Clouds</span><span class="jp-world-card-here">★</span></button>
