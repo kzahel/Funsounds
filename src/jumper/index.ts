@@ -57,11 +57,21 @@ const BUDDY_COLOR_COUNT = BUDDY_STYLES.length;
 const WEDDING_CROISSANT_RAIN_DUR = 8;
 const WEDDING_CROISSANTS_PER_SEC = 30;
 const EXPLORED_WORLDS_KEY = 'barrelhop.worlds.explored';
-const WORLD_LAYERS: readonly WorldLayer[] = ['surface', 'candy', 'upperAtmosphere', 'cave', 'underwater', 'deepSea'];
+const WORLD_LAYERS: readonly WorldLayer[] = [
+  'surface',
+  'candy',
+  'upperAtmosphere',
+  'moonBase',
+  'cave',
+  'underwater',
+  'deepSea',
+];
 const EAT_DISTANCE = 76;
 const UFO_RIDE_DUR = 2.4;
 const UFO_USE_DISTANCE = 74;
 const UFO_REUSE_DELAY = 1.1;
+const GATEWAY_TRAVEL_DUR = 1.25;
+const GATEWAY_USE_DISTANCE = 72;
 const BIRD_SPEED = 58;
 const BIRD_W = 72;
 const BIRD_H = 42;
@@ -89,12 +99,21 @@ const SWIM_MAX_Y = 210;
 const SWIM_SINK_ACCEL = 260;
 const SWIM_SINK_MAX_Y = 72;
 const tuning: Tuning = DEFAULT_TUNING;
+const MOON_TUNING: Tuning = {
+  ...DEFAULT_TUNING,
+  gravity: 1120,
+  jumpVelocity: -660,
+  ascendHoldFactor: 0.38,
+  maxJumpHold: 0.46,
+  terminalVy: 900,
+};
 const NEUTRAL_INPUT: MoveInput = { left: false, right: false, jumpHeld: false, jumpPressed: false };
 
 type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
 type BirdTripSide = 'left' | 'right';
 type SnakeKind = 'snake' | 'trampoline';
 type UfoRideDirection = 'up' | 'down';
+type GatewayKind = 'rocket';
 interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
@@ -163,6 +182,19 @@ interface UfoRide {
   startY: number;
   direction: UfoRideDirection;
 }
+interface WorldGateway {
+  x: number;
+  platformY: number;
+  kind: GatewayKind;
+  target: WorldLayer;
+  locked: boolean;
+}
+interface GatewayTravel {
+  t: number;
+  startX: number;
+  startY: number;
+  gateway: WorldGateway;
+}
 interface StrandedBuddy {
   id: number;
   world: WorldLayer;
@@ -215,8 +247,10 @@ let weddingCroissantRainT = 0;
 let weddingCroissantSpawnBank = 0;
 let candyWorld = false;
 let upperAtmosphereWorld = false;
+let moonBaseWorld = false;
 let ufoRide: UfoRide | null = null;
 let ufoCooldown = 0;
+let gatewayTravel: GatewayTravel | null = null;
 let bird: BirdState | null = null;
 let birdCooldown = 0;
 let birdRide: BirdRide | null = null;
@@ -239,6 +273,7 @@ let consumables: Record<WorldLayer, Consumable[]> = {
   surface: [],
   candy: [],
   upperAtmosphere: [],
+  moonBase: [],
   cave: [],
   underwater: [],
   deepSea: [],
@@ -641,8 +676,10 @@ function buildLevel(): void {
   resetWeddingMateProgress();
   candyWorld = false;
   upperAtmosphereWorld = false;
+  moonBaseWorld = false;
   ufoRide = null;
   ufoCooldown = 0;
+  gatewayTravel = null;
   bird = null;
   birdRide = null;
   resetBirdTrip('left');
@@ -663,12 +700,13 @@ function buildLevel(): void {
   worldMapOpen = false;
   const portal = ufoPortalPosition();
   consumables = {
-    surface: buildConsumables(level, 'surface', levelNum, portal.x),
-    candy: buildConsumables(level, 'candy', levelNum, portal.x),
-    upperAtmosphere: buildConsumables(level, 'upperAtmosphere', levelNum, portal.x),
-    cave: buildConsumables(level, 'cave', levelNum, portal.x),
-    underwater: buildConsumables(level, 'underwater', levelNum, portal.x),
-    deepSea: buildConsumables(level, 'deepSea', levelNum, portal.x),
+    surface: buildConsumables(level, 'surface', levelNum, consumableAvoidanceXs('surface', portal.x)),
+    candy: buildConsumables(level, 'candy', levelNum, consumableAvoidanceXs('candy', portal.x)),
+    upperAtmosphere: buildConsumables(level, 'upperAtmosphere', levelNum, consumableAvoidanceXs('upperAtmosphere', portal.x)),
+    moonBase: buildConsumables(level, 'moonBase', levelNum, consumableAvoidanceXs('moonBase', portal.x)),
+    cave: buildConsumables(level, 'cave', levelNum, consumableAvoidanceXs('cave', portal.x)),
+    underwater: buildConsumables(level, 'underwater', levelNum, consumableAvoidanceXs('underwater', portal.x)),
+    deepSea: buildConsumables(level, 'deepSea', levelNum, consumableAvoidanceXs('deepSea', portal.x)),
   };
   chain.reset(level.startX, level.startY);
 }
@@ -753,6 +791,7 @@ function overlapsRect(ax: number, ay: number, aw: number, ah: number, bx: number
 }
 
 function currentWorldLayer(): WorldLayer {
+  if (moonBaseWorld) return 'moonBase';
   if (deepSeaWorld) return 'deepSea';
   if (underwaterWorld) return 'underwater';
   if (undergroundWorld) return 'cave';
@@ -765,6 +804,7 @@ function worldDisplayName(world: WorldLayer): string {
   switch (world) {
     case 'candy': return 'candy clouds';
     case 'upperAtmosphere': return 'the starry sky';
+    case 'moonBase': return 'the moon base';
     case 'cave': return 'the cave';
     case 'underwater': return 'the reef';
     case 'deepSea': return 'the deep sea';
@@ -776,6 +816,7 @@ const WORLD_MAP_NAMES: Record<WorldLayer, string> = {
   surface: 'Sunny Surface',
   candy: 'Candy Clouds',
   upperAtmosphere: 'Starry Sky',
+  moonBase: 'Moon Base',
   cave: 'Crystal Cave',
   underwater: 'Coral Reef',
   deepSea: 'Deep Sea',
@@ -785,6 +826,7 @@ function worldStatus(world: WorldLayer): string {
   switch (world) {
     case 'candy': return 'Candy clouds! Eat gumdrops or use the UFO beam.';
     case 'upperAtmosphere': return 'Tiny poofy clouds! Space eats croissants.';
+    case 'moonBase': return 'Low gravity! Eat moon cheese and bounce across craters.';
     case 'cave': return 'Space eats cave cheese. Find a snake trampoline.';
     case 'underwater': return 'Space eats crunchy kelp. Up and Down swim.';
     case 'deepSea': return 'Space eats starfruit. Find a glowing lantern fish.';
@@ -797,6 +839,7 @@ function canOpenWorldMap(): boolean {
     && phase === 'playing'
     && !birdRide
     && !ufoRide
+    && !gatewayTravel
     && !undergroundReturn
     && !underwaterReturn
     && !weddingEvent;
@@ -839,9 +882,14 @@ function travelToWorld(world: WorldLayer): void {
     return;
   }
 
+  arriveInWorld(world);
+}
+
+function arriveInWorld(world: WorldLayer): void {
   const landing = platformLandingForBuddy(body.x);
   candyWorld = world === 'candy';
   upperAtmosphereWorld = world === 'upperAtmosphere';
+  moonBaseWorld = world === 'moonBase';
   undergroundWorld = world === 'cave';
   underwaterWorld = world === 'underwater';
   deepSeaWorld = world === 'deepSea';
@@ -875,8 +923,8 @@ function travelToWorld(world: WorldLayer): void {
   worldMapButtonEl.focus();
 }
 
-function ufoPortalPosition(): { x: number; platformY: number } {
-  const targetX = level.width * 0.58;
+function portalPositionAt(fraction: number): { x: number; platformY: number } {
+  const targetX = level.width * fraction;
   const candidates = level.platforms.filter((platform) => platform.w >= 130);
   const pool = candidates.length > 0 ? candidates : level.platforms;
   let best = pool[0];
@@ -891,6 +939,77 @@ function ufoPortalPosition(): { x: number; platformY: number } {
   }
   if (!best) return { x: level.width / 2, platformY: GROUND_Y };
   return { x: best.x + best.w / 2, platformY: best.y };
+}
+
+function worldGatewayDefinitions(world: WorldLayer): WorldGateway[] {
+  if (world === 'upperAtmosphere') {
+    return [{ ...portalPositionAt(0.3), kind: 'rocket', target: 'moonBase', locked: false }];
+  }
+  return [];
+}
+
+function consumableAvoidanceXs(world: WorldLayer, ufoX: number): number[] {
+  const result = worldGatewayDefinitions(world).map((gateway) => gateway.x);
+  if (world === 'candy' || world === 'upperAtmosphere') result.push(ufoX);
+  return result;
+}
+
+function nearbyGateway(): WorldGateway | null {
+  const cx = body.x + body.w / 2;
+  const feetY = body.y + body.h;
+  for (const gateway of worldGatewayDefinitions(currentWorldLayer())) {
+    if (Math.abs(cx - gateway.x) <= GATEWAY_USE_DISTANCE && Math.abs(feetY - gateway.platformY) <= 72) {
+      return gateway;
+    }
+  }
+  return null;
+}
+
+function startNearbyGateway(): boolean {
+  const gateway = nearbyGateway();
+  if (!gateway || gatewayTravel) return false;
+  if (gateway.locked) {
+    showToast('Gateway locked! 🔒');
+    setStatus('Keep exploring to unlock this magical gateway.');
+    return true;
+  }
+  gatewayTravel = { t: 0, startX: body.x, startY: body.y, gateway };
+  body.vx = 0;
+  body.vy = 0;
+  body.grounded = false;
+  body.jumping = false;
+  spawnSparks(body.x + PLAYER_W / 2, body.y + PLAYER_H / 2, 20);
+  showToast(gateway.kind === 'rocket' ? 'Rocket ride! 🚀' : 'Magic gateway!');
+  speakText(gateway.kind === 'rocket' ? 'Rocket ride!' : 'Magic gateway!', { rate: 1, pitch: 1.3 });
+  setStatus(`Traveling to ${WORLD_MAP_NAMES[gateway.target]}!`);
+  return true;
+}
+
+function updateGatewayTravel(dt: number): boolean {
+  if (!gatewayTravel) return false;
+  gatewayTravel.t += dt;
+  const p = clamp(gatewayTravel.t / GATEWAY_TRAVEL_DUR, 0, 1);
+  const lift = Math.sin(Math.PI * smoothstep(p));
+  body.prevX = body.x;
+  body.prevY = body.y;
+  body.x = gatewayTravel.startX + Math.sin(p * Math.PI * 5) * 9;
+  body.y = gatewayTravel.startY - lift * 150;
+  body.vx = 0;
+  body.vy = p < 0.5 ? -220 : 220;
+  body.grounded = false;
+  body.jumping = false;
+
+  if (p >= 1) {
+    const target = gatewayTravel.gateway.target;
+    gatewayTravel = null;
+    arriveInWorld(target);
+  }
+  updateParticles(dt);
+  return true;
+}
+
+function ufoPortalPosition(): { x: number; platformY: number } {
+  return portalPositionAt(0.58);
 }
 
 function isNearUfoPortal(): boolean {
@@ -953,8 +1072,11 @@ function startUfoRide(): boolean {
 function handleEatAction(): void {
   if (eatNearbyConsumable()) return;
   if (startUfoRide()) return;
+  if (startNearbyGateway()) return;
   if (candyWorld || upperAtmosphereWorld) {
-    setStatus('Stand by a snack to eat it, or under the UFO beam to ride.');
+    setStatus(upperAtmosphereWorld
+      ? 'Stand by food to eat, under the UFO, or beside the rocket.'
+      : 'Stand by a snack to eat it, or under the UFO beam to ride.');
   } else {
     setStatus('Stand next to a snack, then press Space to eat it.');
   }
@@ -1138,12 +1260,12 @@ function resetBirdTrip(side: BirdTripSide): void {
 }
 
 function noteBirdTripSide(side: BirdTripSide): void {
-  if (!hasBuddyChain() || candyWorld || upperAtmosphereWorld || undergroundWorld || underwaterWorld || deepSeaWorld || birdTripSide === side) return;
+  if (!hasBuddyChain() || candyWorld || upperAtmosphereWorld || moonBaseWorld || undergroundWorld || underwaterWorld || deepSeaWorld || birdTripSide === side) return;
   resetBirdTrip(side);
 }
 
 function updateBirdTripSide(cx: number): void {
-  if (!hasBuddyChain() || candyWorld || upperAtmosphereWorld || undergroundWorld || underwaterWorld || deepSeaWorld || level.leftGoalX === undefined) return;
+  if (!hasBuddyChain() || candyWorld || upperAtmosphereWorld || moonBaseWorld || undergroundWorld || underwaterWorld || deepSeaWorld || level.leftGoalX === undefined) return;
   if (cx <= level.leftGoalX) noteBirdTripSide('left');
   else if (cx >= level.goalX) noteBirdTripSide('right');
 }
@@ -1157,7 +1279,7 @@ function birdTripHasStarted(): boolean {
 }
 
 function canSpawnBird(): boolean {
-  return hasBuddyChain() && !candyWorld && !upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && !birdRide && !weddingEvent && phase === 'playing';
+  return hasBuddyChain() && !candyWorld && !upperAtmosphereWorld && !moonBaseWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && !birdRide && !weddingEvent && phase === 'playing';
 }
 
 function spawnBird(): void {
@@ -1794,6 +1916,7 @@ function updateBirdRide(dt: number): boolean {
     if (rideTarget === 'player') {
       candyWorld = true;
       upperAtmosphereWorld = false;
+      moonBaseWorld = false;
       birdCooldown = Number.POSITIVE_INFINITY;
       body.x = landingTop !== null ? landingX : lastSafe.x;
       body.y = landingTop !== null ? landingTop - PLAYER_H : lastSafe.y;
@@ -1978,7 +2101,9 @@ function loseHeart(): void {
 function enterUndergroundWorld(): void {
   candyWorld = false;
   upperAtmosphereWorld = false;
+  moonBaseWorld = false;
   ufoRide = null;
+  gatewayTravel = null;
   undergroundWorld = true;
   underwaterWorld = false;
   deepSeaWorld = false;
@@ -2002,7 +2127,9 @@ function enterUndergroundWorld(): void {
 function leaveCandyWorld(): void {
   candyWorld = false;
   upperAtmosphereWorld = false;
+  moonBaseWorld = false;
   ufoRide = null;
+  gatewayTravel = null;
   undergroundWorld = false;
   underwaterWorld = false;
   deepSeaWorld = false;
@@ -2026,7 +2153,9 @@ function leaveCandyWorld(): void {
 function enterUnderwaterWorld(): void {
   candyWorld = false;
   upperAtmosphereWorld = false;
+  moonBaseWorld = false;
   ufoRide = null;
+  gatewayTravel = null;
   undergroundWorld = false;
   underwaterWorld = true;
   deepSeaWorld = false;
@@ -2047,7 +2176,9 @@ function enterUnderwaterWorld(): void {
 function enterDeepSeaWorld(): void {
   candyWorld = false;
   upperAtmosphereWorld = false;
+  moonBaseWorld = false;
   ufoRide = null;
+  gatewayTravel = null;
   undergroundWorld = false;
   underwaterWorld = false;
   deepSeaWorld = true;
@@ -2066,6 +2197,18 @@ function enterDeepSeaWorld(): void {
 }
 
 function handlePitFall(): void {
+  if (moonBaseWorld) {
+    moonBaseWorld = false;
+    upperAtmosphereWorld = true;
+    gatewayTravel = null;
+    respawnTo(lastSafe);
+    spawnSparks(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 14);
+    showToast('Floated back to the stars!');
+    speakText('Back to the starry sky!', { rate: 1.05, pitch: 1.25 });
+    setStatus('A starry cloud caught you. Find the rocket to visit the Moon again.');
+    updateHud();
+    return;
+  }
   if (upperAtmosphereWorld) {
     upperAtmosphereWorld = false;
     candyWorld = true;
@@ -2174,6 +2317,12 @@ function update(dt: number): void {
     return;
   }
 
+  if (updateGatewayTravel(dt)) {
+    jumpEdge = false;
+    interactEdge = false;
+    eatEdge = false;
+    return;
+  }
   if (updateUfoRide(dt)) {
     jumpEdge = false;
     interactEdge = false;
@@ -2204,7 +2353,7 @@ function update(dt: number): void {
   eatEdge = false;
   if (pressedEat) {
     handleEatAction();
-    if (ufoRide) {
+    if (ufoRide || gatewayTravel) {
       jumpEdge = false;
       interactEdge = false;
       return;
@@ -2240,7 +2389,7 @@ function update(dt: number): void {
 
   const res = underwaterWorld || deepSeaWorld
     ? stepSwimBody(body, solids, { ...input, downHeld: lockForWeddingEvent ? false : downHeld }, dt)
-    : stepBody(body, solids, input, tuning, dt);
+    : stepBody(body, solids, input, moonBaseWorld ? MOON_TUNING : tuning, dt);
 
   if (res.startedJump) {
     sfx.jump();
@@ -2395,21 +2544,22 @@ function renderFrame(alpha: number): void {
       babyBaseX: weddingEvent?.babyBaseX ?? weddingBabyBasePosition().x,
       babyBaseY: weddingEvent?.babyBaseY ?? weddingBabyBasePosition().y,
     } : undefined,
-    candyWorld,
-    upperAtmosphereWorld,
+    world: currentWorldLayer(),
     atmosphereLiftT: ufoRide ? clamp(ufoRide.t / UFO_RIDE_DUR, 0, 1) : 0,
     skyRideT: birdRide ? clamp(birdRide.t / BIRD_RIDE_DUR, 0, 1) : 0,
-    undergroundWorld,
     undergroundLiftT: undergroundReturn ? clamp(undergroundReturn.t / UNDERGROUND_RETURN_DUR, 0, 1) : 0,
-    underwaterWorld,
     underwaterLiftT: underwaterReturn ? clamp(underwaterReturn.t / UNDERWATER_RETURN_DUR, 0, 1) : 0,
-    deepSeaWorld,
     consumables: consumables[currentWorldLayer()] ?? [],
     ufo: candyWorld || upperAtmosphereWorld || ufoRide ? {
       ...ufoPortalPosition(),
       t: view.time,
       active: ufoRide !== null,
     } : undefined,
+    gateways: worldGatewayDefinitions(currentWorldLayer()).map((gateway) => ({
+      ...gateway,
+      t: view.time,
+      active: gatewayTravel?.gateway.target === gateway.target,
+    })),
     bird: bird ? {
       x: bird.x,
       y: bird.y,
@@ -2486,6 +2636,7 @@ async function startGame(modeId: string): Promise<void> {
 function stopGame(): void {
   loop.stop();
   gameActive = false;
+  gatewayTravel = null;
   worldMapOpen = false;
   worldMapEl.classList.remove('visible');
   worldMapEl.setAttribute('aria-hidden', 'true');

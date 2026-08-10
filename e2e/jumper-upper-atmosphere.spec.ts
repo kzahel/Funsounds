@@ -60,20 +60,17 @@ test('upper-atmosphere canvas art renders poofy platforms, UFO, stars and croiss
       flagDown: 0,
       buddies: [],
       worldBuddies: [],
-      candyWorld: false,
-      upperAtmosphereWorld: true,
+      world: 'upperAtmosphere',
       skyRideT: 0,
       atmosphereLiftT: 0,
-      undergroundWorld: false,
       undergroundLiftT: 0,
-      underwaterWorld: false,
       underwaterLiftT: 0,
-      deepSeaWorld: false,
       consumables: [
         { id: 'upper-0', x: 238, y: 444, w: 40, h: 26, kind: 'croissant' },
         { id: 'upper-1', x: 535, y: 379, w: 40, h: 26, kind: 'croissant' },
       ],
       ufo: { x: 305, platformY: 470, t: 1.4, active: false },
+      gateways: [{ x: 535, platformY: 405, kind: 'rocket', locked: false, active: false, t: 1.4 }],
       tarantulas: [],
       particles: [],
     });
@@ -81,5 +78,22 @@ test('upper-atmosphere canvas art renders poofy platforms, UFO, stars and croiss
 
   await expect(page.locator('#jp-canvas')).toBeVisible();
   await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-upper-atmosphere.png' });
+  expect(errors).toEqual([]);
+});
+
+test('Moon Base renders low-gravity world art and moon cheese', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('barrelhop.worlds.explored', JSON.stringify([
+      'surface', 'candy', 'upperAtmosphere', 'moonBase',
+    ]));
+  });
+  await page.goto('/Funsounds/?game=buddy');
+  await page.locator('#jp-world-map-button').click();
+  await page.locator('[data-jp-world="moonBase"]').click();
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-world', 'moonBase');
+  await expect(page.locator('#jp-status')).toContainText('moon cheese');
+  await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-moon-base.png' });
   expect(errors).toEqual([]);
 });

@@ -24,7 +24,7 @@ unlocks it permanently for direct map travel.
 
 | World | Natural discovery route | Signature snack | Status |
 | --- | --- | --- | --- |
-| Moon Base | Rocket from Starry Sky | Moon cheese | Planned |
+| Moon Base | Rocket from Starry Sky | Moon cheese | Complete |
 | Starry Sky | UFO from Candy Clouds | Croissant | Complete |
 | Candy Clouds | Friendly bird from Surface | Gumdrop | Complete |
 | Rainbow Dreamland | Rainbow gate after exploring every other world | Sprinkle cookie | Planned |
@@ -41,9 +41,10 @@ unlocks it permanently for direct map travel.
 
 ### Moon Base
 
-- Low-gravity jumping with cratered moon platforms.
-- A friendly rover and robot, Earth on the horizon, satellite obstacles.
-- A rocket gateway in Starry Sky and soft falls back to Starry Sky.
+- Complete: low-gravity jumping with cratered moon platforms and moon cheese.
+- Complete: friendly rovers, Earth on the horizon, satellites, and moon rocks.
+- Complete: a Space/EAT rocket gateway in Starry Sky and soft falls back to
+  Starry Sky.
 
 ### Dinosaur Jungle
 
@@ -89,7 +90,7 @@ unlocks it permanently for direct map travel.
 ## Delivery checklist
 
 - [x] Exploration-gated, persistent world map
-- [ ] Moon Base
+- [x] Moon Base
 - [ ] Dinosaur Jungle
 - [ ] Volcano World
 - [ ] Sunken Castle

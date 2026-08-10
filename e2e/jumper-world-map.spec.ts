@@ -8,7 +8,7 @@ test('Buddy world map pauses play and revisits every layer without resetting sna
   });
   await page.addInitScript(() => {
     localStorage.setItem('barrelhop.worlds.explored', JSON.stringify([
-      'surface', 'candy', 'upperAtmosphere', 'cave', 'underwater', 'deepSea',
+      'surface', 'candy', 'upperAtmosphere', 'moonBase', 'cave', 'underwater', 'deepSea',
     ]));
   });
 
@@ -28,7 +28,7 @@ test('Buddy world map pauses play and revisits every layer without resetting sna
 
   await mapButton.click();
   await expect(map).toBeVisible();
-  await expect(map.locator('[data-jp-world]')).toHaveCount(6);
+  await expect(map.locator('[data-jp-world]')).toHaveCount(7);
   await expect(map.locator('[data-jp-world="surface"]')).toHaveClass(/current/);
   await expect(mapButton).toHaveAttribute('aria-expanded', 'true');
   await map.screenshot({ path: '/tmp/jumper-world-map.png' });
@@ -63,7 +63,7 @@ test('unexplored worlds stay locked until Buddy discovers them', async ({ page }
 
   await expect(map.locator('[data-jp-world="surface"]')).toBeEnabled();
   await expect(map.locator('[data-jp-world="surface"]')).toHaveClass(/current/);
-  await expect(map.locator('[data-jp-world]:disabled')).toHaveCount(5);
+  await expect(map.locator('[data-jp-world]:disabled')).toHaveCount(6);
   await expect(map.locator('[data-jp-world="cave"]')).toHaveClass(/locked/);
   await map.screenshot({ path: '/tmp/jumper-world-map-locked.png' });
 

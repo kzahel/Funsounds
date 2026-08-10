@@ -11,6 +11,7 @@ export const CONSUMABLE_LABELS: Record<ConsumableKind, string> = {
   kelp: 'crunchy kelp',
   starfruit: 'glowing starfruit',
   croissant: 'croissant',
+  moonCheese: 'moon cheese',
 };
 
 const FOOD_SIZE: Record<ConsumableKind, { w: number; h: number }> = {
@@ -24,12 +25,14 @@ const FOOD_SIZE: Record<ConsumableKind, { w: number; h: number }> = {
   kelp: { w: 28, h: 36 },
   starfruit: { w: 34, h: 34 },
   croissant: { w: 40, h: 26 },
+  moonCheese: { w: 36, h: 29 },
 };
 
 /** The six surface seasons get their own snack; the fantastical worlds do too. */
 export function consumableKindForWorld(world: WorldLayer, levelNum: number): ConsumableKind {
   if (world === 'candy') return 'gumdrop';
   if (world === 'upperAtmosphere') return 'croissant';
+  if (world === 'moonBase') return 'moonCheese';
   if (world === 'cave') return 'cheese';
   if (world === 'underwater') return 'kelp';
   if (world === 'deepSea') return 'starfruit';
@@ -49,8 +52,8 @@ function candidateXs(platform: Platform): number[] {
   ));
 }
 
-function tooCloseToLandmark(level: Level, x: number, ufoX: number): boolean {
-  const landmarks = [level.leftGoalX, level.goalX, level.partnerX, ufoX];
+function tooCloseToLandmark(level: Level, x: number, avoidedXs: number[]): boolean {
+  const landmarks = [level.leftGoalX, level.goalX, level.partnerX, ...avoidedXs];
   if (landmarks.some((landmark) => landmark !== undefined && Math.abs(x - landmark) < 88)) return true;
   return level.barrels.some((barrel) => x > barrel.x - 46 && x < barrel.x + barrel.w + 46);
 }
@@ -63,16 +66,17 @@ export function buildConsumables(
   level: Level,
   world: WorldLayer,
   levelNum: number,
-  ufoX: number,
+  avoidedX: number | number[],
 ): Consumable[] {
   const kind = consumableKindForWorld(world, levelNum);
   const size = FOOD_SIZE[kind];
   const result: Consumable[] = [];
+  const avoidedXs = Array.isArray(avoidedX) ? avoidedX : [avoidedX];
   let sequence = 0;
 
   for (const platform of level.platforms) {
     for (const centerX of candidateXs(platform)) {
-      if (tooCloseToLandmark(level, centerX, ufoX)) continue;
+      if (tooCloseToLandmark(level, centerX, avoidedXs)) continue;
       result.push({
         id: `${world}-${sequence++}`,
         x: centerX - size.w / 2,

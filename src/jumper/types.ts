@@ -5,7 +5,14 @@
 export type ModeId = 'practice' | 'easy' | 'hard' | 'buddy' | 'wedding';
 
 /** The same course is re-imagined as Buddy travels vertically between worlds. */
-export type WorldLayer = 'surface' | 'candy' | 'upperAtmosphere' | 'cave' | 'underwater' | 'deepSea';
+export type WorldLayer =
+  | 'surface'
+  | 'candy'
+  | 'upperAtmosphere'
+  | 'moonBase'
+  | 'cave'
+  | 'underwater'
+  | 'deepSea';
 
 export type ConsumableKind =
   | 'strawberry'
@@ -17,7 +24,8 @@ export type ConsumableKind =
   | 'cheese'
   | 'kelp'
   | 'starfruit'
-  | 'croissant';
+  | 'croissant'
+  | 'moonCheese';
 
 /** A snack resting on a platform. Space (or EAT on touch screens) consumes it. */
 export interface Consumable {

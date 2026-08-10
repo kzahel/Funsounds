@@ -3,7 +3,7 @@
 // the world in scaled world space. Colors come from the level's Theme; barrels
 // and the character stay constant so they're always easy to read.
 
-import type { Barrel, Consumable, Level, Particle, Platform } from './types';
+import type { Barrel, Consumable, Level, Particle, Platform, WorldLayer } from './types';
 import type { Theme } from './themes';
 import { GROUND_Y, PLAYER_H, PLAYER_W, VIRTUAL_H } from './modes';
 import { BUDDY_LOOKS, type BuddyLook, type BuddySpecies } from './buddy-looks';
@@ -90,6 +90,17 @@ export interface UfoRender {
   active: boolean;
 }
 
+export type GatewayRenderKind = 'rocket';
+
+export interface GatewayRender {
+  x: number;
+  platformY: number;
+  kind: GatewayRenderKind;
+  locked: boolean;
+  active: boolean;
+  t: number;
+}
+
 export interface Scene {
   level: Level;
   theme: Theme;
@@ -105,17 +116,14 @@ export interface Scene {
   buddies: BuddyRender[];
   worldBuddies: BuddyRender[];
   wedding?: WeddingRender;
-  candyWorld: boolean;
-  upperAtmosphereWorld: boolean;
+  world: WorldLayer;
   skyRideT: number;
   atmosphereLiftT: number;
-  undergroundWorld: boolean;
   undergroundLiftT: number;
-  underwaterWorld: boolean;
   underwaterLiftT: number;
-  deepSeaWorld: boolean;
   consumables: Consumable[];
   ufo?: UfoRender;
+  gateways: GatewayRender[];
   bird?: BirdRender;
   snake?: SnakeRender;
   tarantulas: TarantulaRender[];
@@ -167,18 +175,19 @@ export const BUDDY_STYLES: CharStyle[] = [
 export function render(view: View, scene: Scene): void {
   const { ctx, dpr } = view;
   const theme = scene.theme;
+  const candyWorld = scene.world === 'candy';
+  const upperAtmosphereWorld = scene.world === 'upperAtmosphere';
+  const undergroundWorld = scene.world === 'cave';
+  const underwaterWorld = scene.world === 'underwater';
+  const deepSeaWorld = scene.world === 'deepSea';
   drawBackground(
     view,
     theme,
-    scene.candyWorld,
-    scene.upperAtmosphereWorld,
+    scene.world,
     scene.skyRideT,
     scene.atmosphereLiftT,
-    scene.undergroundWorld,
     scene.undergroundLiftT,
-    scene.underwaterWorld,
     scene.underwaterLiftT,
-    scene.deepSeaWorld,
   );
 
   // World space transform (scale + camera), folded with device pixel ratio.
@@ -186,34 +195,28 @@ export function render(view: View, scene: Scene): void {
   ctx.setTransform(s, 0, 0, s, -view.cameraX * s, 0);
 
   if (scene.ufo) drawUfo(ctx, scene.ufo);
-  drawPlatforms(
-    ctx,
-    scene.level.platforms,
-    theme,
-    scene.candyWorld,
-    scene.upperAtmosphereWorld,
-    scene.undergroundWorld,
-    scene.underwaterWorld,
-    scene.deepSeaWorld,
-  );
+  drawPlatforms(ctx, scene.level.platforms, theme, scene.world);
+  for (const gateway of scene.gateways) drawGateway(ctx, gateway);
   if (scene.level.leftGoalX !== undefined) {
-    drawEndpoint(ctx, scene.level.leftGoalX, view.time, 0, -1, scene.candyWorld);
+    drawEndpoint(ctx, scene.level.leftGoalX, view.time, 0, -1, candyWorld);
   }
-  drawGoal(ctx, scene.level, view.time, scene.flagDown, scene.candyWorld);
+  drawGoal(ctx, scene.level, view.time, scene.flagDown, candyWorld);
   if (scene.wedding) drawWeddingDecor(ctx, scene.level, scene.wedding, view.time);
-  if (scene.undergroundWorld) drawUndergroundDecor(ctx, scene.level, view.time);
-  if (scene.underwaterWorld) drawUnderwaterDecor(ctx, scene.level, view.time);
-  if (scene.deepSeaWorld) drawDeepSeaDecor(ctx, scene.level, view.time);
+  if (undergroundWorld) drawUndergroundDecor(ctx, scene.level, view.time);
+  if (underwaterWorld) drawUnderwaterDecor(ctx, scene.level, view.time);
+  if (deepSeaWorld) drawDeepSeaDecor(ctx, scene.level, view.time);
+  if (scene.world === 'moonBase') drawMoonBaseDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
-    if (scene.deepSeaWorld) drawDeepSeaObstacle(ctx, b);
-    else if (scene.underwaterWorld) drawUnderwaterObstacle(ctx, b);
-    else if (scene.undergroundWorld) drawCaveObstacle(ctx, b);
-    else if (scene.upperAtmosphereWorld) drawUpperAtmosphereObstacle(ctx, b);
-    else if (scene.candyWorld) drawCandyObstacle(ctx, b);
+    if (deepSeaWorld) drawDeepSeaObstacle(ctx, b);
+    else if (underwaterWorld) drawUnderwaterObstacle(ctx, b);
+    else if (undergroundWorld) drawCaveObstacle(ctx, b);
+    else if (upperAtmosphereWorld) drawUpperAtmosphereObstacle(ctx, b);
+    else if (candyWorld) drawCandyObstacle(ctx, b);
+    else if (scene.world === 'moonBase') drawMoonBaseObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
-  if (scene.candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
-  if (scene.undergroundWorld) {
+  if (candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
+  if (undergroundWorld) {
     for (const tarantula of scene.tarantulas) drawTarantula(ctx, tarantula);
   }
   if (scene.snake) drawSnake(ctx, scene.snake);
@@ -255,7 +258,7 @@ export function render(view: View, scene: Scene): void {
   );
 
   // Ambient weather overlays the whole scene (screen space).
-  if (!scene.candyWorld && !scene.upperAtmosphereWorld && !scene.undergroundWorld && !scene.underwaterWorld && !scene.deepSeaWorld) {
+  if (scene.world === 'surface') {
     drawWeather(view, theme);
   }
 }
@@ -289,21 +292,26 @@ function drawBuddy(ctx: CanvasRenderingContext2D, level: Level, bd: BuddyRender,
 function drawBackground(
   view: View,
   theme: Theme,
-  candyWorld: boolean,
-  upperAtmosphereWorld: boolean,
+  world: WorldLayer,
   skyRideT: number,
   atmosphereLiftT: number,
-  undergroundWorld: boolean,
   undergroundLiftT: number,
-  underwaterWorld: boolean,
   underwaterLiftT: number,
-  deepSeaWorld: boolean,
 ): void {
   const { ctx, dpr, cssW, cssH } = view;
+  const candyWorld = world === 'candy';
+  const upperAtmosphereWorld = world === 'upperAtmosphere';
+  const undergroundWorld = world === 'cave';
+  const underwaterWorld = world === 'underwater';
+  const deepSeaWorld = world === 'deepSea';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (upperAtmosphereWorld) {
+  if (world === 'moonBase') {
+    sky.addColorStop(0, '#01020d');
+    sky.addColorStop(0.55, '#080c28');
+    sky.addColorStop(1, '#14183c');
+  } else if (upperAtmosphereWorld) {
     sky.addColorStop(0, '#050829');
     sky.addColorStop(0.5, '#15245f');
     sky.addColorStop(1, '#526bc7');
@@ -330,18 +338,19 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (upperAtmosphereWorld) drawUpperAtmosphereBackground(view);
+  if (world === 'moonBase') drawMoonBaseBackground(view);
+  else if (upperAtmosphereWorld) drawUpperAtmosphereBackground(view);
   else if (deepSeaWorld) drawDeepSeaBackground(view);
   else if (underwaterWorld) drawUnderwaterBackground(view);
   else if (undergroundWorld) drawCaveBackground(view);
-  if (!candyWorld && !upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld && theme.stars) drawStars(view);
-  if (!upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld) {
+  if (world === 'surface' && theme.stars) drawStars(view);
+  if ((world === 'surface' || candyWorld)) {
     if (!candyWorld) drawCelestial(view, theme);
     else drawCandySky(view);
   }
 
   // Drifting clouds (slow parallax).
-  if (!upperAtmosphereWorld && !undergroundWorld && !underwaterWorld && !deepSeaWorld) {
+  if (world === 'surface' || candyWorld) {
     const cloudShift = (view.cameraX * 0.15 + view.time * 8) % (cssW + 240);
     ctx.fillStyle = candyWorld ? 'rgba(255,255,255,0.96)' : theme.cloud;
     const cloudCount = candyWorld ? 7 : 4;
@@ -354,7 +363,10 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (upperAtmosphereWorld) {
+  if (world === 'moonBase') {
+    hills(ctx, view, '#242747', 0.16, groundScreenY + 16, 72, 250);
+    hills(ctx, view, '#14172f', 0.36, groundScreenY + 30, 52, 190);
+  } else if (upperAtmosphereWorld) {
     // The glowing atmospheric limb is drawn by drawUpperAtmosphereBackground.
   } else if (deepSeaWorld) {
     hills(ctx, view, '#020815', 0.18, groundScreenY + 18, 92, 260);
@@ -415,6 +427,49 @@ function drawUpperAtmosphereBackground(view: View): void {
     const x = ((i * 239 - view.cameraX * 0.06 + view.time * 4) % (cssW + 260)) - 110;
     cloud(ctx, x, cssH * (0.76 + (i % 2) * 0.08), 25 + (i % 3) * 7);
   }
+  ctx.restore();
+}
+
+function drawMoonBaseBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+  for (let i = 0; i < 92; i++) {
+    const x = (((i * 97 + 29) % 223) / 223) * cssW;
+    const y = (((i * 151 + 11) % 181) / 181) * cssH * 0.78;
+    const glow = 0.42 + Math.sin(view.time * 1.7 + i * 2.1) * 0.25;
+    ctx.globalAlpha = Math.max(0.2, glow);
+    ctx.fillStyle = i % 9 === 0 ? '#b8ddff' : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x, y, 0.7 + (i % 4) * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Earth hangs brightly over the quiet lunar horizon.
+  ctx.globalAlpha = 1;
+  const earthX = cssW * 0.79 - (view.cameraX * 0.025) % (cssW * 0.12);
+  const earthY = cssH * 0.2;
+  const earthGlow = ctx.createRadialGradient(earthX, earthY, 28, earthX, earthY, 70);
+  earthGlow.addColorStop(0, 'rgba(130,205,255,0.5)');
+  earthGlow.addColorStop(1, 'rgba(80,145,255,0)');
+  ctx.fillStyle = earthGlow;
+  ctx.beginPath();
+  ctx.arc(earthX, earthY, 70, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#4fa9ef';
+  ctx.beginPath();
+  ctx.arc(earthX, earthY, 34, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8ee0a4';
+  ctx.beginPath();
+  ctx.ellipse(earthX - 8, earthY - 9, 13, 8, -0.4, 0, Math.PI * 2);
+  ctx.ellipse(earthX + 10, earthY + 8, 11, 7, 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.beginPath();
+  ctx.arc(earthX - 8, earthY - 12, 29, 0.7 * Math.PI, 1.4 * Math.PI);
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -806,30 +861,30 @@ function drawPlatforms(
   ctx: CanvasRenderingContext2D,
   platforms: Platform[],
   theme: Theme,
-  candyWorld: boolean,
-  upperAtmosphereWorld: boolean,
-  undergroundWorld: boolean,
-  underwaterWorld: boolean,
-  deepSeaWorld: boolean,
+  world: WorldLayer,
 ): void {
   for (const p of platforms) {
-    if (upperAtmosphereWorld) {
+    if (world === 'moonBase') {
+      drawMoonBasePlatform(ctx, p);
+      continue;
+    }
+    if (world === 'upperAtmosphere') {
       drawUpperAtmospherePlatform(ctx, p);
       continue;
     }
-    if (deepSeaWorld) {
+    if (world === 'deepSea') {
       drawDeepSeaPlatform(ctx, p);
       continue;
     }
-    if (underwaterWorld) {
+    if (world === 'underwater') {
       drawUnderwaterPlatform(ctx, p);
       continue;
     }
-    if (undergroundWorld) {
+    if (world === 'cave') {
       drawCavePlatform(ctx, p);
       continue;
     }
-    if (candyWorld) {
+    if (world === 'candy') {
       drawCloudPlatform(ctx, p);
       continue;
     }
@@ -850,6 +905,27 @@ function drawPlatforms(
       ctx.fillStyle = theme.grass;
       ctx.fill();
     }
+  }
+}
+
+function drawMoonBasePlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#777b91';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#505469';
+    ctx.fillRect(p.x, p.y + p.h - 12, p.w, 12);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 7, 10);
+    ctx.fillStyle = '#74788d';
+    ctx.fill();
+  }
+  ctx.fillStyle = '#aeb1c0';
+  ctx.fillRect(p.x, p.y, p.w, 10);
+  ctx.fillStyle = 'rgba(67,70,89,0.65)';
+  for (let x = p.x + 26; x < p.x + p.w - 8; x += 74) {
+    ctx.beginPath();
+    ctx.ellipse(x, p.y + 6, 8 + (Math.floor(x) % 3), 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -994,6 +1070,39 @@ function drawUpperAtmosphereObstacle(ctx: CanvasRenderingContext2D, b: Barrel): 
   ctx.lineWidth = 2;
   roundRect(ctx, b.x + 5, b.y + 4, b.w - 10, Math.max(12, b.h - 4), 12);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawMoonBaseObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  ctx.save();
+  if (b.id % 2 === 0) {
+    ctx.fillStyle = '#d8dde8';
+    roundRect(ctx, b.x + 4, b.y + 7, b.w - 8, b.h - 7, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#687087';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = '#7ff0ff';
+    ctx.fillRect(b.x + 12, b.y + 17, b.w - 24, 8);
+    ctx.fillStyle = '#ff7aa8';
+    ctx.beginPath();
+    ctx.arc(b.x + b.w / 2, b.y + Math.min(40, b.h / 2), 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#565b71';
+    ctx.beginPath();
+    ctx.moveTo(b.x + 2, b.y + b.h);
+    ctx.lineTo(b.x + 10, b.y + b.h * 0.38);
+    ctx.lineTo(b.x + 24, b.y + 8);
+    ctx.lineTo(b.x + b.w - 4, b.y + b.h * 0.35);
+    ctx.lineTo(b.x + b.w - 1, b.y + b.h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#80869a';
+    ctx.beginPath();
+    ctx.arc(b.x + 23, b.y + b.h * 0.55, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1390,6 +1499,47 @@ function drawDeepSeaDecor(ctx: CanvasRenderingContext2D, level: Level, time: num
       drawDeepSeaSpider(ctx, x, p.y, time + i);
       spiders++;
     }
+  }
+}
+
+function drawMoonBaseDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  let rovers = 0;
+  for (let i = 0; i < level.platforms.length && rovers < 4; i++) {
+    const p = level.platforms[i];
+    if (p.w < 190 || i % 2 !== 0) continue;
+    const x = p.x + 70 + ((i * 137) % Math.max(1, p.w - 140));
+    const y = p.y;
+    const bob = Math.sin(time * 2 + i) * 1.5;
+    ctx.save();
+    ctx.translate(x, y + bob);
+    ctx.fillStyle = '#e8edf7';
+    roundRect(ctx, -27, -34, 54, 25, 7);
+    ctx.fill();
+    ctx.fillStyle = '#78dfff';
+    ctx.fillRect(-17, -29, 34, 9);
+    ctx.strokeStyle = '#c6cedd';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, -34);
+    ctx.lineTo(0, -50);
+    ctx.stroke();
+    ctx.fillStyle = '#ff7aa8';
+    ctx.beginPath();
+    ctx.arc(0, -53, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#34394d';
+    for (const dx of [-20, 20]) {
+      ctx.beginPath();
+      ctx.arc(dx, -7, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#8991a7';
+      ctx.beginPath();
+      ctx.arc(dx, -7, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#34394d';
+    }
+    ctx.restore();
+    rovers++;
   }
 }
 
@@ -2183,6 +2333,57 @@ function drawBird(ctx: CanvasRenderingContext2D, bird: BirdRender): void {
   ctx.restore();
 }
 
+function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  if (gateway.kind !== 'rocket') return;
+  const bob = Math.sin(gateway.t * 2.4) * 2;
+  const baseY = gateway.platformY - 2 + bob;
+  ctx.save();
+  ctx.translate(gateway.x, baseY);
+  ctx.shadowColor = gateway.locked ? '#9ca1b2' : '#78e8ff';
+  ctx.shadowBlur = gateway.active ? 28 : 13;
+  ctx.fillStyle = gateway.locked ? '#8c91a0' : '#f6f7fb';
+  ctx.beginPath();
+  ctx.moveTo(0, -118);
+  ctx.quadraticCurveTo(31, -91, 27, -34);
+  ctx.lineTo(-27, -34);
+  ctx.quadraticCurveTo(-31, -91, 0, -118);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = gateway.locked ? '#696e7d' : '#ff668c';
+  ctx.beginPath();
+  ctx.moveTo(-27, -52);
+  ctx.lineTo(-45, -18);
+  ctx.lineTo(-20, -30);
+  ctx.lineTo(20, -30);
+  ctx.lineTo(45, -18);
+  ctx.lineTo(27, -52);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = gateway.locked ? '#737887' : '#6cceff';
+  ctx.beginPath();
+  ctx.arc(0, -76, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#39435b';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  const flame = gateway.active ? 25 + Math.sin(gateway.t * 18) * 6 : 10;
+  ctx.fillStyle = gateway.locked ? '#777b88' : '#ffd65a';
+  ctx.beginPath();
+  ctx.moveTo(-10, -29);
+  ctx.lineTo(0, flame);
+  ctx.lineTo(10, -29);
+  ctx.closePath();
+  ctx.fill();
+  if (gateway.locked) {
+    ctx.fillStyle = '#f6e39a';
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔒', 0, -57);
+  }
+  ctx.restore();
+}
+
 function drawUfo(ctx: CanvasRenderingContext2D, ufo: UfoRender): void {
   const hover = Math.sin(ufo.t * 2.3) * 5;
   const shipY = ufo.platformY - 132 + hover;
@@ -2354,6 +2555,20 @@ function drawConsumables(ctx: CanvasRenderingContext2D, consumables: Consumable[
         ctx.fill();
         ctx.fillStyle = '#d9a52d';
         for (const [dx, dy, r] of [[-7, 3, 3], [7, 5, 2.5], [4, -4, 2]]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 'moonCheese':
+        ctx.fillStyle = '#fff08a';
+        ctx.beginPath();
+        ctx.arc(x, y, 16, 0.35 * Math.PI, 1.65 * Math.PI);
+        ctx.arc(x + 8, y, 12, 1.55 * Math.PI, 0.45 * Math.PI, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#d9b94e';
+        for (const [dx, dy, r] of [[-7, -6, 2.5], [-8, 7, 3], [1, 10, 2]]) {
           ctx.beginPath();
           ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
           ctx.fill();
