@@ -90,7 +90,7 @@ export interface UfoRender {
   active: boolean;
 }
 
-export type GatewayRenderKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate';
+export type GatewayRenderKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate' | 'rainbowGate';
 
 export interface GatewayRender {
   x: number;
@@ -209,6 +209,7 @@ export function render(view: View, scene: Scene): void {
   if (scene.world === 'dinosaurJungle') drawDinosaurJungleDecor(ctx, scene.level, view.time);
   if (scene.world === 'volcano') drawVolcanoDecor(ctx, scene.level, view.time);
   if (scene.world === 'sunkenCastle') drawSunkenCastleDecor(ctx, scene.level, view.time);
+  if (scene.world === 'rainbowDreamland') drawRainbowDreamlandDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
     if (deepSeaWorld) drawDeepSeaObstacle(ctx, b);
     else if (underwaterWorld) drawUnderwaterObstacle(ctx, b);
@@ -219,6 +220,7 @@ export function render(view: View, scene: Scene): void {
     else if (scene.world === 'dinosaurJungle') drawDinosaurJungleObstacle(ctx, b);
     else if (scene.world === 'volcano') drawVolcanoObstacle(ctx, b);
     else if (scene.world === 'sunkenCastle') drawSunkenCastleObstacle(ctx, b);
+    else if (scene.world === 'rainbowDreamland') drawRainbowDreamlandObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
   if (candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
@@ -313,7 +315,11 @@ function drawBackground(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (world === 'sunkenCastle') {
+  if (world === 'rainbowDreamland') {
+    sky.addColorStop(0, '#8c7dff');
+    sky.addColorStop(0.48, '#ef9fe2');
+    sky.addColorStop(1, '#ffe6a1');
+  } else if (world === 'sunkenCastle') {
     sky.addColorStop(0, '#041f45');
     sky.addColorStop(0.5, '#075780');
     sky.addColorStop(1, '#15829a');
@@ -356,7 +362,8 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (world === 'sunkenCastle') drawSunkenCastleBackground(view);
+  if (world === 'rainbowDreamland') drawRainbowDreamlandBackground(view);
+  else if (world === 'sunkenCastle') drawSunkenCastleBackground(view);
   else if (world === 'volcano') drawVolcanoBackground(view);
   else if (world === 'dinosaurJungle') drawDinosaurJungleBackground(view);
   else if (world === 'moonBase') drawMoonBaseBackground(view);
@@ -384,7 +391,10 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (world === 'sunkenCastle') {
+  if (world === 'rainbowDreamland') {
+    hills(ctx, view, '#b68ce2', 0.18, groundScreenY + 8, 105, 270);
+    hills(ctx, view, '#8b7ad1', 0.42, groundScreenY + 25, 74, 210);
+  } else if (world === 'sunkenCastle') {
     hills(ctx, view, '#0a4462', 0.18, groundScreenY + 14, 90, 250);
     hills(ctx, view, '#063247', 0.42, groundScreenY + 28, 65, 195);
   } else if (world === 'volcano') {
@@ -617,6 +627,36 @@ function drawSunkenCastleBackground(view: View): void {
     ctx.beginPath();
     ctx.arc(x, y, 2 + (i % 4), 0, Math.PI * 2);
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRainbowDreamlandBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+  const colors = ['#ff6f91', '#ffab5c', '#ffe36b', '#71dd8c', '#64bfff', '#9b7cf2'];
+  ctx.lineCap = 'round';
+  for (let i = 0; i < colors.length; i++) {
+    ctx.strokeStyle = colors[i];
+    ctx.globalAlpha = 0.72;
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.arc(cssW * 0.23, cssH * 0.54, 150 - i * 12, Math.PI, 0);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < 38; i++) {
+    const x = (((i * 91 + 13) % 211) / 211) * cssW;
+    const y = (((i * 127 + 31) % 173) / 173) * cssH * 0.72;
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.globalAlpha = 0.45 + Math.sin(view.time * 2.6 + i) * 0.25;
+    star(ctx, x, y, 3 + (i % 3), 1.5 + (i % 2));
+  }
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = '#fff8ff';
+  for (let i = 0; i < 6; i++) {
+    const x = ((i * 167 - view.cameraX * 0.08 + view.time * 3) % (cssW + 180)) - 90;
+    cloud(ctx, x, 76 + (i % 3) * 77, 35 + (i % 2) * 10);
   }
   ctx.restore();
 }
@@ -1012,6 +1052,10 @@ function drawPlatforms(
   world: WorldLayer,
 ): void {
   for (const p of platforms) {
+    if (world === 'rainbowDreamland') {
+      drawRainbowDreamlandPlatform(ctx, p);
+      continue;
+    }
     if (world === 'sunkenCastle') {
       drawSunkenCastlePlatform(ctx, p);
       continue;
@@ -1156,6 +1200,29 @@ function drawSunkenCastlePlatform(ctx: CanvasRenderingContext2D, p: Platform): v
   ctx.fillStyle = '#72d190';
   for (let x = p.x + 20; x < p.x + p.w; x += 110) {
     ctx.fillRect(x, p.y - 3, 30, 5);
+  }
+}
+
+function drawRainbowDreamlandPlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#aa83d3';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#735fae';
+    ctx.fillRect(p.x, p.y + p.h - 12, p.w, 12);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 10, 13);
+    ctx.fillStyle = '#b68fe0';
+    ctx.fill();
+  }
+  const colors = ['#ff7197', '#ffbb61', '#ffe267', '#70d989', '#65bfff', '#9478ea'];
+  const stripeW = p.w / colors.length;
+  for (let i = 0; i < colors.length; i++) {
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(p.x + i * stripeW, p.y, stripeW + 1, 10);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.62)';
+  for (let x = p.x + 22; x < p.x + p.w; x += 62) {
+    star(ctx, x, p.y + 18, 4, 2);
   }
 }
 
@@ -1406,6 +1473,21 @@ function drawSunkenCastleObstacle(ctx: CanvasRenderingContext2D, b: Barrel): voi
   ctx.beginPath();
   ctx.arc(b.x + b.w / 2, b.y + 4, 9, Math.PI, 0);
   ctx.fill();
+  ctx.restore();
+}
+
+function drawRainbowDreamlandObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  ctx.save();
+  const colors = ['#ff7197', '#ffca62', '#75d890', '#6fc5ff', '#a47ee8'];
+  const rows = Math.max(1, Math.ceil(b.h / 23));
+  for (let row = 0; row < rows; row++) {
+    ctx.fillStyle = colors[(b.id + row) % colors.length];
+    star(ctx, b.x + b.w / 2, b.y + b.h - 12 - row * 22, 20, 9);
+    ctx.fillStyle = '#fff7cc';
+    ctx.beginPath();
+    ctx.arc(b.x + b.w / 2, b.y + b.h - 12 - row * 22, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1967,6 +2049,60 @@ function drawSunkenCastleDecor(ctx: CanvasRenderingContext2D, level: Level, time
     ctx.fill();
     ctx.restore();
     horses++;
+  }
+}
+
+function drawRainbowDreamlandDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  let unicorns = 0;
+  for (let i = 0; i < level.platforms.length && unicorns < 4; i++) {
+    const p = level.platforms[i];
+    if (p.w < 190 || i % 2 !== 0) continue;
+    const x = p.x + 82 + ((i * 149) % Math.max(1, p.w - 155));
+    const y = p.y - Math.max(0, Math.sin(time * 3 + i)) * 5;
+    const dir = i % 4 < 2 ? 1 : -1;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(dir, 1);
+    ctx.fillStyle = '#fff7ff';
+    ctx.beginPath();
+    ctx.ellipse(0, -23, 38, 20, 0, 0, Math.PI * 2);
+    ctx.ellipse(31, -44, 17, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#b86fe6';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(-30, -27);
+    ctx.quadraticCurveTo(-54, -45, -62, -13);
+    ctx.stroke();
+    const mane = ['#ff77ae', '#ffcb63', '#75d995', '#69c5ff'];
+    for (let m = 0; m < mane.length; m++) {
+      ctx.strokeStyle = mane[m];
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(19 - m * 3, -52 + m * 5);
+      ctx.lineTo(8 - m * 4, -42 + m * 7);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#8b76ca';
+    ctx.lineWidth = 4;
+    for (const lx of [-18, 17]) {
+      ctx.beginPath();
+      ctx.moveTo(lx, -8);
+      ctx.lineTo(lx + 2, 0);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#ffd85d';
+    ctx.beginPath();
+    ctx.moveTo(34, -59);
+    ctx.lineTo(40, -83);
+    ctx.lineTo(45, -58);
+    ctx.fill();
+    ctx.fillStyle = '#323451';
+    ctx.beginPath();
+    ctx.arc(37, -47, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    unicorns++;
   }
 }
 
@@ -2761,6 +2897,10 @@ function drawBird(ctx: CanvasRenderingContext2D, bird: BirdRender): void {
 }
 
 function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  if (gateway.kind === 'rainbowGate') {
+    drawRainbowGate(ctx, gateway);
+    return;
+  }
   if (gateway.kind === 'shellGate') {
     drawShellGateGateway(ctx, gateway);
     return;
@@ -2819,6 +2959,38 @@ function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): voi
     ctx.textAlign = 'center';
     ctx.fillText('🔒', 0, -57);
   }
+  ctx.restore();
+}
+
+function drawRainbowGate(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  const colors = gateway.locked
+    ? ['#8b8b94', '#797982', '#6b6b74', '#5d5d66', '#50505a']
+    : ['#ff7197', '#ffb75f', '#ffe367', '#70db8c', '#63c2ff', '#9879ed'];
+  ctx.save();
+  ctx.translate(gateway.x, gateway.platformY);
+  ctx.shadowColor = gateway.locked ? '#8c8c94' : '#fff3aa';
+  ctx.shadowBlur = gateway.active ? 30 : 13;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < colors.length; i++) {
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 58 - i * 7, Math.PI, 0);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = gateway.locked ? '#aaaaaf' : '#fff8ff';
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(side * 50, -2, 17, 0, Math.PI * 2);
+    ctx.arc(side * 65, -5, 15, 0, Math.PI * 2);
+    ctx.arc(side * 58, -17, 14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#4e4967';
+  ctx.font = 'bold 21px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(gateway.locked ? '🔒' : '✨', 0, -47);
   ctx.restore();
 }
 
@@ -3165,6 +3337,27 @@ function drawConsumables(ctx: CanvasRenderingContext2D, consumables: Consumable[
         ctx.strokeStyle = '#efb2d5';
         ctx.lineWidth = 2;
         ctx.stroke();
+        break;
+      }
+      case 'sprinkleCookie': {
+        ctx.fillStyle = '#f9d49a';
+        ctx.beginPath();
+        ctx.arc(x, y, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#cf9a5f';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        const sprinkles = ['#ff5c8a', '#ffad38', '#55c97a', '#4ba9ef', '#9b68e8'];
+        for (let s = 0; s < 10; s++) {
+          const a = s * 2.4;
+          const radius = 4 + (s % 3) * 3;
+          ctx.strokeStyle = sprinkles[s % sprinkles.length];
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(a) * radius - 2, y + Math.sin(a) * radius - 1);
+          ctx.lineTo(x + Math.cos(a) * radius + 2, y + Math.sin(a) * radius + 1);
+          ctx.stroke();
+        }
         break;
       }
       case 'kelp':

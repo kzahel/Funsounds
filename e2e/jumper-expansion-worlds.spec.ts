@@ -50,3 +50,32 @@ test('Sunken Castle preserves swimming and renders pearl-candy castle art', asyn
   await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-sunken-castle.png' });
   expect(errors).toEqual([]);
 });
+
+test('Rainbow Dreamland is bouncy and full of cookies, rainbows, and unicorns', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('barrelhop.worlds.explored', JSON.stringify(['surface', 'rainbowDreamland']));
+  });
+  await page.goto('/Funsounds/?game=buddy');
+  await page.locator('#jp-world-map-button').click();
+  await page.locator('[data-jp-world="rainbowDreamland"]').click();
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-world', 'rainbowDreamland');
+  await expect(page.locator('#jp-status')).toContainText('sprinkle cookies');
+  await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-rainbow-dreamland.png' });
+  expect(errors).toEqual([]);
+});
+
+test('the Rainbow gate requires every other world to be explored', async ({ page }) => {
+  await page.goto('/Funsounds/?game=buddy');
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-rainbow-gate-locked', 'true');
+
+  await page.evaluate(() => {
+    localStorage.setItem('barrelhop.worlds.explored', JSON.stringify([
+      'surface', 'candy', 'upperAtmosphere', 'moonBase', 'dinosaurJungle',
+      'volcano', 'sunkenCastle', 'cave', 'underwater', 'deepSea',
+    ]));
+  });
+  await page.reload();
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-rainbow-gate-locked', 'false');
+});

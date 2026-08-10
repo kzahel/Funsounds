@@ -27,7 +27,7 @@ unlocks it permanently for direct map travel.
 | Moon Base | Rocket from Starry Sky | Moon cheese | Complete |
 | Starry Sky | UFO from Candy Clouds | Croissant | Complete |
 | Candy Clouds | Friendly bird from Surface | Gumdrop | Complete |
-| Rainbow Dreamland | Rainbow gate after exploring every other world | Sprinkle cookie | Planned |
+| Rainbow Dreamland | Rainbow gate after exploring every other world | Sprinkle cookie | Complete |
 | Sunny Surface | Starting world | Seasonal fruit or cookie | Complete |
 | Dinosaur Jungle | Giant vine from Surface | Banana | Complete |
 | Giant Toy Room | Magic toy chest from Surface | Cracker | Planned |
@@ -72,9 +72,11 @@ unlocks it permanently for direct map travel.
 
 ### Rainbow Dreamland
 
-- Final discovery world, available only after every other world is explored.
-- Bouncy movement, layered rainbows, unicorns, stars, and sprinkle cookies.
-- A rainbow gate appears on the Surface once its requirement is satisfied.
+- Complete: the final discovery world; its visible Surface gate unlocks only
+  after every other world has been explored.
+- Complete: bouncy movement, layered rainbows, unicorns, stars, and sprinkle
+  cookies.
+- Complete: falls return Buddy softly to the Surface.
 
 ### Giant Toy Room
 
@@ -100,6 +102,6 @@ unlocks it permanently for direct map travel.
 - [x] Dinosaur Jungle
 - [x] Volcano World
 - [x] Sunken Castle
-- [ ] Rainbow Dreamland
+- [x] Rainbow Dreamland
 - [ ] Giant Toy Room
 - [ ] Final full regression and documentation audit
