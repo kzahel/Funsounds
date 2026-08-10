@@ -64,6 +64,7 @@ const WORLD_LAYERS: readonly WorldLayer[] = [
   'moonBase',
   'dinosaurJungle',
   'volcano',
+  'sunkenCastle',
   'cave',
   'underwater',
   'deepSea',
@@ -115,7 +116,7 @@ type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
 type BirdTripSide = 'left' | 'right';
 type SnakeKind = 'snake' | 'trampoline';
 type UfoRideDirection = 'up' | 'down';
-type GatewayKind = 'rocket' | 'vine' | 'dragonDoor';
+type GatewayKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate';
 interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
@@ -278,6 +279,7 @@ let consumables: Record<WorldLayer, Consumable[]> = {
   moonBase: [],
   dinosaurJungle: [],
   volcano: [],
+  sunkenCastle: [],
   cave: [],
   underwater: [],
   deepSea: [],
@@ -710,6 +712,7 @@ function buildLevel(): void {
     moonBase: buildConsumables(level, 'moonBase', levelNum, consumableAvoidanceXs('moonBase', portal.x)),
     dinosaurJungle: buildConsumables(level, 'dinosaurJungle', levelNum, consumableAvoidanceXs('dinosaurJungle', portal.x)),
     volcano: buildConsumables(level, 'volcano', levelNum, consumableAvoidanceXs('volcano', portal.x)),
+    sunkenCastle: buildConsumables(level, 'sunkenCastle', levelNum, consumableAvoidanceXs('sunkenCastle', portal.x)),
     cave: buildConsumables(level, 'cave', levelNum, consumableAvoidanceXs('cave', portal.x)),
     underwater: buildConsumables(level, 'underwater', levelNum, consumableAvoidanceXs('underwater', portal.x)),
     deepSea: buildConsumables(level, 'deepSea', levelNum, consumableAvoidanceXs('deepSea', portal.x)),
@@ -730,7 +733,7 @@ function hasBuddyChain(): boolean {
 }
 
 function weddingPartnerKind(): WeddingPartnerKind {
-  return underwaterWorld || deepSeaWorld ? 'fish' : 'buddy';
+  return underwaterWorld || deepSeaWorld || gatewayWorld === 'sunkenCastle' ? 'fish' : 'buddy';
 }
 
 function weddingBabySpecies(kind: WeddingPartnerKind): BuddySpecies {
@@ -813,6 +816,7 @@ function worldDisplayName(world: WorldLayer): string {
     case 'moonBase': return 'the moon base';
     case 'dinosaurJungle': return 'the dinosaur jungle';
     case 'volcano': return 'volcano world';
+    case 'sunkenCastle': return 'the sunken castle';
     case 'cave': return 'the cave';
     case 'underwater': return 'the reef';
     case 'deepSea': return 'the deep sea';
@@ -827,6 +831,7 @@ const WORLD_MAP_NAMES: Record<WorldLayer, string> = {
   moonBase: 'Moon Base',
   dinosaurJungle: 'Dinosaur Jungle',
   volcano: 'Volcano World',
+  sunkenCastle: 'Sunken Castle',
   cave: 'Crystal Cave',
   underwater: 'Coral Reef',
   deepSea: 'Deep Sea',
@@ -839,6 +844,7 @@ function worldStatus(world: WorldLayer): string {
     case 'moonBase': return 'Low gravity! Eat moon cheese and bounce across craters.';
     case 'dinosaurJungle': return 'Dinosaur jungle! Eat bananas and meet the baby dinosaurs.';
     case 'volcano': return 'Volcano world! Eat toasted marshmallows and visit the sleepy dragon.';
+    case 'sunkenCastle': return 'Sunken castle! Swim for pearl candy and visit the seahorses.';
     case 'cave': return 'Space eats cave cheese. Find a snake trampoline.';
     case 'underwater': return 'Space eats crunchy kelp. Up and Down swim.';
     case 'deepSea': return 'Space eats starfruit. Find a glowing lantern fish.';
@@ -901,7 +907,7 @@ function arriveInWorld(world: WorldLayer): void {
   const landing = platformLandingForBuddy(body.x);
   candyWorld = world === 'candy';
   upperAtmosphereWorld = world === 'upperAtmosphere';
-  gatewayWorld = world === 'moonBase' || world === 'dinosaurJungle' || world === 'volcano' ? world : null;
+  gatewayWorld = world === 'moonBase' || world === 'dinosaurJungle' || world === 'volcano' || world === 'sunkenCastle' ? world : null;
   undergroundWorld = world === 'cave';
   underwaterWorld = world === 'underwater';
   deepSeaWorld = world === 'deepSea';
@@ -963,6 +969,9 @@ function worldGatewayDefinitions(world: WorldLayer): WorldGateway[] {
   if (world === 'cave') {
     return [{ ...portalPositionAt(0.35), kind: 'dragonDoor', target: 'volcano', locked: false }];
   }
+  if (world === 'underwater') {
+    return [{ ...portalPositionAt(0.7), kind: 'shellGate', target: 'sunkenCastle', locked: false }];
+  }
   return [];
 }
 
@@ -1003,8 +1012,10 @@ function startNearbyGateway(): boolean {
       ? 'Vine climb!'
       : gateway.kind === 'dragonDoor'
         ? 'Dragon door!'
+        : gateway.kind === 'shellGate'
+          ? 'Shell gate!'
         : 'Magic gateway!';
-  const rideIcon = gateway.kind === 'rocket' ? '🚀' : gateway.kind === 'vine' ? '🌿' : '🐉';
+  const rideIcon = gateway.kind === 'rocket' ? '🚀' : gateway.kind === 'vine' ? '🌿' : gateway.kind === 'dragonDoor' ? '🐉' : '🐚';
   showToast(`${rideLabel} ${rideIcon}`);
   speakText(rideLabel, { rate: 1, pitch: 1.3 });
   setStatus(`Traveling to ${WORLD_MAP_NAMES[gateway.target]}!`);
@@ -2258,6 +2269,18 @@ function handlePitFall(): void {
     updateHud();
     return;
   }
+  if (gatewayWorld === 'sunkenCastle') {
+    gatewayWorld = null;
+    underwaterWorld = true;
+    gatewayTravel = null;
+    respawnTo(lastSafe);
+    spawnSparks(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 12);
+    showToast('A bubble carried you to the reef!');
+    speakText('Back to the coral reef!', { rate: 1.05, pitch: 1.2 });
+    setStatus('Back in Coral Reef. Press Space beside the giant shell to return.');
+    updateHud();
+    return;
+  }
   if (upperAtmosphereWorld) {
     upperAtmosphereWorld = false;
     candyWorld = true;
@@ -2436,7 +2459,7 @@ function update(dt: number): void {
     LOOK_FRAC_SHIFT_PER_SEC * dt,
   );
 
-  const res = underwaterWorld || deepSeaWorld
+  const res = underwaterWorld || deepSeaWorld || gatewayWorld === 'sunkenCastle'
     ? stepSwimBody(body, solids, { ...input, downHeld: lockForWeddingEvent ? false : downHeld }, dt)
     : stepBody(body, solids, input, gatewayWorld === 'moonBase' ? MOON_TUNING : tuning, dt);
 

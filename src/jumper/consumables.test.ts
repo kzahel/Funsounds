@@ -13,6 +13,7 @@ describe('jumper consumables', () => {
     expect(consumableKindForWorld('moonBase', 1)).toBe('moonCheese');
     expect(consumableKindForWorld('dinosaurJungle', 1)).toBe('banana');
     expect(consumableKindForWorld('volcano', 1)).toBe('toastedMarshmallow');
+    expect(consumableKindForWorld('sunkenCastle', 1)).toBe('pearlCandy');
     expect(consumableKindForWorld('cave', 1)).toBe('cheese');
     expect(consumableKindForWorld('underwater', 1)).toBe('kelp');
     expect(consumableKindForWorld('deepSea', 1)).toBe('starfruit');
@@ -20,7 +21,7 @@ describe('jumper consumables', () => {
 
   it('rests each snack on a platform and keeps the UFO beam clear', () => {
     const level = MODES.wedding.build(1);
-    const worlds: WorldLayer[] = ['surface', 'candy', 'upperAtmosphere', 'moonBase', 'dinosaurJungle', 'volcano', 'cave', 'underwater', 'deepSea'];
+    const worlds: WorldLayer[] = ['surface', 'candy', 'upperAtmosphere', 'moonBase', 'dinosaurJungle', 'volcano', 'sunkenCastle', 'cave', 'underwater', 'deepSea'];
     const ufoX = level.width * 0.58;
 
     for (const world of worlds) {

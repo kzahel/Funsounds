@@ -34,7 +34,7 @@ unlocks it permanently for direct map travel.
 | Crystal Cave | Fall below Surface | Cave cheese | Complete |
 | Volcano World | Dragon door from Crystal Cave | Toasted marshmallow | Complete |
 | Coral Reef | Fall below Crystal Cave | Crunchy kelp | Complete |
-| Sunken Castle | Giant shell gate from Coral Reef | Pearl candy | Planned |
+| Sunken Castle | Giant shell gate from Coral Reef | Pearl candy | Complete |
 | Deep Sea | Fall below Coral Reef | Glowing starfruit | Complete |
 
 ## Planned world slices
@@ -63,9 +63,12 @@ unlocks it permanently for direct map travel.
 
 ### Sunken Castle
 
-- Underwater swimming through castle-stone platforms and bubble columns.
-- Pearl candy, seahorses, shell towers, and a giant shell gate in Coral Reef.
-- Falls drift Buddy back to Coral Reef.
+- Complete: underwater swimming through castle-stone platforms, light shafts,
+  and bubble columns.
+- Complete: pearl candy, seahorses, distant towers, and a Space/EAT shell gate
+  in Coral Reef.
+- Complete: fish-family Wedding interactions and falls that drift Buddy back to
+  Coral Reef.
 
 ### Rainbow Dreamland
 
@@ -96,7 +99,7 @@ unlocks it permanently for direct map travel.
 - [x] Moon Base
 - [x] Dinosaur Jungle
 - [x] Volcano World
-- [ ] Sunken Castle
+- [x] Sunken Castle
 - [ ] Rainbow Dreamland
 - [ ] Giant Toy Room
 - [ ] Final full regression and documentation audit

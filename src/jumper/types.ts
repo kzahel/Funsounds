@@ -12,6 +12,7 @@ export type WorldLayer =
   | 'moonBase'
   | 'dinosaurJungle'
   | 'volcano'
+  | 'sunkenCastle'
   | 'cave'
   | 'underwater'
   | 'deepSea';
@@ -29,7 +30,8 @@ export type ConsumableKind =
   | 'croissant'
   | 'moonCheese'
   | 'banana'
-  | 'toastedMarshmallow';
+  | 'toastedMarshmallow'
+  | 'pearlCandy';
 
 /** A snack resting on a platform. Space (or EAT on touch screens) consumes it. */
 export interface Consumable {
