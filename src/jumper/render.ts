@@ -90,7 +90,7 @@ export interface UfoRender {
   active: boolean;
 }
 
-export type GatewayRenderKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate' | 'rainbowGate';
+export type GatewayRenderKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate' | 'rainbowGate' | 'toyChest';
 
 export interface GatewayRender {
   x: number;
@@ -210,6 +210,7 @@ export function render(view: View, scene: Scene): void {
   if (scene.world === 'volcano') drawVolcanoDecor(ctx, scene.level, view.time);
   if (scene.world === 'sunkenCastle') drawSunkenCastleDecor(ctx, scene.level, view.time);
   if (scene.world === 'rainbowDreamland') drawRainbowDreamlandDecor(ctx, scene.level, view.time);
+  if (scene.world === 'toyRoom') drawToyRoomDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
     if (deepSeaWorld) drawDeepSeaObstacle(ctx, b);
     else if (underwaterWorld) drawUnderwaterObstacle(ctx, b);
@@ -221,6 +222,7 @@ export function render(view: View, scene: Scene): void {
     else if (scene.world === 'volcano') drawVolcanoObstacle(ctx, b);
     else if (scene.world === 'sunkenCastle') drawSunkenCastleObstacle(ctx, b);
     else if (scene.world === 'rainbowDreamland') drawRainbowDreamlandObstacle(ctx, b);
+    else if (scene.world === 'toyRoom') drawToyRoomObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
   if (candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
@@ -315,7 +317,11 @@ function drawBackground(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (world === 'rainbowDreamland') {
+  if (world === 'toyRoom') {
+    sky.addColorStop(0, '#6f94cc');
+    sky.addColorStop(0.5, '#9fc3e8');
+    sky.addColorStop(1, '#f4d7b1');
+  } else if (world === 'rainbowDreamland') {
     sky.addColorStop(0, '#8c7dff');
     sky.addColorStop(0.48, '#ef9fe2');
     sky.addColorStop(1, '#ffe6a1');
@@ -362,7 +368,8 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (world === 'rainbowDreamland') drawRainbowDreamlandBackground(view);
+  if (world === 'toyRoom') drawToyRoomBackground(view);
+  else if (world === 'rainbowDreamland') drawRainbowDreamlandBackground(view);
   else if (world === 'sunkenCastle') drawSunkenCastleBackground(view);
   else if (world === 'volcano') drawVolcanoBackground(view);
   else if (world === 'dinosaurJungle') drawDinosaurJungleBackground(view);
@@ -391,7 +398,10 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (world === 'rainbowDreamland') {
+  if (world === 'toyRoom') {
+    hills(ctx, view, '#6d789f', 0.18, groundScreenY + 22, 82, 270);
+    hills(ctx, view, '#4f587d', 0.42, groundScreenY + 34, 58, 205);
+  } else if (world === 'rainbowDreamland') {
     hills(ctx, view, '#b68ce2', 0.18, groundScreenY + 8, 105, 270);
     hills(ctx, view, '#8b7ad1', 0.42, groundScreenY + 25, 74, 210);
   } else if (world === 'sunkenCastle') {
@@ -657,6 +667,45 @@ function drawRainbowDreamlandBackground(view: View): void {
   for (let i = 0; i < 6; i++) {
     const x = ((i * 167 - view.cameraX * 0.08 + view.time * 3) % (cssW + 180)) - 90;
     cloud(ctx, x, 76 + (i % 3) * 77, 35 + (i % 2) * 10);
+  }
+  ctx.restore();
+}
+
+function drawToyRoomBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+  // Oversized wallpaper, window, and furniture make Buddy feel toy-sized.
+  ctx.fillStyle = 'rgba(255,248,226,0.38)';
+  for (let x = -((view.cameraX * 0.03) % 92); x < cssW + 92; x += 92) {
+    for (let y = 42; y < cssH * 0.68; y += 88) {
+      star(ctx, x + 32, y, 8, 4);
+    }
+  }
+  ctx.fillStyle = '#d8efff';
+  ctx.fillRect(cssW * 0.62, cssH * 0.12, cssW * 0.28, cssH * 0.36);
+  ctx.strokeStyle = '#fff8e8';
+  ctx.lineWidth = 15;
+  ctx.strokeRect(cssW * 0.62, cssH * 0.12, cssW * 0.28, cssH * 0.36);
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(cssW * 0.76, cssH * 0.12);
+  ctx.lineTo(cssW * 0.76, cssH * 0.48);
+  ctx.moveTo(cssW * 0.62, cssH * 0.3);
+  ctx.lineTo(cssW * 0.9, cssH * 0.3);
+  ctx.stroke();
+  ctx.fillStyle = '#7cc66b';
+  ctx.beginPath();
+  ctx.arc(cssW * 0.69, cssH * 0.32, 52, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = '#d69a67';
+  ctx.fillRect(0, cssH * 0.72, cssW, cssH * 0.28);
+  ctx.strokeStyle = 'rgba(102,64,43,0.28)';
+  ctx.lineWidth = 3;
+  for (let y = cssH * 0.75; y < cssH; y += 28) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(cssW, y);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -1052,6 +1101,10 @@ function drawPlatforms(
   world: WorldLayer,
 ): void {
   for (const p of platforms) {
+    if (world === 'toyRoom') {
+      drawToyRoomPlatform(ctx, p);
+      continue;
+    }
     if (world === 'rainbowDreamland') {
       drawRainbowDreamlandPlatform(ctx, p);
       continue;
@@ -1223,6 +1276,29 @@ function drawRainbowDreamlandPlatform(ctx: CanvasRenderingContext2D, p: Platform
   ctx.fillStyle = 'rgba(255,255,255,0.62)';
   for (let x = p.x + 22; x < p.x + p.w; x += 62) {
     star(ctx, x, p.y + 18, 4, 2);
+  }
+}
+
+function drawToyRoomPlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  const colors = ['#ef5d6f', '#f2b544', '#55b87b', '#4d98dc', '#8e69d5'];
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#455273';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#303a58';
+    ctx.fillRect(p.x, p.y + p.h - 12, p.w, 12);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 9, 6);
+    ctx.fillStyle = colors[Math.abs(Math.floor(p.x / 100)) % colors.length];
+    ctx.fill();
+  }
+  const blockW = 58;
+  for (let x = p.x; x < p.x + p.w; x += blockW) {
+    ctx.fillStyle = colors[Math.abs(Math.floor(x / blockW)) % colors.length];
+    ctx.fillRect(x, p.y, Math.min(blockW - 2, p.x + p.w - x), 13);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.arc(x + Math.min(28, (p.x + p.w - x) / 2), p.y + 6, 4, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -1487,6 +1563,42 @@ function drawRainbowDreamlandObstacle(ctx: CanvasRenderingContext2D, b: Barrel):
     ctx.beginPath();
     ctx.arc(b.x + b.w / 2, b.y + b.h - 12 - row * 22, 3, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawToyRoomObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  ctx.save();
+  if (b.id % 2 === 0) {
+    // Giant toy drum.
+    roundRect(ctx, b.x + 2, b.y + 4, b.w - 4, b.h - 4, 8);
+    ctx.fillStyle = '#e95d68';
+    ctx.fill();
+    ctx.strokeStyle = '#fff0c1';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.strokeStyle = '#f5c94e';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x + 8, b.y + 9);
+    ctx.lineTo(b.x + b.w - 8, b.y + b.h - 9);
+    ctx.moveTo(b.x + b.w - 8, b.y + 9);
+    ctx.lineTo(b.x + 8, b.y + b.h - 9);
+    ctx.stroke();
+  } else {
+    // Stack of alphabet blocks.
+    const rows = Math.max(1, Math.ceil(b.h / 30));
+    const colors = ['#5eb5df', '#f0ad4f', '#67bd78'];
+    for (let row = 0; row < rows; row++) {
+      const size = Math.min(30, b.h - row * 30);
+      const y = b.y + b.h - (row + 1) * 30;
+      ctx.fillStyle = colors[row % colors.length];
+      ctx.fillRect(b.x + 6, Math.max(b.y, y), b.w - 12, size);
+      ctx.fillStyle = '#fff8d5';
+      ctx.font = 'bold 17px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(String.fromCharCode(65 + (b.id + row) % 26), b.x + b.w / 2, Math.max(b.y, y) + 21);
+    }
   }
   ctx.restore();
 }
@@ -2103,6 +2215,62 @@ function drawRainbowDreamlandDecor(ctx: CanvasRenderingContext2D, level: Level, 
     ctx.fill();
     ctx.restore();
     unicorns++;
+  }
+}
+
+function drawToyRoomDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  let toys = 0;
+  for (let i = 0; i < level.platforms.length && toys < 5; i++) {
+    const p = level.platforms[i];
+    if (p.w < 180 || i % 2 === 0) continue;
+    const x = p.x + 72 + ((i * 157) % Math.max(1, p.w - 145));
+    const y = p.y + Math.sin(time * 2 + i) * 1.5;
+    ctx.save();
+    ctx.translate(x, y);
+    if (toys % 2 === 0) {
+      // Friendly giant teddy.
+      ctx.fillStyle = '#c8834f';
+      ctx.beginPath();
+      ctx.arc(-17, -61, 14, 0, Math.PI * 2);
+      ctx.arc(17, -61, 14, 0, Math.PI * 2);
+      ctx.ellipse(0, -28, 33, 31, 0, 0, Math.PI * 2);
+      ctx.arc(0, -55, 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#efbd82';
+      ctx.beginPath();
+      ctx.ellipse(0, -49, 16, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#3e2b26';
+      ctx.beginPath();
+      ctx.arc(-8, -59, 2.5, 0, Math.PI * 2);
+      ctx.arc(8, -59, 2.5, 0, Math.PI * 2);
+      ctx.arc(0, -50, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#65a7df';
+      ctx.beginPath();
+      ctx.moveTo(-12, -38);
+      ctx.lineTo(0, -29);
+      ctx.lineTo(12, -38);
+      ctx.lineTo(0, -43);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Chunky wooden toy train.
+      ctx.fillStyle = '#4da1dd';
+      ctx.fillRect(-43, -34, 67, 26);
+      ctx.fillStyle = '#ef5d68';
+      ctx.fillRect(10, -54, 31, 46);
+      ctx.fillStyle = '#f4c74d';
+      ctx.fillRect(-32, -48, 14, 14);
+      ctx.fillStyle = '#343b54';
+      for (const wx of [-27, 23]) {
+        ctx.beginPath();
+        ctx.arc(wx, -5, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+    toys++;
   }
 }
 
@@ -2897,6 +3065,10 @@ function drawBird(ctx: CanvasRenderingContext2D, bird: BirdRender): void {
 }
 
 function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  if (gateway.kind === 'toyChest') {
+    drawToyChestGateway(ctx, gateway);
+    return;
+  }
   if (gateway.kind === 'rainbowGate') {
     drawRainbowGate(ctx, gateway);
     return;
@@ -2958,6 +3130,39 @@ function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): voi
     ctx.font = 'bold 22px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('🔒', 0, -57);
+  }
+  ctx.restore();
+}
+
+function drawToyChestGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  const lid = gateway.active ? Math.sin(gateway.t * 8) * 0.12 : 0;
+  ctx.save();
+  ctx.translate(gateway.x, gateway.platformY);
+  ctx.shadowColor = gateway.locked ? '#888' : '#ffe66d';
+  ctx.shadowBlur = gateway.active ? 30 : 13;
+  ctx.fillStyle = gateway.locked ? '#77716e' : '#9b5a35';
+  roundRect(ctx, -50, -55, 100, 55, 9);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.save();
+  ctx.translate(0, -55);
+  ctx.rotate(lid);
+  ctx.fillStyle = gateway.locked ? '#88817d' : '#bd7444';
+  roundRect(ctx, -52, -30, 104, 34, 13);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = '#f3c64f';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(-47, -51, 94, 47);
+  ctx.fillStyle = '#f3c64f';
+  roundRect(ctx, -12, -42, 24, 28, 5);
+  ctx.fill();
+  const toys = gateway.locked ? ['🔒'] : ['🧸', '🚂', '⭐'];
+  ctx.font = '23px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < toys.length; i++) {
+    const rise = gateway.active ? Math.sin(gateway.t * 9 + i) * 7 : 0;
+    ctx.fillText(toys[i], (i - (toys.length - 1) / 2) * 30, -67 - Math.abs(rise));
   }
   ctx.restore();
 }
@@ -3360,6 +3565,20 @@ function drawConsumables(ctx: CanvasRenderingContext2D, consumables: Consumable[
         }
         break;
       }
+      case 'cracker':
+        roundRect(ctx, x - 15, y - 14, 30, 28, 5);
+        ctx.fillStyle = '#f5c85d';
+        ctx.fill();
+        ctx.strokeStyle = '#d59b37';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = '#a9752a';
+        for (const [dx, dy] of [[-7, -6], [7, -6], [-7, 6], [7, 6], [0, 0]]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, y + dy, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
       case 'kelp':
         ctx.strokeStyle = '#6fe08c';
         ctx.lineWidth = 7;

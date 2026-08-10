@@ -66,6 +66,7 @@ const WORLD_LAYERS: readonly WorldLayer[] = [
   'volcano',
   'sunkenCastle',
   'rainbowDreamland',
+  'toyRoom',
   'cave',
   'underwater',
   'deepSea',
@@ -124,7 +125,7 @@ type WeddingEventPhase = 'kiss' | 'sparkle' | 'baby';
 type BirdTripSide = 'left' | 'right';
 type SnakeKind = 'snake' | 'trampoline';
 type UfoRideDirection = 'up' | 'down';
-type GatewayKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate' | 'rainbowGate';
+type GatewayKind = 'rocket' | 'vine' | 'dragonDoor' | 'shellGate' | 'rainbowGate' | 'toyChest';
 interface WeddingEvent {
   phase: WeddingEventPhase;
   t: number;
@@ -289,6 +290,7 @@ let consumables: Record<WorldLayer, Consumable[]> = {
   volcano: [],
   sunkenCastle: [],
   rainbowDreamland: [],
+  toyRoom: [],
   cave: [],
   underwater: [],
   deepSea: [],
@@ -724,6 +726,7 @@ function buildLevel(): void {
     volcano: buildConsumables(level, 'volcano', levelNum, consumableAvoidanceXs('volcano', portal.x)),
     sunkenCastle: buildConsumables(level, 'sunkenCastle', levelNum, consumableAvoidanceXs('sunkenCastle', portal.x)),
     rainbowDreamland: buildConsumables(level, 'rainbowDreamland', levelNum, consumableAvoidanceXs('rainbowDreamland', portal.x)),
+    toyRoom: buildConsumables(level, 'toyRoom', levelNum, consumableAvoidanceXs('toyRoom', portal.x)),
     cave: buildConsumables(level, 'cave', levelNum, consumableAvoidanceXs('cave', portal.x)),
     underwater: buildConsumables(level, 'underwater', levelNum, consumableAvoidanceXs('underwater', portal.x)),
     deepSea: buildConsumables(level, 'deepSea', levelNum, consumableAvoidanceXs('deepSea', portal.x)),
@@ -829,6 +832,7 @@ function worldDisplayName(world: WorldLayer): string {
     case 'volcano': return 'volcano world';
     case 'sunkenCastle': return 'the sunken castle';
     case 'rainbowDreamland': return 'rainbow dreamland';
+    case 'toyRoom': return 'the giant toy room';
     case 'cave': return 'the cave';
     case 'underwater': return 'the reef';
     case 'deepSea': return 'the deep sea';
@@ -845,6 +849,7 @@ const WORLD_MAP_NAMES: Record<WorldLayer, string> = {
   volcano: 'Volcano World',
   sunkenCastle: 'Sunken Castle',
   rainbowDreamland: 'Rainbow Dreamland',
+  toyRoom: 'Giant Toy Room',
   cave: 'Crystal Cave',
   underwater: 'Coral Reef',
   deepSea: 'Deep Sea',
@@ -859,6 +864,7 @@ function worldStatus(world: WorldLayer): string {
     case 'volcano': return 'Volcano world! Eat toasted marshmallows and visit the sleepy dragon.';
     case 'sunkenCastle': return 'Sunken castle! Swim for pearl candy and visit the seahorses.';
     case 'rainbowDreamland': return 'Rainbow dreamland! Bounce for sprinkle cookies and wave to unicorns.';
+    case 'toyRoom': return 'Giant toy room! Eat crackers and hop across enormous toys.';
     case 'cave': return 'Space eats cave cheese. Find a snake trampoline.';
     case 'underwater': return 'Space eats crunchy kelp. Up and Down swim.';
     case 'deepSea': return 'Space eats starfruit. Find a glowing lantern fish.';
@@ -926,6 +932,7 @@ function arriveInWorld(world: WorldLayer): void {
     || world === 'volcano'
     || world === 'sunkenCastle'
     || world === 'rainbowDreamland'
+    || world === 'toyRoom'
     ? world
     : null;
   undergroundWorld = world === 'cave';
@@ -992,6 +999,7 @@ function worldGatewayDefinitions(world: WorldLayer): WorldGateway[] {
         target: 'rainbowDreamland',
         locked: rainbowGateLocked(),
       },
+      { ...portalPositionAt(0.82), kind: 'toyChest', target: 'toyRoom', locked: false },
     ];
   }
   if (world === 'cave') {
@@ -1050,6 +1058,8 @@ function startNearbyGateway(): boolean {
           ? 'Shell gate!'
           : gateway.kind === 'rainbowGate'
             ? 'Rainbow ride!'
+            : gateway.kind === 'toyChest'
+              ? 'Toy chest magic!'
           : 'Magic gateway!';
   const rideIcon = gateway.kind === 'rocket'
     ? '🚀'
@@ -1059,7 +1069,9 @@ function startNearbyGateway(): boolean {
         ? '🐉'
         : gateway.kind === 'shellGate'
           ? '🐚'
-          : '🌈';
+          : gateway.kind === 'rainbowGate'
+            ? '🌈'
+            : '🧸';
   showToast(`${rideLabel} ${rideIcon}`);
   speakText(rideLabel, { rate: 1, pitch: 1.3 });
   setStatus(`Traveling to ${WORLD_MAP_NAMES[gateway.target]}!`);
@@ -2333,6 +2345,17 @@ function handlePitFall(): void {
     showToast('A rainbow caught you!');
     speakText('Back to the sunny surface!', { rate: 1.05, pitch: 1.3 });
     setStatus('Back on the Surface. Your rainbow gate is waiting.');
+    updateHud();
+    return;
+  }
+  if (gatewayWorld === 'toyRoom') {
+    gatewayWorld = null;
+    gatewayTravel = null;
+    respawnTo(lastSafe);
+    spawnSparks(lastSafe.x + PLAYER_W / 2, lastSafe.y + PLAYER_H, 16);
+    showToast('The toy chest popped you home!');
+    speakText('Back to the sunny surface!', { rate: 1.05, pitch: 1.25 });
+    setStatus('Back on the Surface. The magic toy chest is still sparkling.');
     updateHud();
     return;
   }

@@ -30,7 +30,7 @@ unlocks it permanently for direct map travel.
 | Rainbow Dreamland | Rainbow gate after exploring every other world | Sprinkle cookie | Complete |
 | Sunny Surface | Starting world | Seasonal fruit or cookie | Complete |
 | Dinosaur Jungle | Giant vine from Surface | Banana | Complete |
-| Giant Toy Room | Magic toy chest from Surface | Cracker | Planned |
+| Giant Toy Room | Magic toy chest from Surface | Cracker | Complete |
 | Crystal Cave | Fall below Surface | Cave cheese | Complete |
 | Volcano World | Dragon door from Crystal Cave | Toasted marshmallow | Complete |
 | Coral Reef | Fall below Crystal Cave | Crunchy kelp | Complete |
@@ -80,9 +80,11 @@ unlocks it permanently for direct map travel.
 
 ### Giant Toy Room
 
-- Buddy appears tiny among giant blocks, drums, dollhouses, and toy trains.
-- Block platforms and toy obstacles with crackers as snacks.
-- A magic toy chest on the Surface provides entry; falls return to Surface.
+- Complete: Buddy appears tiny among giant blocks, drums, teddy bears, and toy
+  trains.
+- Complete: block platforms, alphabet-block obstacles, and cheese crackers.
+- Complete: a Space/EAT magic toy chest on the Surface provides entry; falls
+  return to the Surface.
 
 ## Shared implementation work
 
@@ -103,5 +105,5 @@ unlocks it permanently for direct map travel.
 - [x] Volcano World
 - [x] Sunken Castle
 - [x] Rainbow Dreamland
-- [ ] Giant Toy Room
+- [x] Giant Toy Room
 - [ ] Final full regression and documentation audit

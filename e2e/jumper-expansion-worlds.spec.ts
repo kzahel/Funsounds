@@ -73,9 +73,24 @@ test('the Rainbow gate requires every other world to be explored', async ({ page
   await page.evaluate(() => {
     localStorage.setItem('barrelhop.worlds.explored', JSON.stringify([
       'surface', 'candy', 'upperAtmosphere', 'moonBase', 'dinosaurJungle',
-      'volcano', 'sunkenCastle', 'cave', 'underwater', 'deepSea',
+      'volcano', 'sunkenCastle', 'toyRoom', 'cave', 'underwater', 'deepSea',
     ]));
   });
   await page.reload();
   await expect(page.locator('#jumper-screen')).toHaveAttribute('data-rainbow-gate-locked', 'false');
+});
+
+test('Giant Toy Room makes Buddy tiny among blocks, trains, and teddy bears', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('barrelhop.worlds.explored', JSON.stringify(['surface', 'toyRoom']));
+  });
+  await page.goto('/Funsounds/?game=buddy');
+  await page.locator('#jp-world-map-button').click();
+  await page.locator('[data-jp-world="toyRoom"]').click();
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-world', 'toyRoom');
+  await expect(page.locator('#jp-status')).toContainText('crackers');
+  await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-giant-toy-room.png' });
+  expect(errors).toEqual([]);
 });
