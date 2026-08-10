@@ -12,6 +12,7 @@ export const CONSUMABLE_LABELS: Record<ConsumableKind, string> = {
   starfruit: 'glowing starfruit',
   croissant: 'croissant',
   moonCheese: 'moon cheese',
+  banana: 'jungle banana',
 };
 
 const FOOD_SIZE: Record<ConsumableKind, { w: number; h: number }> = {
@@ -26,6 +27,7 @@ const FOOD_SIZE: Record<ConsumableKind, { w: number; h: number }> = {
   starfruit: { w: 34, h: 34 },
   croissant: { w: 40, h: 26 },
   moonCheese: { w: 36, h: 29 },
+  banana: { w: 38, h: 28 },
 };
 
 /** The six surface seasons get their own snack; the fantastical worlds do too. */
@@ -33,6 +35,7 @@ export function consumableKindForWorld(world: WorldLayer, levelNum: number): Con
   if (world === 'candy') return 'gumdrop';
   if (world === 'upperAtmosphere') return 'croissant';
   if (world === 'moonBase') return 'moonCheese';
+  if (world === 'dinosaurJungle') return 'banana';
   if (world === 'cave') return 'cheese';
   if (world === 'underwater') return 'kelp';
   if (world === 'deepSea') return 'starfruit';

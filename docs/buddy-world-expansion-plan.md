@@ -29,7 +29,7 @@ unlocks it permanently for direct map travel.
 | Candy Clouds | Friendly bird from Surface | Gumdrop | Complete |
 | Rainbow Dreamland | Rainbow gate after exploring every other world | Sprinkle cookie | Planned |
 | Sunny Surface | Starting world | Seasonal fruit or cookie | Complete |
-| Dinosaur Jungle | Giant vine from Surface | Banana | Planned |
+| Dinosaur Jungle | Giant vine from Surface | Banana | Complete |
 | Giant Toy Room | Magic toy chest from Surface | Cracker | Planned |
 | Crystal Cave | Fall below Surface | Cave cheese | Complete |
 | Volcano World | Dragon door from Crystal Cave | Toasted marshmallow | Planned |
@@ -48,9 +48,10 @@ unlocks it permanently for direct map travel.
 
 ### Dinosaur Jungle
 
-- Dense tropical background, mossy platforms, vines, logs, and dinosaur eggs.
-- Friendly baby dinosaurs and a giant climbable-looking vine gateway.
-- Falls return Buddy safely to the Surface.
+- Complete: dense tropical scenery, mossy platforms, logs, and dinosaur eggs.
+- Complete: friendly baby dinosaurs and a Space/EAT giant-vine gateway on the
+  Surface.
+- Complete: bananas as snacks and soft falls back to the Surface.
 
 ### Volcano World
 
@@ -91,7 +92,7 @@ unlocks it permanently for direct map travel.
 
 - [x] Exploration-gated, persistent world map
 - [x] Moon Base
-- [ ] Dinosaur Jungle
+- [x] Dinosaur Jungle
 - [ ] Volcano World
 - [ ] Sunken Castle
 - [ ] Rainbow Dreamland

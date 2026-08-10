@@ -90,7 +90,7 @@ export interface UfoRender {
   active: boolean;
 }
 
-export type GatewayRenderKind = 'rocket';
+export type GatewayRenderKind = 'rocket' | 'vine';
 
 export interface GatewayRender {
   x: number;
@@ -206,6 +206,7 @@ export function render(view: View, scene: Scene): void {
   if (underwaterWorld) drawUnderwaterDecor(ctx, scene.level, view.time);
   if (deepSeaWorld) drawDeepSeaDecor(ctx, scene.level, view.time);
   if (scene.world === 'moonBase') drawMoonBaseDecor(ctx, scene.level, view.time);
+  if (scene.world === 'dinosaurJungle') drawDinosaurJungleDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
     if (deepSeaWorld) drawDeepSeaObstacle(ctx, b);
     else if (underwaterWorld) drawUnderwaterObstacle(ctx, b);
@@ -213,6 +214,7 @@ export function render(view: View, scene: Scene): void {
     else if (upperAtmosphereWorld) drawUpperAtmosphereObstacle(ctx, b);
     else if (candyWorld) drawCandyObstacle(ctx, b);
     else if (scene.world === 'moonBase') drawMoonBaseObstacle(ctx, b);
+    else if (scene.world === 'dinosaurJungle') drawDinosaurJungleObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
   if (candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
@@ -307,7 +309,11 @@ function drawBackground(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (world === 'moonBase') {
+  if (world === 'dinosaurJungle') {
+    sky.addColorStop(0, '#0c4c38');
+    sky.addColorStop(0.48, '#258663');
+    sky.addColorStop(1, '#8edc79');
+  } else if (world === 'moonBase') {
     sky.addColorStop(0, '#01020d');
     sky.addColorStop(0.55, '#080c28');
     sky.addColorStop(1, '#14183c');
@@ -338,7 +344,8 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (world === 'moonBase') drawMoonBaseBackground(view);
+  if (world === 'dinosaurJungle') drawDinosaurJungleBackground(view);
+  else if (world === 'moonBase') drawMoonBaseBackground(view);
   else if (upperAtmosphereWorld) drawUpperAtmosphereBackground(view);
   else if (deepSeaWorld) drawDeepSeaBackground(view);
   else if (underwaterWorld) drawUnderwaterBackground(view);
@@ -363,7 +370,10 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (world === 'moonBase') {
+  if (world === 'dinosaurJungle') {
+    hills(ctx, view, '#195a3f', 0.18, groundScreenY + 2, 130, 260);
+    hills(ctx, view, '#123d2c', 0.42, groundScreenY + 20, 92, 210);
+  } else if (world === 'moonBase') {
     hills(ctx, view, '#242747', 0.16, groundScreenY + 16, 72, 250);
     hills(ctx, view, '#14172f', 0.36, groundScreenY + 30, 52, 190);
   } else if (upperAtmosphereWorld) {
@@ -470,6 +480,43 @@ function drawMoonBaseBackground(view: View): void {
   ctx.strokeStyle = 'rgba(255,255,255,0.75)';
   ctx.lineWidth = 5;
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawDinosaurJungleBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+  const sun = ctx.createRadialGradient(cssW * 0.18, cssH * 0.18, 8, cssW * 0.18, cssH * 0.18, 92);
+  sun.addColorStop(0, 'rgba(255,243,154,0.7)');
+  sun.addColorStop(1, 'rgba(255,243,154,0)');
+  ctx.fillStyle = sun;
+  ctx.fillRect(0, 0, cssW, cssH);
+  ctx.fillStyle = 'rgba(6,54,35,0.62)';
+  for (let i = 0; i < 14; i++) {
+    const x = ((i * 97 - view.cameraX * 0.1) % (cssW + 160)) - 80;
+    const sway = Math.sin(view.time * 0.8 + i) * 6;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.bezierCurveTo(x + 12 + sway, 90, x - 24 + sway, 145, x + 5, 215);
+    ctx.lineWidth = 7 + (i % 3) * 2;
+    ctx.strokeStyle = 'rgba(19,91,55,0.72)';
+    ctx.stroke();
+    ctx.fillStyle = i % 2 ? '#2d9360' : '#47aa67';
+    ctx.beginPath();
+    ctx.ellipse(x + 8 + sway, 102 + (i % 4) * 22, 27, 11, (i % 2 ? 1 : -1) * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A distant long-neck dinosaur gives the skyline a friendly silhouette.
+  const dx = cssW * 0.76;
+  const dy = cssH * 0.66;
+  ctx.fillStyle = 'rgba(40,105,69,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(dx, dy, 76, 34, 0, 0, Math.PI * 2);
+  ctx.moveTo(dx + 45, dy - 12);
+  ctx.quadraticCurveTo(dx + 76, dy - 104, dx + 95, dy - 117);
+  ctx.quadraticCurveTo(dx + 119, dy - 126, dx + 122, dy - 105);
+  ctx.quadraticCurveTo(dx + 88, dy - 93, dx + 72, dy);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -864,6 +911,10 @@ function drawPlatforms(
   world: WorldLayer,
 ): void {
   for (const p of platforms) {
+    if (world === 'dinosaurJungle') {
+      drawDinosaurJunglePlatform(ctx, p);
+      continue;
+    }
     if (world === 'moonBase') {
       drawMoonBasePlatform(ctx, p);
       continue;
@@ -925,6 +976,29 @@ function drawMoonBasePlatform(ctx: CanvasRenderingContext2D, p: Platform): void 
   for (let x = p.x + 26; x < p.x + p.w - 8; x += 74) {
     ctx.beginPath();
     ctx.ellipse(x, p.y + 6, 8 + (Math.floor(x) % 3), 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawDinosaurJunglePlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#6c4b2d';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#432d20';
+    ctx.fillRect(p.x, p.y + p.h - 11, p.w, 11);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 8, 9);
+    ctx.fillStyle = '#705034';
+    ctx.fill();
+  }
+  ctx.fillStyle = '#3fad55';
+  ctx.fillRect(p.x, p.y, p.w, 13);
+  ctx.fillStyle = '#218743';
+  for (let x = p.x + 8; x < p.x + p.w; x += 22) {
+    ctx.beginPath();
+    ctx.moveTo(x, p.y + 13);
+    ctx.lineTo(x + 7, p.y + 21 + (Math.floor(x) % 3) * 3);
+    ctx.lineTo(x + 12, p.y + 13);
     ctx.fill();
   }
 }
@@ -1102,6 +1176,37 @@ function drawMoonBaseObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
     ctx.beginPath();
     ctx.arc(b.x + 23, b.y + b.h * 0.55, 7, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDinosaurJungleObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  ctx.save();
+  if (b.id % 2 === 0) {
+    // Mossy fallen log.
+    roundRect(ctx, b.x + 2, b.y + 5, b.w - 4, b.h - 5, 13);
+    ctx.fillStyle = '#754725';
+    ctx.fill();
+    ctx.strokeStyle = '#4b2d1e';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = '#3fae56';
+    ctx.fillRect(b.x + 7, b.y + 6, b.w - 14, 9);
+  } else {
+    // A stack of bright, harmless dinosaur eggs.
+    const rows = Math.max(1, Math.ceil(b.h / 26));
+    for (let row = 0; row < rows; row++) {
+      const cy = b.y + b.h - 13 - row * 24;
+      ctx.fillStyle = row % 2 ? '#ffe38a' : '#dff5c5';
+      ctx.beginPath();
+      ctx.ellipse(b.x + b.w / 2, cy, 18, 13, row % 2 ? 0.2 : -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = row % 2 ? '#ff9f67' : '#65b97a';
+      ctx.beginPath();
+      ctx.arc(b.x + b.w / 2 - 5, cy - 2, 3, 0, Math.PI * 2);
+      ctx.arc(b.x + b.w / 2 + 6, cy + 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.restore();
 }
@@ -1540,6 +1645,52 @@ function drawMoonBaseDecor(ctx: CanvasRenderingContext2D, level: Level, time: nu
     }
     ctx.restore();
     rovers++;
+  }
+}
+
+function drawDinosaurJungleDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  let dinos = 0;
+  for (let i = 0; i < level.platforms.length && dinos < 5; i++) {
+    const p = level.platforms[i];
+    if (p.w < 180 || i % 2 !== 1) continue;
+    const x = p.x + 75 + ((i * 151) % Math.max(1, p.w - 150));
+    const y = p.y - 2 - Math.max(0, Math.sin(time * 3 + i)) * 4;
+    const dir = i % 4 < 2 ? 1 : -1;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(dir, 1);
+    ctx.fillStyle = dinos % 2 ? '#73c96b' : '#67b9d8';
+    ctx.beginPath();
+    ctx.ellipse(0, -18, 28, 18, 0, 0, Math.PI * 2);
+    ctx.ellipse(24, -31, 15, 14, 0, 0, Math.PI * 2);
+    ctx.moveTo(-22, -20);
+    ctx.lineTo(-47, -34);
+    ctx.lineTo(-29, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#355b42';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-13, -7);
+    ctx.lineTo(-15, 0);
+    ctx.moveTo(13, -7);
+    ctx.lineTo(15, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(29, -35, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#25352a';
+    ctx.beginPath();
+    ctx.arc(30, -34, 1.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#355b42';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(31, -27, 6, 0.05 * Math.PI, 0.7 * Math.PI);
+    ctx.stroke();
+    ctx.restore();
+    dinos++;
   }
 }
 
@@ -2334,7 +2485,10 @@ function drawBird(ctx: CanvasRenderingContext2D, bird: BirdRender): void {
 }
 
 function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
-  if (gateway.kind !== 'rocket') return;
+  if (gateway.kind === 'vine') {
+    drawVineGateway(ctx, gateway);
+    return;
+  }
   const bob = Math.sin(gateway.t * 2.4) * 2;
   const baseY = gateway.platformY - 2 + bob;
   ctx.save();
@@ -2381,6 +2535,39 @@ function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): voi
     ctx.textAlign = 'center';
     ctx.fillText('🔒', 0, -57);
   }
+  ctx.restore();
+}
+
+function drawVineGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  const sway = Math.sin(gateway.t * 1.8) * 5;
+  ctx.save();
+  ctx.translate(gateway.x, gateway.platformY);
+  ctx.shadowColor = gateway.locked ? '#738176' : '#8cff8a';
+  ctx.shadowBlur = gateway.active ? 24 : 10;
+  ctx.strokeStyle = gateway.locked ? '#657169' : '#2d9b4d';
+  ctx.lineWidth = 13;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 4);
+  ctx.bezierCurveTo(-18 + sway, -45, 20 + sway, -86, sway, -142);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = gateway.locked ? '#8b938d' : '#a9ed6d';
+  ctx.stroke();
+  for (let i = 0; i < 7; i++) {
+    const y = -18 - i * 18;
+    const side = i % 2 === 0 ? -1 : 1;
+    const x = Math.sin(i * 1.7) * 8 + sway * (i / 7);
+    ctx.fillStyle = gateway.locked ? '#7b857e' : i % 3 === 0 ? '#64d46d' : '#42b95b';
+    ctx.beginPath();
+    ctx.ellipse(x + side * 14, y, 15, 7, side * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = gateway.locked ? '#9da5a0' : '#ffe066';
+  ctx.font = 'bold 21px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(gateway.locked ? '🔒' : '🦕', sway, -150);
   ctx.restore();
 }
 
@@ -2573,6 +2760,19 @@ function drawConsumables(ctx: CanvasRenderingContext2D, consumables: Consumable[
           ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
           ctx.fill();
         }
+        break;
+      case 'banana':
+        ctx.fillStyle = '#ffe15a';
+        ctx.strokeStyle = '#d3a92f';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x - 1, y - 5, 18, 0.08 * Math.PI, 0.88 * Math.PI);
+        ctx.arc(x + 3, y - 5, 12, 0.9 * Math.PI, 0.05 * Math.PI, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#77552b';
+        ctx.fillRect(x + 14, y - 9, 4, 6);
         break;
       case 'kelp':
         ctx.strokeStyle = '#6fe08c';
