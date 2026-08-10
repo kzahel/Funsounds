@@ -19,3 +19,18 @@ test('Dinosaur Jungle is a revisitable banana world', async ({ page }) => {
   await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-dinosaur-jungle.png' });
   expect(errors).toEqual([]);
 });
+
+test('Volcano World has marshmallows, obsidian ledges, and a sleepy dragon', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    localStorage.setItem('barrelhop.worlds.explored', JSON.stringify(['surface', 'volcano']));
+  });
+  await page.goto('/Funsounds/?game=buddy');
+  await page.locator('#jp-world-map-button').click();
+  await page.locator('[data-jp-world="volcano"]').click();
+  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-world', 'volcano');
+  await expect(page.locator('#jp-status')).toContainText('toasted marshmallows');
+  await page.locator('#jp-canvas').screenshot({ path: '/tmp/jumper-volcano-world.png' });
+  expect(errors).toEqual([]);
+});

@@ -32,7 +32,7 @@ unlocks it permanently for direct map travel.
 | Dinosaur Jungle | Giant vine from Surface | Banana | Complete |
 | Giant Toy Room | Magic toy chest from Surface | Cracker | Planned |
 | Crystal Cave | Fall below Surface | Cave cheese | Complete |
-| Volcano World | Dragon door from Crystal Cave | Toasted marshmallow | Planned |
+| Volcano World | Dragon door from Crystal Cave | Toasted marshmallow | Complete |
 | Coral Reef | Fall below Crystal Cave | Crunchy kelp | Complete |
 | Sunken Castle | Giant shell gate from Coral Reef | Pearl candy | Planned |
 | Deep Sea | Fall below Coral Reef | Glowing starfruit | Complete |
@@ -55,9 +55,11 @@ unlocks it permanently for direct map travel.
 
 ### Volcano World
 
-- Glowing lava horizon, black-rock platforms, embers, and obsidian obstacles.
-- A sleepy friendly dragon guards the cave doorway.
-- Falls return Buddy to Crystal Cave rather than costing a life.
+- Complete: glowing lava horizon, black-rock platforms, embers, and obsidian
+  obstacles.
+- Complete: toasted marshmallows, a sleepy friendly dragon, and a Space/EAT
+  dragon door in Crystal Cave.
+- Complete: falls return Buddy to Crystal Cave rather than costing a life.
 
 ### Sunken Castle
 
@@ -93,7 +95,7 @@ unlocks it permanently for direct map travel.
 - [x] Exploration-gated, persistent world map
 - [x] Moon Base
 - [x] Dinosaur Jungle
-- [ ] Volcano World
+- [x] Volcano World
 - [ ] Sunken Castle
 - [ ] Rainbow Dreamland
 - [ ] Giant Toy Room

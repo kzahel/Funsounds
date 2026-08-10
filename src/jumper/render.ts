@@ -90,7 +90,7 @@ export interface UfoRender {
   active: boolean;
 }
 
-export type GatewayRenderKind = 'rocket' | 'vine';
+export type GatewayRenderKind = 'rocket' | 'vine' | 'dragonDoor';
 
 export interface GatewayRender {
   x: number;
@@ -207,6 +207,7 @@ export function render(view: View, scene: Scene): void {
   if (deepSeaWorld) drawDeepSeaDecor(ctx, scene.level, view.time);
   if (scene.world === 'moonBase') drawMoonBaseDecor(ctx, scene.level, view.time);
   if (scene.world === 'dinosaurJungle') drawDinosaurJungleDecor(ctx, scene.level, view.time);
+  if (scene.world === 'volcano') drawVolcanoDecor(ctx, scene.level, view.time);
   for (const b of scene.level.barrels) {
     if (deepSeaWorld) drawDeepSeaObstacle(ctx, b);
     else if (underwaterWorld) drawUnderwaterObstacle(ctx, b);
@@ -215,6 +216,7 @@ export function render(view: View, scene: Scene): void {
     else if (candyWorld) drawCandyObstacle(ctx, b);
     else if (scene.world === 'moonBase') drawMoonBaseObstacle(ctx, b);
     else if (scene.world === 'dinosaurJungle') drawDinosaurJungleObstacle(ctx, b);
+    else if (scene.world === 'volcano') drawVolcanoObstacle(ctx, b);
     else drawBarrel(ctx, b);
   }
   if (candyWorld) drawCandyBunnies(ctx, scene.level, view.time);
@@ -309,7 +311,11 @@ function drawBackground(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const sky = ctx.createLinearGradient(0, 0, 0, cssH);
-  if (world === 'dinosaurJungle') {
+  if (world === 'volcano') {
+    sky.addColorStop(0, '#190b1b');
+    sky.addColorStop(0.55, '#5b1820');
+    sky.addColorStop(1, '#e24b20');
+  } else if (world === 'dinosaurJungle') {
     sky.addColorStop(0, '#0c4c38');
     sky.addColorStop(0.48, '#258663');
     sky.addColorStop(1, '#8edc79');
@@ -344,7 +350,8 @@ function drawBackground(
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  if (world === 'dinosaurJungle') drawDinosaurJungleBackground(view);
+  if (world === 'volcano') drawVolcanoBackground(view);
+  else if (world === 'dinosaurJungle') drawDinosaurJungleBackground(view);
   else if (world === 'moonBase') drawMoonBaseBackground(view);
   else if (upperAtmosphereWorld) drawUpperAtmosphereBackground(view);
   else if (deepSeaWorld) drawDeepSeaBackground(view);
@@ -370,7 +377,10 @@ function drawBackground(
 
   // Rolling hills (two parallax layers), anchored to the ground line.
   const groundScreenY = GROUND_Y * view.scale;
-  if (world === 'dinosaurJungle') {
+  if (world === 'volcano') {
+    hills(ctx, view, '#3b151d', 0.18, groundScreenY + 12, 120, 260);
+    hills(ctx, view, '#211018', 0.42, groundScreenY + 28, 84, 205);
+  } else if (world === 'dinosaurJungle') {
     hills(ctx, view, '#195a3f', 0.18, groundScreenY + 2, 130, 260);
     hills(ctx, view, '#123d2c', 0.42, groundScreenY + 20, 92, 210);
   } else if (world === 'moonBase') {
@@ -517,6 +527,43 @@ function drawDinosaurJungleBackground(view: View): void {
   ctx.quadraticCurveTo(dx + 119, dy - 126, dx + 122, dy - 105);
   ctx.quadraticCurveTo(dx + 88, dy - 93, dx + 72, dy);
   ctx.fill();
+  ctx.restore();
+}
+
+function drawVolcanoBackground(view: View): void {
+  const { ctx, cssW, cssH } = view;
+  ctx.save();
+  const glow = ctx.createRadialGradient(cssW * 0.5, cssH * 0.7, 10, cssW * 0.5, cssH * 0.7, cssW * 0.7);
+  glow.addColorStop(0, 'rgba(255,115,34,0.55)');
+  glow.addColorStop(1, 'rgba(255,65,20,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, cssW, cssH);
+  ctx.fillStyle = '#160c13';
+  ctx.beginPath();
+  ctx.moveTo(cssW * 0.1, cssH * 0.74);
+  ctx.lineTo(cssW * 0.32, cssH * 0.28);
+  ctx.lineTo(cssW * 0.42, cssH * 0.7);
+  ctx.lineTo(cssW * 0.63, cssH * 0.38);
+  ctx.lineTo(cssW * 0.9, cssH * 0.74);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ff6b24';
+  ctx.beginPath();
+  ctx.moveTo(cssW * 0.27, cssH * 0.39);
+  ctx.lineTo(cssW * 0.32, cssH * 0.28);
+  ctx.lineTo(cssW * 0.35, cssH * 0.42);
+  ctx.quadraticCurveTo(cssW * 0.32, cssH * 0.36, cssW * 0.27, cssH * 0.39);
+  ctx.fill();
+  for (let i = 0; i < 34; i++) {
+    const x = ((i * 79 - view.cameraX * 0.04) % (cssW + 60)) - 30;
+    const y = cssH - ((view.time * (25 + i % 4 * 8) + i * 43) % (cssH * 0.78));
+    ctx.globalAlpha = 0.25 + (i % 4) * 0.15;
+    ctx.fillStyle = i % 3 === 0 ? '#ffe06a' : '#ff7a32';
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 
@@ -911,6 +958,10 @@ function drawPlatforms(
   world: WorldLayer,
 ): void {
   for (const p of platforms) {
+    if (world === 'volcano') {
+      drawVolcanoPlatform(ctx, p);
+      continue;
+    }
     if (world === 'dinosaurJungle') {
       drawDinosaurJunglePlatform(ctx, p);
       continue;
@@ -1000,6 +1051,30 @@ function drawDinosaurJunglePlatform(ctx: CanvasRenderingContext2D, p: Platform):
     ctx.lineTo(x + 7, p.y + 21 + (Math.floor(x) % 3) * 3);
     ctx.lineTo(x + 12, p.y + 13);
     ctx.fill();
+  }
+}
+
+function drawVolcanoPlatform(ctx: CanvasRenderingContext2D, p: Platform): void {
+  if (p.kind === 'ground') {
+    ctx.fillStyle = '#291923';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#120b11';
+    ctx.fillRect(p.x, p.y + p.h - 12, p.w, 12);
+  } else {
+    roundRect(ctx, p.x, p.y, p.w, p.h + 8, 8);
+    ctx.fillStyle = '#2d1c25';
+    ctx.fill();
+  }
+  ctx.fillStyle = '#4b2a2c';
+  ctx.fillRect(p.x, p.y, p.w, 12);
+  ctx.strokeStyle = '#ff662e';
+  ctx.lineWidth = 3;
+  for (let x = p.x + 28; x < p.x + p.w - 16; x += 96) {
+    ctx.beginPath();
+    ctx.moveTo(x - 15, p.y + 5);
+    ctx.lineTo(x, p.y + 9);
+    ctx.lineTo(x + 12, p.y + 3);
+    ctx.stroke();
   }
 }
 
@@ -1208,6 +1283,28 @@ function drawDinosaurJungleObstacle(ctx: CanvasRenderingContext2D, b: Barrel): v
       ctx.fill();
     }
   }
+  ctx.restore();
+}
+
+function drawVolcanoObstacle(ctx: CanvasRenderingContext2D, b: Barrel): void {
+  ctx.save();
+  ctx.fillStyle = '#1b1319';
+  ctx.beginPath();
+  ctx.moveTo(b.x + 2, b.y + b.h);
+  ctx.lineTo(b.x + 8, b.y + b.h * 0.45);
+  ctx.lineTo(b.x + 18, b.y + 7);
+  ctx.lineTo(b.x + 29, b.y + b.h * 0.37);
+  ctx.lineTo(b.x + b.w - 4, b.y + b.h * 0.2);
+  ctx.lineTo(b.x + b.w - 1, b.y + b.h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#ff5f2a';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(b.x + 18, b.y + 8);
+  ctx.lineTo(b.x + 25, b.y + b.h * 0.55);
+  ctx.lineTo(b.x + 38, b.y + b.h * 0.72);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1692,6 +1789,43 @@ function drawDinosaurJungleDecor(ctx: CanvasRenderingContext2D, level: Level, ti
     ctx.restore();
     dinos++;
   }
+}
+
+function drawVolcanoDecor(ctx: CanvasRenderingContext2D, level: Level, time: number): void {
+  const platform = level.platforms.find((p, index) => p.w >= 220 && index > 0) ?? level.platforms[0];
+  if (!platform) return;
+  const x = platform.x + Math.min(platform.w - 82, 112);
+  const y = platform.y;
+  const breathe = Math.sin(time * 2) * 2;
+  ctx.save();
+  ctx.translate(x, y + breathe);
+  ctx.fillStyle = '#b54c68';
+  ctx.beginPath();
+  ctx.ellipse(0, -24, 46, 23, 0, 0, Math.PI * 2);
+  ctx.ellipse(38, -34, 24, 19, 0, 0, Math.PI * 2);
+  ctx.moveTo(-35, -28);
+  ctx.lineTo(-70, -13);
+  ctx.lineTo(-38, -6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#e48262';
+  ctx.beginPath();
+  ctx.moveTo(-5, -38);
+  ctx.lineTo(-25, -68);
+  ctx.lineTo(8, -49);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#4f2632';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(44, -39, 7, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
+  ctx.fillStyle = '#ffe06a';
+  ctx.font = 'bold 16px system-ui, sans-serif';
+  ctx.fillText('z', 54, -60);
+  ctx.font = 'bold 12px system-ui, sans-serif';
+  ctx.fillText('z', 67, -72);
+  ctx.restore();
 }
 
 function drawJellyfish(ctx: CanvasRenderingContext2D, x: number, y: number, time: number, colorIndex: number): void {
@@ -2485,6 +2619,10 @@ function drawBird(ctx: CanvasRenderingContext2D, bird: BirdRender): void {
 }
 
 function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  if (gateway.kind === 'dragonDoor') {
+    drawDragonDoorGateway(ctx, gateway);
+    return;
+  }
   if (gateway.kind === 'vine') {
     drawVineGateway(ctx, gateway);
     return;
@@ -2535,6 +2673,50 @@ function drawGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): voi
     ctx.textAlign = 'center';
     ctx.fillText('🔒', 0, -57);
   }
+  ctx.restore();
+}
+
+function drawDragonDoorGateway(ctx: CanvasRenderingContext2D, gateway: GatewayRender): void {
+  const glow = 0.75 + Math.sin(gateway.t * 3) * 0.2;
+  ctx.save();
+  ctx.translate(gateway.x, gateway.platformY);
+  ctx.shadowColor = gateway.locked ? '#777' : '#ff7138';
+  ctx.shadowBlur = gateway.active ? 28 : 14;
+  ctx.fillStyle = gateway.locked ? '#55515a' : '#3d2430';
+  ctx.beginPath();
+  ctx.moveTo(-42, 0);
+  ctx.lineTo(-42, -67);
+  ctx.quadraticCurveTo(-42, -116, 0, -126);
+  ctx.quadraticCurveTo(42, -116, 42, -67);
+  ctx.lineTo(42, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = gateway.locked ? '#7d7782' : '#f18a4c';
+  ctx.lineWidth = 7;
+  ctx.stroke();
+  ctx.globalAlpha = gateway.locked ? 0.35 : glow;
+  ctx.fillStyle = '#ff5b2d';
+  ctx.beginPath();
+  ctx.moveTo(-25, -5);
+  ctx.quadraticCurveTo(-35, -55, 0, -106);
+  ctx.quadraticCurveTo(35, -55, 25, -5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffcf64';
+  ctx.beginPath();
+  ctx.moveTo(-36, -105);
+  ctx.lineTo(-52, -130);
+  ctx.lineTo(-25, -117);
+  ctx.moveTo(36, -105);
+  ctx.lineTo(52, -130);
+  ctx.lineTo(25, -117);
+  ctx.fill();
+  ctx.fillStyle = '#f6e39a';
+  ctx.font = 'bold 20px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(gateway.locked ? '🔒' : '🐉', 0, -67);
   ctx.restore();
 }
 
@@ -2773,6 +2955,23 @@ function drawConsumables(ctx: CanvasRenderingContext2D, consumables: Consumable[
         ctx.stroke();
         ctx.fillStyle = '#77552b';
         ctx.fillRect(x + 14, y - 9, 4, 6);
+        break;
+      case 'toastedMarshmallow':
+        ctx.strokeStyle = '#8a5b35';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x - 15, y + 16);
+        ctx.lineTo(x + 15, y - 15);
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(x + 4, y - 4);
+        ctx.rotate(-0.75);
+        roundRect(ctx, -11, -13, 22, 26, 8);
+        ctx.fillStyle = '#fff0d2';
+        ctx.fill();
+        ctx.fillStyle = '#c97a43';
+        ctx.fillRect(-11, 2, 22, 7);
+        ctx.restore();
         break;
       case 'kelp':
         ctx.strokeStyle = '#6fe08c';
