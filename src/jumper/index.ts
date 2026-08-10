@@ -242,6 +242,7 @@ let consumables: Record<WorldLayer, Consumable[]> = {
   deepSea: [],
 };
 let snacksEaten = 0;
+let worldMapOpen = false;
 
 // Input.
 const moveCodes = new Set<string>();
@@ -271,6 +272,9 @@ let mateProgressEl: HTMLElement;
 let statusEl: HTMLElement;
 let toastEl: HTMLElement;
 let touchInteractEl: HTMLElement;
+let worldMapButtonEl: HTMLButtonElement;
+let worldMapEl: HTMLElement;
+let worldMapCloseEl: HTMLButtonElement;
 
 // --- audio ------------------------------------------------------------------
 
@@ -526,7 +530,22 @@ function updateHud(): void {
   }
   renderWeddingMateProgress();
   touchInteractEl.classList.toggle('visible', isWeddingMode());
+  worldMapButtonEl.classList.toggle('visible', hasBuddyChain());
+  syncWorldMapUi();
   positionStatusBelowHud();
+}
+
+function syncWorldMapUi(): void {
+  worldMapEl.classList.toggle('visible', worldMapOpen);
+  worldMapEl.setAttribute('aria-hidden', String(!worldMapOpen));
+  worldMapButtonEl.setAttribute('aria-expanded', String(worldMapOpen));
+  const current = currentWorldLayer();
+  worldMapEl.querySelectorAll<HTMLElement>('[data-jp-world]').forEach((button) => {
+    const here = button.dataset.jpWorld === current;
+    button.classList.toggle('current', here);
+    if (here) button.setAttribute('aria-current', 'location');
+    else button.removeAttribute('aria-current');
+  });
 }
 
 function positionStatusBelowHud(): void {
@@ -597,6 +616,7 @@ function buildLevel(): void {
   strandedBuddies = [];
   strandedBuddySeq = 0;
   snacksEaten = 0;
+  worldMapOpen = false;
   const portal = ufoPortalPosition();
   consumables = {
     surface: buildConsumables(level, 'surface', levelNum, portal.x),
@@ -706,6 +726,104 @@ function worldDisplayName(world: WorldLayer): string {
     case 'deepSea': return 'the deep sea';
     default: return 'the surface';
   }
+}
+
+const WORLD_MAP_NAMES: Record<WorldLayer, string> = {
+  surface: 'Sunny Surface',
+  candy: 'Candy Clouds',
+  upperAtmosphere: 'Starry Sky',
+  cave: 'Crystal Cave',
+  underwater: 'Coral Reef',
+  deepSea: 'Deep Sea',
+};
+
+function worldStatus(world: WorldLayer): string {
+  switch (world) {
+    case 'candy': return 'Candy clouds! Eat gumdrops or use the UFO beam.';
+    case 'upperAtmosphere': return 'Tiny poofy clouds! Space eats croissants.';
+    case 'cave': return 'Space eats cave cheese. Find a snake trampoline.';
+    case 'underwater': return 'Space eats crunchy kelp. Up and Down swim.';
+    case 'deepSea': return 'Space eats starfruit. Find a glowing lantern fish.';
+    default: return startStatus();
+  }
+}
+
+function canOpenWorldMap(): boolean {
+  return hasBuddyChain()
+    && phase === 'playing'
+    && !birdRide
+    && !ufoRide
+    && !undergroundReturn
+    && !underwaterReturn
+    && !weddingEvent;
+}
+
+function openWorldMap(): void {
+  if (!canOpenWorldMap()) {
+    showToast('Map in a moment!');
+    setStatus('Finish this ride or celebration, then open the map.');
+    return;
+  }
+  worldMapOpen = true;
+  clearInput();
+  syncWorldMapUi();
+  showToast('Choose a world!');
+  setStatus('The game is paused while you choose a world.');
+  worldMapCloseEl.focus();
+}
+
+function closeWorldMap(restoreStatus = true): void {
+  if (!worldMapOpen) return;
+  worldMapOpen = false;
+  clearInput();
+  syncWorldMapUi();
+  if (restoreStatus) setStatus(worldStatus(currentWorldLayer()));
+  worldMapButtonEl.focus();
+}
+
+function travelToWorld(world: WorldLayer): void {
+  if (!hasBuddyChain()) return;
+  if (world === currentWorldLayer()) {
+    closeWorldMap(false);
+    showToast(`Already in ${WORLD_MAP_NAMES[world]}!`);
+    setStatus(worldStatus(world));
+    return;
+  }
+
+  const landing = platformLandingForBuddy(body.x);
+  candyWorld = world === 'candy';
+  upperAtmosphereWorld = world === 'upperAtmosphere';
+  undergroundWorld = world === 'cave';
+  underwaterWorld = world === 'underwater';
+  deepSeaWorld = world === 'deepSea';
+  bird = null;
+  birdRide = null;
+  ufoRide = null;
+  ufoCooldown = 0;
+  snake = null;
+  snakeCooldown = world === 'cave' ? 0.8 : 0;
+  undergroundReturn = null;
+  tarantulas = [];
+  tarantulaCooldown = world === 'cave' ? 0.6 : 0;
+  fish = null;
+  fishCooldown = world === 'underwater' || world === 'deepSea' ? 0.8 : 0;
+  underwaterReturn = null;
+  chain.releaseCarriedBuddy();
+  particles = [];
+  respawnTo(landing);
+  lastSafe = landing;
+  if (world === 'surface') {
+    const midpoint = level.leftGoalX === undefined ? level.width / 2 : (level.leftGoalX + level.goalX) / 2;
+    resetBirdTrip(body.x + body.w / 2 <= midpoint ? 'left' : 'right');
+  }
+
+  worldMapOpen = false;
+  updateHud();
+  spawnSparks(body.x + PLAYER_W / 2, body.y + PLAYER_H / 2, 20);
+  showToast(`${WORLD_MAP_NAMES[world]}!`);
+  speakText(WORLD_MAP_NAMES[world], { rate: 1, pitch: world === 'deepSea' ? 0.9 : 1.2 });
+  setStatus(worldStatus(world));
+  worldMapButtonEl.focus();
 }
 
 function ufoPortalPosition(): { x: number; platformY: number } {
@@ -1985,6 +2103,12 @@ function advanceLevel(): void {
 
 function update(dt: number): void {
   if (!gameActive) return;
+  if (worldMapOpen) {
+    jumpEdge = false;
+    interactEdge = false;
+    eatEdge = false;
+    return;
+  }
   if (isWeddingMode()) updateCroissantRain(dt);
 
   // During the level-clear celebration the player just settles from the victory
@@ -2312,6 +2436,10 @@ async function startGame(modeId: string): Promise<void> {
 function stopGame(): void {
   loop.stop();
   gameActive = false;
+  worldMapOpen = false;
+  worldMapEl.classList.remove('visible');
+  worldMapEl.setAttribute('aria-hidden', 'true');
+  worldMapButtonEl.setAttribute('aria-expanded', 'false');
   clearInput();
   toastEl.classList.remove('visible');
   screenEl.style.display = 'none';
@@ -2343,6 +2471,25 @@ function onKeyDown(event: KeyboardEvent): void {
   if (!gameActive) return;
   if (shouldIgnoreGameKey(event)) return;
   const code = event.code;
+
+  if (code === 'Escape' && worldMapOpen) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeWorldMap();
+    return;
+  }
+  if (code === 'KeyM') {
+    event.preventDefault();
+    if (!event.repeat) {
+      if (worldMapOpen) closeWorldMap();
+      else openWorldMap();
+    }
+    return;
+  }
+  if (worldMapOpen) {
+    event.preventDefault();
+    return;
+  }
 
   if (code === 'Digit1') return void switchMode('practice');
   if (code === 'Digit2') return void switchMode('easy');
@@ -2468,6 +2615,9 @@ export async function initJumper(): Promise<void> {
   statusEl = document.getElementById('jp-status')!;
   toastEl = document.getElementById('jp-toast')!;
   touchInteractEl = document.getElementById('jp-touch-interact')!;
+  worldMapButtonEl = document.getElementById('jp-world-map-button') as HTMLButtonElement;
+  worldMapEl = document.getElementById('jp-world-map')!;
+  worldMapCloseEl = document.getElementById('jp-world-map-close') as HTMLButtonElement;
 
   loop = createLoop(update, renderFrame);
 
@@ -2478,6 +2628,14 @@ export async function initJumper(): Promise<void> {
     if (!gameActive) return;
     const i = MODE_ORDER.indexOf(mode.id);
     switchMode(String(MODE_ORDER[(i + 1) % MODE_ORDER.length]));
+  });
+  worldMapButtonEl.addEventListener('click', openWorldMap);
+  worldMapCloseEl.addEventListener('click', () => closeWorldMap());
+  worldMapEl.addEventListener('click', (event) => {
+    if (event.target === worldMapEl) closeWorldMap();
+  });
+  worldMapEl.querySelectorAll<HTMLElement>('[data-jp-world]').forEach((button) => {
+    button.addEventListener('click', () => travelToWorld(button.dataset.jpWorld as WorldLayer));
   });
 
   document.addEventListener('keydown', onKeyDown, true);

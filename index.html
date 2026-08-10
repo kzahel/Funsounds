@@ -1407,6 +1407,122 @@
             opacity: 1;
             transform: translate(-50%, -50%) scale(1);
         }
+        .jp-world-map-button {
+            display: none;
+            pointer-events: auto;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.3);
+            font: inherit;
+            font-weight: 800;
+        }
+        .jp-world-map-button.visible { display: flex; }
+        #jp-world-map {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 45;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(5, 10, 35, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+        #jp-world-map.visible { display: flex; }
+        .jp-world-map-panel {
+            position: relative;
+            width: min(430px, calc(100vw - 36px));
+            max-height: calc(100vh - 36px);
+            overflow: auto;
+            padding: 22px 24px 24px;
+            border: 3px solid rgba(255,255,255,0.72);
+            border-radius: 30px;
+            background: linear-gradient(180deg, rgba(24,37,88,0.97) 0%, rgba(47,31,75,0.97) 100%);
+            box-shadow: 0 24px 70px rgba(0,0,0,0.45), inset 0 0 45px rgba(130,205,255,0.12);
+            color: white;
+            text-align: center;
+        }
+        .jp-world-map-title {
+            margin: 0;
+            font-size: 1.65rem;
+            line-height: 1.1;
+        }
+        .jp-world-map-hint {
+            margin: 0.35rem 0 0.9rem;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.9rem;
+        }
+        .jp-world-map-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 38px;
+            height: 38px;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 50%;
+            background: rgba(255,255,255,0.13);
+            color: white;
+            font-size: 1.45rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .jp-world-route {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 13px;
+            width: min(330px, 100%);
+            margin: 0 auto;
+        }
+        .jp-world-card {
+            position: relative;
+            display: grid;
+            grid-template-columns: 48px 1fr 34px;
+            align-items: center;
+            min-height: 54px;
+            padding: 0.45rem 0.7rem;
+            border: 2px solid rgba(255,255,255,0.42);
+            border-radius: 18px;
+            background: var(--jp-world-color, #5974b8);
+            color: white;
+            font: inherit;
+            font-weight: 800;
+            text-align: left;
+            cursor: pointer;
+            box-shadow: 0 7px 0 rgba(0,0,0,0.19), inset 0 2px 0 rgba(255,255,255,0.18);
+            transition: transform 0.12s ease-out, border-color 0.12s ease-out;
+        }
+        .jp-world-card:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: calc(100% + 3px);
+            width: 5px;
+            height: 10px;
+            transform: translateX(-50%);
+            border-radius: 5px;
+            background: rgba(255,255,255,0.68);
+        }
+        .jp-world-card:active { transform: translateY(3px); box-shadow: 0 4px 0 rgba(0,0,0,0.19); }
+        .jp-world-card.current {
+            border-color: #fff29a;
+            box-shadow: 0 0 0 4px rgba(255,226,93,0.25), 0 7px 0 rgba(0,0,0,0.19);
+        }
+        .jp-world-card-icon { font-size: 1.8rem; text-align: center; }
+        .jp-world-card-name { font-size: 1rem; }
+        .jp-world-card-here {
+            opacity: 0;
+            font-size: 1.1rem;
+            text-align: center;
+        }
+        .jp-world-card.current .jp-world-card-here { opacity: 1; }
+        .jp-world-card[data-jp-world="upperAtmosphere"] { --jp-world-color: linear-gradient(135deg, #293b86, #7052a4); }
+        .jp-world-card[data-jp-world="candy"] { --jp-world-color: linear-gradient(135deg, #de78bd, #7abde5); }
+        .jp-world-card[data-jp-world="surface"] { --jp-world-color: linear-gradient(135deg, #4ba957, #83be4d); }
+        .jp-world-card[data-jp-world="cave"] { --jp-world-color: linear-gradient(135deg, #64527f, #3c375c); }
+        .jp-world-card[data-jp-world="underwater"] { --jp-world-color: linear-gradient(135deg, #168ca5, #136384); }
+        .jp-world-card[data-jp-world="deepSea"] { --jp-world-color: linear-gradient(135deg, #142b58, #08142f); }
         #jp-touch {
             display: none;
             position: absolute;
@@ -1461,6 +1577,12 @@
             .jp-touch-move, .jp-touch-actions { gap: 8px; }
             .jp-touch-btn { width: 58px; height: 58px; }
             .jp-touch-jump { width: 92px; }
+            .jp-world-map-panel { padding: 18px 18px 20px; border-radius: 24px; }
+            .jp-world-map-title { font-size: 1.35rem; }
+            .jp-world-map-hint { margin-bottom: 0.7rem; }
+            .jp-world-route { gap: 10px; }
+            .jp-world-card { min-height: 48px; }
+            .jp-world-card:not(:last-child)::after { height: 7px; }
             #jp-mate-progress {
                 gap: 0.28rem;
             }
@@ -2725,11 +2847,27 @@
             <div class="jp-pill">Best <strong id="jp-best">0</strong></div>
             <div class="jp-pill">Snacks <strong id="jp-snacks">0</strong></div>
             <div class="jp-pill">Lives <strong id="jp-hearts">❤️❤️❤️</strong></div>
+            <button class="jp-pill jp-world-map-button" id="jp-world-map-button" type="button" aria-expanded="false" aria-keyshortcuts="M" title="Open world map (M)">🗺️ Worlds</button>
             <div class="jp-pill" id="jp-buddies-pill" style="display:none"><span id="jp-buddies-label">Buddies</span> <strong id="jp-buddies">0/5</strong></div>
             <div class="jp-pill" id="jp-mate-progress" style="display:none"></div>
         </div>
         <div id="jp-status">Arrows move • Up jumps • Space eats nearby snacks</div>
         <div id="jp-toast"></div>
+        <div id="jp-world-map" aria-hidden="true">
+            <div class="jp-world-map-panel" role="dialog" aria-modal="true" aria-labelledby="jp-world-map-title">
+                <button class="jp-world-map-close" id="jp-world-map-close" type="button" aria-label="Close world map">×</button>
+                <h2 class="jp-world-map-title" id="jp-world-map-title">🗺️ Buddy’s World Map</h2>
+                <p class="jp-world-map-hint">Pick a favorite place!</p>
+                <div class="jp-world-route">
+                    <button class="jp-world-card" type="button" data-jp-world="upperAtmosphere"><span class="jp-world-card-icon">🥐</span><span class="jp-world-card-name">Starry Sky</span><span class="jp-world-card-here">★</span></button>
+                    <button class="jp-world-card" type="button" data-jp-world="candy"><span class="jp-world-card-icon">🍬</span><span class="jp-world-card-name">Candy Clouds</span><span class="jp-world-card-here">★</span></button>
+                    <button class="jp-world-card" type="button" data-jp-world="surface"><span class="jp-world-card-icon">🌳</span><span class="jp-world-card-name">Sunny Surface</span><span class="jp-world-card-here">★</span></button>
+                    <button class="jp-world-card" type="button" data-jp-world="cave"><span class="jp-world-card-icon">💎</span><span class="jp-world-card-name">Crystal Cave</span><span class="jp-world-card-here">★</span></button>
+                    <button class="jp-world-card" type="button" data-jp-world="underwater"><span class="jp-world-card-icon">🪸</span><span class="jp-world-card-name">Coral Reef</span><span class="jp-world-card-here">★</span></button>
+                    <button class="jp-world-card" type="button" data-jp-world="deepSea"><span class="jp-world-card-icon">🐟</span><span class="jp-world-card-name">Deep Sea</span><span class="jp-world-card-here">★</span></button>
+                </div>
+            </div>
+        </div>
         <div id="jp-touch">
             <div class="jp-touch-move">
                 <button class="jp-touch-btn" data-jp-dir="ArrowLeft">←</button>
