@@ -1407,7 +1407,8 @@
             opacity: 1;
             transform: translate(-50%, -50%) scale(1);
         }
-        .jp-world-map-button {
+        .jp-world-map-button,
+        .jp-hint-button {
             display: none;
             pointer-events: auto;
             cursor: pointer;
@@ -1415,7 +1416,8 @@
             font: inherit;
             font-weight: 800;
         }
-        .jp-world-map-button.visible { display: flex; }
+        .jp-world-map-button.visible,
+        .jp-hint-button.visible { display: flex; }
         #jp-world-map {
             display: none;
             position: absolute;
@@ -1449,7 +1451,14 @@
             line-height: 1.1;
         }
         .jp-world-map-hint {
+            position: sticky;
+            top: -1px;
+            z-index: 2;
             margin: 0.35rem 0 0.9rem;
+            padding: 0.48rem 0.65rem;
+            border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 12px;
+            background: rgba(25,36,83,0.96);
             color: rgba(255,255,255,0.8);
             font-size: 0.9rem;
         }
@@ -1512,7 +1521,7 @@
         .jp-world-card.locked {
             filter: saturate(0.18);
             opacity: 0.58;
-            cursor: not-allowed;
+            cursor: help;
             box-shadow: 0 4px 0 rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.1);
         }
         .jp-world-card.locked:active { transform: none; }
@@ -1537,6 +1546,74 @@
         .jp-world-card[data-jp-world="underwater"] { --jp-world-color: linear-gradient(135deg, #168ca5, #136384); }
         .jp-world-card[data-jp-world="sunkenCastle"] { --jp-world-color: linear-gradient(135deg, #257a91, #484d88); }
         .jp-world-card[data-jp-world="deepSea"] { --jp-world-color: linear-gradient(135deg, #142b58, #08142f); }
+        #jp-hint-sheet {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 46;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(5, 10, 35, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+        #jp-hint-sheet.visible { display: flex; }
+        .jp-hint-panel {
+            position: relative;
+            width: min(520px, calc(100vw - 36px));
+            max-height: calc(100vh - 36px);
+            overflow: auto;
+            padding: 22px 24px 24px;
+            border: 3px solid rgba(255,255,255,0.72);
+            border-radius: 30px;
+            background: linear-gradient(180deg, rgba(24,37,88,0.98) 0%, rgba(47,31,75,0.98) 100%);
+            box-shadow: 0 24px 70px rgba(0,0,0,0.45), inset 0 0 45px rgba(130,205,255,0.12);
+            color: white;
+        }
+        .jp-hint-title {
+            margin: 0 2.5rem 0.85rem;
+            font-size: 1.65rem;
+            line-height: 1.1;
+            text-align: center;
+        }
+        .jp-hint-next,
+        .jp-hint-rainbow {
+            margin: 0 0 0.8rem;
+            padding: 0.8rem 0.9rem;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 17px;
+            background: rgba(255,255,255,0.1);
+            line-height: 1.4;
+        }
+        .jp-hint-next { background: rgba(255,224,116,0.15); }
+        .jp-hint-rainbow strong { display: block; margin-bottom: 0.2rem; }
+        .jp-hint-guide-title {
+            margin: 1rem 0 0.55rem;
+            font-size: 1.08rem;
+            text-align: center;
+        }
+        .jp-hint-routes {
+            display: grid;
+            gap: 0.5rem;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .jp-hint-routes li {
+            padding: 0.6rem 0.7rem;
+            border-radius: 13px;
+            background: rgba(255,255,255,0.075);
+            font-size: 0.92rem;
+            line-height: 1.35;
+        }
+        .jp-hint-action {
+            margin: 0.8rem 0 0;
+            color: rgba(255,255,255,0.78);
+            font-size: 0.86rem;
+            text-align: center;
+        }
         #jp-touch {
             display: none;
             position: absolute;
@@ -1594,6 +1671,8 @@
             .jp-world-map-panel { padding: 18px 18px 20px; border-radius: 24px; }
             .jp-world-map-title { font-size: 1.35rem; }
             .jp-world-map-hint { margin-bottom: 0.7rem; }
+            .jp-hint-panel { padding: 18px 18px 20px; border-radius: 24px; }
+            .jp-hint-title { font-size: 1.35rem; }
             .jp-world-route { gap: 10px; }
             .jp-world-card { min-height: 48px; }
             .jp-world-card:not(:last-child)::after { height: 7px; }
@@ -2862,6 +2941,7 @@
             <div class="jp-pill">Snacks <strong id="jp-snacks">0</strong></div>
             <div class="jp-pill">Lives <strong id="jp-hearts">❤️❤️❤️</strong></div>
             <button class="jp-pill jp-world-map-button" id="jp-world-map-button" type="button" aria-expanded="false" aria-keyshortcuts="M" title="Open world map (M)">🗺️ Worlds</button>
+            <button class="jp-pill jp-hint-button" id="jp-hint-button" type="button" aria-expanded="false" aria-keyshortcuts="H" title="Open Buddy hints (H)">💡 Hints</button>
             <div class="jp-pill" id="jp-buddies-pill" style="display:none"><span id="jp-buddies-label">Buddies</span> <strong id="jp-buddies">0/5</strong></div>
             <div class="jp-pill" id="jp-mate-progress" style="display:none"></div>
         </div>
@@ -2871,7 +2951,7 @@
             <div class="jp-world-map-panel" role="dialog" aria-modal="true" aria-labelledby="jp-world-map-title">
                 <button class="jp-world-map-close" id="jp-world-map-close" type="button" aria-label="Close world map">×</button>
                 <h2 class="jp-world-map-title" id="jp-world-map-title">🗺️ Buddy’s World Map</h2>
-                <p class="jp-world-map-hint">Explore new worlds to unlock them here!</p>
+                <p class="jp-world-map-hint" id="jp-world-map-hint" role="status" aria-live="polite">Tap a locked world to learn how to find it.</p>
                 <div class="jp-world-route">
                     <button class="jp-world-card" type="button" data-jp-world="moonBase"><span class="jp-world-card-icon">🌕</span><span class="jp-world-card-name">Moon Base</span><span class="jp-world-card-here">★</span></button>
                     <button class="jp-world-card" type="button" data-jp-world="upperAtmosphere"><span class="jp-world-card-icon">🥐</span><span class="jp-world-card-name">Starry Sky</span><span class="jp-world-card-here">★</span></button>
@@ -2886,6 +2966,26 @@
                     <button class="jp-world-card" type="button" data-jp-world="sunkenCastle"><span class="jp-world-card-icon">🏰</span><span class="jp-world-card-name">Sunken Castle</span><span class="jp-world-card-here">★</span></button>
                     <button class="jp-world-card" type="button" data-jp-world="deepSea"><span class="jp-world-card-icon">🐟</span><span class="jp-world-card-name">Deep Sea</span><span class="jp-world-card-here">★</span></button>
                 </div>
+            </div>
+        </div>
+        <div id="jp-hint-sheet" aria-hidden="true">
+            <div class="jp-hint-panel" role="dialog" aria-modal="true" aria-labelledby="jp-hint-title">
+                <button class="jp-world-map-close" id="jp-hint-close" type="button" aria-label="Close Buddy hints">×</button>
+                <h2 class="jp-hint-title" id="jp-hint-title">💡 Buddy’s Hints</h2>
+                <p class="jp-hint-next" id="jp-hint-next"></p>
+                <div class="jp-hint-rainbow">
+                    <strong>🌈 The Rainbow lock</strong>
+                    <span id="jp-hint-rainbow"></span>
+                </div>
+                <h3 class="jp-hint-guide-title">Adventure cheat sheet</h3>
+                <ul class="jp-hint-routes">
+                    <li>🐦 <strong>Up high:</strong> Flying bird → Candy Clouds → UFO → Starry Sky → Rocket → Moon Base</li>
+                    <li>🌿 <strong>Surface portals:</strong> Giant vine → Dinosaur Jungle · Toy chest → Giant Toy Room</li>
+                    <li>🕳️ <strong>Down deep:</strong> Fall from Surface → Crystal Cave → Coral Reef → Deep Sea</li>
+                    <li>🚪 <strong>Secret doors:</strong> Cave dragon door → Volcano · Reef shell → Sunken Castle</li>
+                    <li>🌈 <strong>Final world:</strong> Explore every other world, then use the Rainbow gate on the Surface</li>
+                </ul>
+                <p class="jp-hint-action">Stand near a portal and press Space. To ride a flying friend, bump into it.</p>
             </div>
         </div>
         <div id="jp-touch">

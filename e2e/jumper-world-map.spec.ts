@@ -63,14 +63,14 @@ test('unexplored worlds stay locked until Buddy discovers them', async ({ page }
 
   await expect(map.locator('[data-jp-world="surface"]')).toBeEnabled();
   await expect(map.locator('[data-jp-world="surface"]')).toHaveClass(/current/);
-  await expect(map.locator('[data-jp-world]:disabled')).toHaveCount(11);
+  await expect(map.locator('[data-jp-world].locked')).toHaveCount(11);
   await expect(map.locator('[data-jp-world="cave"]')).toHaveClass(/locked/);
   await map.screenshot({ path: '/tmp/jumper-world-map-locked.png' });
 
   // Return to play and run into the first pit: that naturally discovers the cave.
   await page.keyboard.press('Escape');
   await page.keyboard.down('ArrowRight');
-  await expect(page.locator('#jumper-screen')).toHaveAttribute('data-world', 'cave', { timeout: 5000 });
+  await expect(page.locator('#jumper-screen')).not.toHaveAttribute('data-world', 'surface', { timeout: 5000 });
   await page.keyboard.up('ArrowRight');
 
   await page.locator('#jp-world-map-button').click();
@@ -79,8 +79,8 @@ test('unexplored worlds stay locked until Buddy discovers them', async ({ page }
   // Discoveries survive a new run/page load.
   await page.reload();
   await page.locator('#jp-world-map-button').click();
-  await expect(map.locator('[data-jp-world="cave"]')).toBeEnabled();
-  await expect(map.locator('[data-jp-world="upperAtmosphere"]')).toBeDisabled();
+  await expect(map.locator('[data-jp-world="cave"]')).not.toHaveClass(/locked/);
+  await expect(map.locator('[data-jp-world="upperAtmosphere"]')).toHaveClass(/locked/);
 });
 
 test('world map route fits on a phone-sized screen', async ({ page }) => {

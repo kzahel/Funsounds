@@ -297,6 +297,7 @@ let consumables: Record<WorldLayer, Consumable[]> = {
 };
 let snacksEaten = 0;
 let worldMapOpen = false;
+let hintSheetOpen = false;
 let exploredWorlds = new Set<WorldLayer>(['surface']);
 
 // Input.
@@ -330,6 +331,12 @@ let touchInteractEl: HTMLElement;
 let worldMapButtonEl: HTMLButtonElement;
 let worldMapEl: HTMLElement;
 let worldMapCloseEl: HTMLButtonElement;
+let worldMapHintEl: HTMLElement;
+let hintButtonEl: HTMLButtonElement;
+let hintSheetEl: HTMLElement;
+let hintCloseEl: HTMLButtonElement;
+let hintNextEl: HTMLElement;
+let hintRainbowEl: HTMLElement;
 
 // --- audio ------------------------------------------------------------------
 
@@ -619,7 +626,9 @@ function updateHud(): void {
   renderWeddingMateProgress();
   touchInteractEl.classList.toggle('visible', isWeddingMode());
   worldMapButtonEl.classList.toggle('visible', hasBuddyChain());
+  hintButtonEl.classList.toggle('visible', hasBuddyChain());
   syncWorldMapUi();
+  syncHintSheetUi();
   positionStatusBelowHud();
 }
 
@@ -634,15 +643,82 @@ function syncWorldMapUi(): void {
     const explored = exploredWorlds.has(world);
     button.classList.toggle('current', here);
     button.classList.toggle('locked', !explored);
-    if (button instanceof HTMLButtonElement) button.disabled = !explored;
     if (here) button.setAttribute('aria-current', 'location');
     else button.removeAttribute('aria-current');
     const marker = button.querySelector<HTMLElement>('.jp-world-card-here');
     if (marker) marker.textContent = here ? '★' : explored ? '' : '🔒';
     button.setAttribute('aria-label', explored
       ? `${WORLD_MAP_NAMES[world]}${here ? ', current location' : ''}`
-      : `${WORLD_MAP_NAMES[world]}, locked until explored`);
+      : `${WORLD_MAP_NAMES[world]}, locked; tap for a discovery hint`);
   });
+}
+
+const DISCOVERY_HINTS: Partial<Record<WorldLayer, string>> = {
+  candy: 'On Sunny Surface, let a flying bird bump into Buddy for a ride to Candy Clouds.',
+  upperAtmosphere: 'In Candy Clouds, stand under the UFO beam and press Space.',
+  moonBase: 'In Starry Sky, stand beside the rocket and press Space.',
+  dinosaurJungle: 'On Sunny Surface, stand beside the giant vine and press Space.',
+  toyRoom: 'On Sunny Surface, stand beside the magic toy chest and press Space.',
+  cave: 'On Sunny Surface, fall through any gap to reach Crystal Cave.',
+  volcano: 'In Crystal Cave, stand beside the dragon door and press Space.',
+  underwater: 'In Crystal Cave, fall through the bottom to reach Coral Reef.',
+  sunkenCastle: 'In Coral Reef, swim beside the giant shell and press Space.',
+  deepSea: 'In Coral Reef, swim down through the bottom to reach the Deep Sea.',
+};
+
+const DISCOVERY_ORDER: readonly WorldLayer[] = [
+  'candy',
+  'upperAtmosphere',
+  'moonBase',
+  'dinosaurJungle',
+  'toyRoom',
+  'cave',
+  'volcano',
+  'underwater',
+  'sunkenCastle',
+  'deepSea',
+];
+
+const LOCAL_DISCOVERY_ORDER: Partial<Record<WorldLayer, readonly WorldLayer[]>> = {
+  surface: ['candy', 'dinosaurJungle', 'toyRoom', 'cave'],
+  candy: ['upperAtmosphere'],
+  upperAtmosphere: ['moonBase'],
+  cave: ['volcano', 'underwater'],
+  underwater: ['sunkenCastle', 'deepSea'],
+};
+
+function unexploredRainbowRequirements(): WorldLayer[] {
+  return WORLD_LAYERS.filter((world) => world !== 'rainbowDreamland' && !exploredWorlds.has(world));
+}
+
+function nextDiscoveryHint(): string {
+  const localOptions = LOCAL_DISCOVERY_ORDER[currentWorldLayer()] ?? [];
+  const nextWorld = localOptions.find((world) => !exploredWorlds.has(world))
+    ?? DISCOVERY_ORDER.find((world) => !exploredWorlds.has(world));
+  if (nextWorld) return `Try this next: ${DISCOVERY_HINTS[nextWorld]}`;
+  if (!exploredWorlds.has('rainbowDreamland')) {
+    return 'Try this next: The Rainbow gate is ready! Go to Sunny Surface, stand beside it, and press Space.';
+  }
+  return 'You found every world! Use the Worlds map whenever you want to revisit one.';
+}
+
+function rainbowUnlockHint(): string {
+  const missing = unexploredRainbowRequirements();
+  if (missing.length === 0) {
+    return 'There is no key to collect—the gate is unlocked! Find it on Sunny Surface and press Space beside it.';
+  }
+  const worldWord = missing.length === 1 ? 'world' : 'worlds';
+  return `There is no key to collect. The gate opens by itself after you explore every other world. ${missing.length} ${worldWord} to go.`;
+}
+
+function syncHintSheetUi(): void {
+  hintSheetEl.classList.toggle('visible', hintSheetOpen);
+  hintSheetEl.setAttribute('aria-hidden', String(!hintSheetOpen));
+  hintButtonEl.setAttribute('aria-expanded', String(hintSheetOpen));
+  if (hintSheetOpen) {
+    hintNextEl.textContent = nextDiscoveryHint();
+    hintRainbowEl.textContent = rainbowUnlockHint();
+  }
 }
 
 function positionStatusBelowHud(): void {
@@ -716,6 +792,7 @@ function buildLevel(): void {
   strandedBuddySeq = 0;
   snacksEaten = 0;
   worldMapOpen = false;
+  hintSheetOpen = false;
   const portal = ufoPortalPosition();
   consumables = {
     surface: buildConsumables(level, 'surface', levelNum, consumableAvoidanceXs('surface', portal.x)),
@@ -889,12 +966,35 @@ function openWorldMap(): void {
     setStatus('Finish this ride or celebration, then open the map.');
     return;
   }
+  hintSheetOpen = false;
+  syncHintSheetUi();
   worldMapOpen = true;
+  worldMapHintEl.textContent = 'Tap a locked world to learn how to find it.';
   clearInput();
   syncWorldMapUi();
   showToast('Choose a world!');
   setStatus('The game is paused while you choose a world.');
   worldMapCloseEl.focus();
+}
+
+function openHintSheet(): void {
+  if (!hasBuddyChain()) return;
+  worldMapOpen = false;
+  syncWorldMapUi();
+  hintSheetOpen = true;
+  clearInput();
+  syncHintSheetUi();
+  setStatus('The game is paused while you read a hint.');
+  hintCloseEl.focus();
+}
+
+function closeHintSheet(restoreStatus = true): void {
+  if (!hintSheetOpen) return;
+  hintSheetOpen = false;
+  clearInput();
+  syncHintSheetUi();
+  if (restoreStatus) setStatus(worldStatus(currentWorldLayer()));
+  hintButtonEl.focus();
 }
 
 function closeWorldMap(restoreStatus = true): void {
@@ -909,8 +1009,12 @@ function closeWorldMap(restoreStatus = true): void {
 function travelToWorld(world: WorldLayer): void {
   if (!hasBuddyChain()) return;
   if (!exploredWorlds.has(world)) {
-    showToast('World still locked! 🔒');
-    setStatus('Explore that world during the adventure to unlock it here.');
+    const hint = world === 'rainbowDreamland'
+      ? rainbowUnlockHint()
+      : DISCOVERY_HINTS[world] ?? 'Explore the adventure to discover this world.';
+    worldMapHintEl.textContent = `${WORLD_MAP_NAMES[world]}: ${hint}`;
+    showToast('Hint revealed! 💡');
+    setStatus(`Hint for ${WORLD_MAP_NAMES[world]} shown on the map.`);
     return;
   }
   if (world === currentWorldLayer()) {
@@ -1038,8 +1142,14 @@ function startNearbyGateway(): boolean {
   const gateway = nearbyGateway();
   if (!gateway || gatewayTravel) return false;
   if (gateway.locked) {
-    showToast('Gateway locked! 🔒');
-    setStatus('Keep exploring to unlock this magical gateway.');
+    if (gateway.kind === 'rainbowGate') {
+      const remaining = unexploredRainbowRequirements().length;
+      showToast(`${remaining} ${remaining === 1 ? 'world' : 'worlds'} to go! 🔒`);
+      setStatus('No key needed—the Rainbow gate opens after you explore every other world. Press H for hints.');
+    } else {
+      showToast('Gateway locked! 🔒');
+      setStatus('Keep exploring to unlock this magical gateway.');
+    }
     return true;
   }
   gatewayTravel = { t: 0, startX: body.x, startY: body.y, gateway };
@@ -2445,7 +2555,7 @@ function advanceLevel(): void {
 
 function update(dt: number): void {
   if (!gameActive) return;
-  if (worldMapOpen) {
+  if (worldMapOpen || hintSheetOpen) {
     jumpEdge = false;
     interactEdge = false;
     eatEdge = false;
@@ -2794,9 +2904,13 @@ function stopGame(): void {
   gameActive = false;
   gatewayTravel = null;
   worldMapOpen = false;
+  hintSheetOpen = false;
   worldMapEl.classList.remove('visible');
   worldMapEl.setAttribute('aria-hidden', 'true');
   worldMapButtonEl.setAttribute('aria-expanded', 'false');
+  hintSheetEl.classList.remove('visible');
+  hintSheetEl.setAttribute('aria-hidden', 'true');
+  hintButtonEl.setAttribute('aria-expanded', 'false');
   clearInput();
   toastEl.classList.remove('visible');
   screenEl.style.display = 'none';
@@ -2829,21 +2943,36 @@ function onKeyDown(event: KeyboardEvent): void {
   if (shouldIgnoreGameKey(event)) return;
   const code = event.code;
 
+  if (code === 'Escape' && hintSheetOpen) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeHintSheet();
+    return;
+  }
   if (code === 'Escape' && worldMapOpen) {
     event.preventDefault();
     event.stopImmediatePropagation();
     closeWorldMap();
     return;
   }
+  if (code === 'KeyH' && hasBuddyChain()) {
+    event.preventDefault();
+    if (!event.repeat) {
+      if (hintSheetOpen) closeHintSheet();
+      else openHintSheet();
+    }
+    return;
+  }
   if (code === 'KeyM') {
     event.preventDefault();
     if (!event.repeat) {
+      if (hintSheetOpen) closeHintSheet(false);
       if (worldMapOpen) closeWorldMap();
       else openWorldMap();
     }
     return;
   }
-  if (worldMapOpen) {
+  if (worldMapOpen || hintSheetOpen) {
     event.preventDefault();
     return;
   }
@@ -2975,6 +3104,12 @@ export async function initJumper(): Promise<void> {
   worldMapButtonEl = document.getElementById('jp-world-map-button') as HTMLButtonElement;
   worldMapEl = document.getElementById('jp-world-map')!;
   worldMapCloseEl = document.getElementById('jp-world-map-close') as HTMLButtonElement;
+  worldMapHintEl = document.getElementById('jp-world-map-hint')!;
+  hintButtonEl = document.getElementById('jp-hint-button') as HTMLButtonElement;
+  hintSheetEl = document.getElementById('jp-hint-sheet')!;
+  hintCloseEl = document.getElementById('jp-hint-close') as HTMLButtonElement;
+  hintNextEl = document.getElementById('jp-hint-next')!;
+  hintRainbowEl = document.getElementById('jp-hint-rainbow')!;
 
   loop = createLoop(update, renderFrame);
 
@@ -2987,9 +3122,14 @@ export async function initJumper(): Promise<void> {
     switchMode(String(MODE_ORDER[(i + 1) % MODE_ORDER.length]));
   });
   worldMapButtonEl.addEventListener('click', openWorldMap);
+  hintButtonEl.addEventListener('click', openHintSheet);
   worldMapCloseEl.addEventListener('click', () => closeWorldMap());
+  hintCloseEl.addEventListener('click', () => closeHintSheet());
   worldMapEl.addEventListener('click', (event) => {
     if (event.target === worldMapEl) closeWorldMap();
+  });
+  hintSheetEl.addEventListener('click', (event) => {
+    if (event.target === hintSheetEl) closeHintSheet();
   });
   worldMapEl.querySelectorAll<HTMLElement>('[data-jp-world]').forEach((button) => {
     button.addEventListener('click', () => travelToWorld(button.dataset.jpWorld as WorldLayer));
